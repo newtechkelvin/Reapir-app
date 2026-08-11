@@ -25,7 +25,7 @@ export default function Home() {
 
   // 搜尋狀態
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchVehicles, setSearchVehicles] = useState([]);
+  const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -214,81 +214,127 @@ export default function Home() {
   };
 
   return (
-    
-      
-        
-          {"車輛維修與保養管理系統"}
-        
+    <div className="min-h-screen bg-gray-100 p-4 md:p-8 print:bg-white print:p-0">
+      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 print:shadow-none print:m-0 print:max-w-full print:p-0">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+          車輛維修與保養管理系統
+        </h1>
 
         {/* 分頁切換按鈕 */}
-        
-           setActiveTab('create')}
+        <div className="flex border-b border-gray-200 mb-6 print:hidden">
+          <button
+            type="button"
+            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+              activeTab === 'create'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('create')}
           >
-            {"開立新工單"}
-          
-           setActiveTab('search')}
+            開立新工單
+          </button>
+          <button
+            type="button"
+            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+              activeTab === 'search'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('search')}
           >
-            {"車牌、VIN 與專案綜合搜尋"}
-          
-        
+            車牌、VIN 與專案綜合搜尋
+          </button>
+        </div>
 
         {/* TAB 1: 新增工單 */}
         {activeTab === 'create' && (
-          
-            
-              
-                {"車牌號碼 *"}
-                 setPlateNumber(e.target.value)}
+          <form onSubmit={handleCreateOrder} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">車牌號碼 *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例如: AB-1234"
+                  value={plateNumber}
+                  onChange={(e) => setPlateNumber(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                {"車架號碼 (VIN)"}
-                 setVin(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">車架號碼 (VIN)</label>
+                <input
+                  type="text"
+                  placeholder="例如: 1HGCR2F83HA000000"
+                  value={vin}
+                  onChange={(e) => setVin(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                {"項目 (Project)"}
-                 setProject(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">項目 (Project)</label>
+                <input
+                  type="text"
+                  placeholder="例如: 醫院管理局工程 或 隧道維修合約"
+                  value={project}
+                  onChange={(e) => setProject(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                {"汽車品牌"}
-                 setBrand(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">汽車品牌</label>
+                <input
+                  type="text"
+                  placeholder="例如: Toyota 或 Benz 或 Scania"
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                {"車型名稱"}
-                 setModel(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">車型名稱</label>
+                <input
+                  type="text"
+                  placeholder="例如: HiAce 或 Coaster"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                {"最新里程數 (km)"}
-                 setMileage(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">最新里程數 (km)</label>
+                <input
+                  type="number"
+                  placeholder="例如: 85000"
+                  value={mileage}
+                  onChange={(e) => setMileage(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                {"下一次保養到期日"}
-                 setNextMaintenanceDate(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">下一次保養到期日</label>
+                <input
+                  type="date"
+                  value={nextMaintenanceDate}
+                  onChange={(e) => setNextMaintenanceDate(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
-            
+              </div>
+            </div>
 
-            
-              {"維修狀況描述"}
-               setDescription(e.target.value)}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">維修狀況描述</label>
+              <textarea
+                rows={2}
+                placeholder="請輸入客訴問題或維修備註..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
               />
             </div>
@@ -297,8 +343,8 @@ export default function Home() {
             <div className="border rounded-lg p-4 bg-gray-50">
               <div className="flex flex-wrap justify-between items-center mb-3 gap-2">
                 <div>
-                  <h3 className="font-bold text-gray-800 text-base">{"維修與零件項目明細"}</h3>
-                  <p className="text-xs text-gray-500">{"可逐列輸入或從 Excel 複製多行直接貼上"}</p>
+                  <h3 className="font-bold text-gray-800 text-base">維修與零件項目明細</h3>
+                  <p className="text-xs text-gray-500">可逐列輸入或從 Excel 複製多行直接貼上</p>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -306,14 +352,14 @@ export default function Home() {
                     onClick={() => setShowPasteModal(true)}
                     className="px-3 py-1.5 bg-purple-600 text-white rounded text-sm font-semibold hover:bg-purple-700 cursor-pointer shadow-xs"
                   >
-                    {"快捷貼上 Excel 資料"}
+                    快捷貼上 Excel 資料
                   </button>
                   <button
                     type="button"
                     onClick={addItem}
                     className="px-3 py-1.5 bg-green-600 text-white rounded text-sm font-semibold hover:bg-green-700 cursor-pointer shadow-xs"
                   >
-                    {"+ 新增一列"}
+                    + 新增一列
                   </button>
                 </div>
               </div>
@@ -322,9 +368,9 @@ export default function Home() {
                 <table className="w-full text-left border-collapse text-sm">
                   <thead>
                     <tr className="bg-gray-100 border-b text-gray-700">
-                      <th className="p-2.5 w-32 font-semibold">{"類別"}</th>
-                      <th className="p-2.5 font-semibold">{"維修項目與零件名稱"}</th>
-                      <th className="p-2.5 w-16 text-center font-semibold">{"操作"}</th>
+                      <th className="p-2.5 w-32 font-semibold">類別</th>
+                      <th className="p-2.5 font-semibold">維修項目與零件名稱</th>
+                      <th className="p-2.5 w-16 text-center font-semibold">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -336,8 +382,8 @@ export default function Home() {
                             onChange={(e) => handleItemChange(idx, 'type', e.target.value)}
                             className="w-full p-2 border rounded text-black bg-white focus:ring-1 focus:ring-blue-500"
                           >
-                            <option value="Labor">{"工時與服務"}</option>
-                            <option value="Part">{"零件與耗材"}</option>
+                            <option value="Labor">工時與服務</option>
+                            <option value="Part">零件與耗材</option>
                           </select>
                         </td>
                         <td className="p-1.5">
@@ -358,7 +404,7 @@ export default function Home() {
                               className="text-red-500 hover:text-red-700 font-bold p-1 cursor-pointer"
                               title="刪除此列"
                             >
-                              {"✕"}
+                              ✕
                             </button>
                           )}
                         </td>
@@ -384,18 +430,18 @@ export default function Home() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 print:hidden">
             <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
               <div className="flex justify-between items-center border-b pb-2">
-                <h3 className="text-lg font-bold text-gray-800">{"從 Excel 或試算表批量貼上"}</h3>
+                <h3 className="text-lg font-bold text-gray-800">從 Excel 或試算表批量貼上</h3>
                 <button
                   type="button"
                   onClick={() => setShowPasteModal(false)}
                   className="text-gray-400 hover:text-gray-600 font-bold text-xl cursor-pointer"
                 >
-                  {"✕"}
+                  ✕
                 </button>
               </div>
 
               <div className="text-xs text-gray-600 bg-blue-50 p-3 rounded-lg">
-                <p className="font-semibold text-blue-900">{"💡 貼上說明：可以從 Excel 複製多列項目貼到下方。"}</p>
+                <p className="font-semibold text-blue-900">💡 貼上說明：可以從 Excel 複製多列項目貼到下方。</p>
               </div>
 
               <textarea
@@ -412,14 +458,14 @@ export default function Home() {
                   onClick={() => setShowPasteModal(false)}
                   className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
                 >
-                  {"取消"}
+                  取消
                 </button>
                 <button
                   type="button"
                   onClick={handleApplyPaste}
                   className="px-5 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 cursor-pointer"
                 >
-                  {"解析並套用"}
+                  解析並套用
                 </button>
               </div>
             </div>
@@ -452,14 +498,14 @@ export default function Home() {
               <div className="mt-6 border-t pt-4">
                 {searchVehicles.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    {"查無符合搜尋條件的車輛或保養紀錄。"}
+                    查無符合搜尋條件的車輛或保養紀錄。
                   </div>
                 ) : (
                   <div className="space-y-8">
                     {/* 報表功能操作區 */}
                     <div className="flex flex-wrap justify-between items-center gap-2 bg-slate-100 p-3 rounded-lg print:hidden">
                       <p className="text-sm text-gray-700 font-semibold">
-                        {`找到 ${searchVehicles.length} 筆符合條件的車輛紀錄`}
+                        找到 {searchVehicles.length} 筆符合條件的車輛紀錄
                       </p>
                       <div className="flex gap-2">
                         <button
@@ -467,14 +513,14 @@ export default function Home() {
                           onClick={exportToCSV}
                           className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 cursor-pointer shadow-xs flex items-center gap-1"
                         >
-                          {"📊 匯出 CSV 試算表"}
+                          📊 匯出 CSV 試算表
                         </button>
                         <button
                           type="button"
                           onClick={handlePrint}
                           className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-lg hover:bg-slate-800 cursor-pointer shadow-xs flex items-center gap-1"
                         >
-                          {"🖨️ 列印履歷與存為 PDF"}
+                          🖨️ 列印履歷與存為 PDF
                         </button>
                       </div>
                     </div>
@@ -484,13 +530,13 @@ export default function Home() {
                         {/* 車輛標題與狀態 */}
                         <div className="flex flex-wrap justify-between items-center border-b border-blue-200 pb-2 gap-2">
                           <h3 className="text-xl font-extrabold text-blue-900">
-                            {`車牌：${vehicle.plate_number}`}
+                            車牌：{vehicle.plate_number}
                           </h3>
                           {(() => {
                             const status = getMaintenanceStatus(vehicle.next_maintenance_date);
                             return (
                               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${status.color}`}>
-                                {`保養狀態：${status.label}`}
+                                保養狀態：{status.label}
                               </span>
                             );
                           })()}
@@ -499,27 +545,27 @@ export default function Home() {
                         {/* 詳細屬性網格 */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                           <div>
-                            <span className="font-semibold text-gray-600">{"車架號碼 (VIN)："}</span>
+                            <span className="font-semibold text-gray-600">車架號碼 (VIN)：</span>
                             <span className="font-mono font-bold text-gray-800">{vehicle.vin || '未設定'}</span>
                           </div>
                           <div>
-                            <span className="font-semibold text-gray-600">{"所屬項目 (Project)："}</span>
+                            <span className="font-semibold text-gray-600">所屬項目 (Project)：</span>
                             <span className="font-bold text-blue-800">{vehicle.project || '未設定'}</span>
                           </div>
                           <div>
-                            <span className="font-semibold text-gray-600">{"品牌與車型："}</span>
+                            <span className="font-semibold text-gray-600">品牌與車型：</span>
                             <span className="font-bold text-gray-800">
-                              {`${vehicle.brand || '未設定'} - ${vehicle.model || '未設定'}`}
+                              {(vehicle.brand || '未設定') + ' - ' + (vehicle.model || '未設定')}
                             </span>
                           </div>
                           <div>
-                            <span className="font-semibold text-gray-600">{"保養到期日："}</span>
+                            <span className="font-semibold text-gray-600">保養到期日：</span>
                             <span className="font-bold text-gray-800">
                               {vehicle.next_maintenance_date || '未設定'}
                             </span>
                           </div>
                           <div>
-                            <span className="font-semibold text-gray-600">{"最後維修時間："}</span>
+                            <span className="font-semibold text-gray-600">最後維修時間：</span>
                             <span className="font-bold text-gray-800">
                               {vehicle.last_repair_date
                                 ? new Date(vehicle.last_repair_date).toLocaleString()
@@ -527,15 +573,15 @@ export default function Home() {
                             </span>
                           </div>
                           <div>
-                            <span className="font-semibold text-gray-600">{"最新記錄里程："}</span>
-                            <span className="font-bold text-gray-800">{`${vehicle.mileage} km`}</span>
+                            <span className="font-semibold text-gray-600">最新記錄里程：</span>
+                            <span className="font-bold text-gray-800">{vehicle.mileage} km</span>
                           </div>
                         </div>
 
                         {/* 曾維修項目總覽 */}
                         {vehicle.maintenance_items_summary?.length > 0 && (
                           <div className="pt-2 border-t border-blue-100">
-                            <span className="font-semibold text-gray-700 block mb-1 text-xs">{"過往曾維修與更換項目彙整："}</span>
+                            <span className="font-semibold text-gray-700 block mb-1 text-xs">過往曾維修與更換項目彙整：</span>
                             <div className="flex flex-wrap gap-1.5">
                               {vehicle.maintenance_items_summary.map((item: string, idx: number) => (
                                 <span key={idx} className="bg-white border text-gray-700 text-xs px-2.5 py-1 rounded-md shadow-xs">
@@ -549,7 +595,7 @@ export default function Home() {
                         {/* 歷史工單紀錄 */}
                         {vehicle.workOrders?.length > 0 && (
                           <div className="pt-2">
-                            <h4 className="font-bold text-gray-800 text-sm mb-2">{`歷史工單紀錄 (${vehicle.workOrders.length} 筆)：`}</h4>
+                            <h4 className="font-bold text-gray-800 text-sm mb-2">歷史工單紀錄 ({vehicle.workOrders.length} 筆)：</h4>
                             <div className="space-y-3">
                               {vehicle.workOrders.map((wo: any) => (
                                 <div key={wo.id} className="border rounded-lg p-3 bg-white text-black shadow-xs text-sm">
@@ -566,9 +612,9 @@ export default function Home() {
                                       {new Date(wo.created_at).toLocaleDateString()}
                                     </span>
                                   </div>
-                                  <p className="text-xs text-gray-600 mb-1">{`備註描述：${wo.description || '無'}`}</p>
+                                  <p className="text-xs text-gray-600 mb-1">備註描述：{wo.description || '無'}</p>
                                   <div className="text-xs text-gray-700">
-                                    <span className="font-semibold">{"維修項目："}</span>
+                                    <span className="font-semibold">維修項目：</span>
                                     {wo.work_order_items?.map((i: any) => i.item_name).join('、 ') || '無'}
                                   </div>
                                 </div>
@@ -583,8 +629,6 @@ export default function Home() {
               </div>
             )}
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
+        </div>
+      );
+    }
