@@ -13,62 +13,67 @@ function getSupabaseClient() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-// 🔍 【GET】查詢車牌詳細資料與歷史紀錄
+// 🔍 【GET】多條件模糊查詢（車牌 / VIN / Project 專案）
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const plate = searchParams.get('plate');
+    const query = searchParams.get('q') || searchParams.get('plate');
 
-    if (!plate) {
-      return NextResponse.json({ success: false, error: '請提供車牌號碼' }, { status: 400 });
+    if (!query || !query.trim()) {
+      return NextResponse.json({ success: false, error: '請輸入搜尋關鍵字' }, { status: 400 });
     }
 
     const supabase = getSupabaseClient();
+    const keyword = `%${query.trim()}%`;
 
-    // 1. 查詢車輛基本資料
-    const { data: vehicle, error: vErr } = await supabase
+    // 1. 同時對 plate_number, vin, project 進行不區分大小寫的模糊比對
+    const { data: vehicles, error: vErr } = await supabase
       .from('vehicles')
       .select('*')
-      .eq('plate_number', plate.trim().toUpperCase())
-      .maybeSingle();
+      .or(`plate_number.ilike.${keyword},vin.ilike.${keyword},project.ilike.${keyword}`)
+      .order('updated_at', { ascending: false });
 
     if (vErr) throw vErr;
-    if (!vehicle) {
-      return NextResponse.json({ success: true, vehicle: null, workOrders: [] });
+    if (!vehicles || vehicles.length === 0) {
+      return NextResponse.json({ success: true, vehicles: [] });
     }
 
-    // 2. 查詢歷史工單
+    // 2. 抓取這批車輛的所有歷史工單
+    const vehicleIds = vehicles.map(v => v.id);
     const { data: workOrders, error: woErr } = await supabase
       .from('work_orders')
       .select(`
         *,
         work_order_items (*)
       `)
-      .eq('vehicle_id', vehicle.id)
+      .in('vehicle_id', vehicleIds)
       .order('created_at', { ascending: false });
 
     if (woErr) throw woErr;
 
-    const lastRepairDate = workOrders && workOrders.length > 0 ? workOrders[0].created_at : null;
-    const allItems = workOrders
-      ? Array.from(new Set(workOrders.flatMap(wo => wo.work_order_items?.map((i: any) => i.item_name) || [])))
-      : [];
+    // 3. 組合車輛履歷與工單紀錄
+    const results = vehicles.map(vehicle => {
+      const vWorkOrders = workOrders?.filter(wo => wo.vehicle_id === vehicle.id) || [];
+      const lastRepairDate = vWorkOrders.length > 0 ? vWorkOrders[0].created_at : null;
+      const allItems = Array.from(
+        new Set(vWorkOrders.flatMap(wo => wo.work_order_items?.map((i: any) => i.item_name) || []))
+      );
 
-    return NextResponse.json({
-      success: true,
-      vehicle: {
+      return {
         ...vehicle,
         last_repair_date: lastRepairDate,
-        maintenance_items_summary: allItems
-      },
-      workOrders
+        maintenance_items_summary: allItems,
+        workOrders: vWorkOrders
+      };
     });
+
+    return NextResponse.json({ success: true, vehicles: results });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-// ➕ 【POST】開立工單（只儲存項目名稱與類別）
+// ➕ 【POST】開立工單
 export async function POST(request: Request) {
   try {
     const supabase = getSupabaseClient();
@@ -136,7 +141,7 @@ export async function POST(request: Request) {
 
     if (woErr || !workOrder) throw new Error(woErr?.message || '工單建立失敗');
 
-    // 3. 寫入明細（預設數量為1，單價為0）
+    // 3. 寫入明細
     const formattedItems = items.map((item: any) => ({
       work_order_id: workOrder.id,
       part_id: item.part_id || null,
