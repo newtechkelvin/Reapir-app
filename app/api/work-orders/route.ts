@@ -26,12 +26,12 @@ export async function GET(request: Request) {
     const supabase = getSupabaseClient();
     const keyword = `%${query.trim()}%`;
 
-    // 1. 同時對 plate_number, vin, project 進行不區分大小寫的模糊比對
+    // 1. 同時對 plate_number, vin, project 進行不區分大小寫的模糊比對 (改用 created_at 排序)
     const { data: vehicles, error: vErr } = await supabase
       .from('vehicles')
       .select('*')
       .or(`plate_number.ilike.${keyword},vin.ilike.${keyword},project.ilike.${keyword}`)
-      .order('updated_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (vErr) throw vErr;
     if (!vehicles || vehicles.length === 0) {
