@@ -25,6 +25,10 @@ export default function SearchVehicles({
   exportToCSV,
   handlePrint,
 }: SearchVehiclesProps) {
+  function handleInputChange(e: React.ChangeEvent) {
+    setSearchQuery(e.target.value);
+  }
+
   function renderWorkOrderItems(items: any[]) {
     if (!items || items.length === 0) {
       return '無';
@@ -44,9 +48,7 @@ export default function SearchVehicles({
   return (
     
       
-         setSearchQuery(e.target.value)}
-          className="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black text-base md:text-lg"
-        />
+        
         
           {isSearching ? '搜尋中...' : '搜尋'}
         
@@ -74,7 +76,7 @@ export default function SearchVehicles({
                 
               
 
-              {searchVehicles.map((vehicle: any) => {
+              {searchVehicles.map(function (vehicle: any) {
                 const status = getMaintenanceStatus(vehicle.next_maintenance_date);
                 const hasSummary = vehicle.maintenance_items_summary && vehicle.maintenance_items_summary.length > 0;
                 const hasOrders = vehicle.workOrders && vehicle.workOrders.length > 0;
@@ -137,11 +139,13 @@ export default function SearchVehicles({
                       
                         過往曾維修與更換項目彙整：
                         
-                          {vehicle.maintenance_items_summary.map((item: string, idx: number) => (
-                            
-                              {item}
-                            
-                          ))}
+                          {vehicle.maintenance_items_summary.map(function (item: string, idx: number) {
+                            return (
+                              
+                                {item}
+                              
+                            );
+                          })}
                         
                       
                     )}
@@ -150,28 +154,30 @@ export default function SearchVehicles({
                       
                         歷史工單紀錄 ({vehicle.workOrders.length} 筆)：
                         
-                          {vehicle.workOrders.map((wo: any) => (
-                            
+                          {vehicle.workOrders.map(function (wo: any) {
+                            return (
                               
                                 
-                                  {wo.order_number}
-                                  {wo.project && (
-                                    
-                                      {wo.project}
-                                    
-                                  )}
+                                  
+                                    {wo.order_number}
+                                    {wo.project && (
+                                      
+                                        {wo.project}
+                                      
+                                    )}
+                                  
+                                  
+                                    {new Date(wo.created_at).toLocaleDateString()}
+                                  
                                 
+                                備註描述：{wo.description || '無'}
                                 
-                                  {new Date(wo.created_at).toLocaleDateString()}
+                                  維修項目：
+                                  {renderWorkOrderItems(wo.work_order_items)}
                                 
                               
-                              備註描述：{wo.description || '無'}
-                              
-                                維修項目：
-                                {renderWorkOrderItems(wo.work_order_items)}
-                              
-                            
-                          ))}
+                            );
+                          })}
                         
                       
                     )}
