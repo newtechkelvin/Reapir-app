@@ -25,6 +25,11 @@ export default function SearchVehicles({
   exportToCSV,
   handlePrint,
 }: SearchVehiclesProps) {
+  const formatItemNames = (items: any[]) => {
+    if (!items || items.length === 0) return '無';
+    return items.map((i: any) => i.item_name).filter(Boolean).join(', ');
+  };
+
   return (
     
       
@@ -50,10 +55,10 @@ export default function SearchVehicles({
                 
                 
                   
-                    📊 匯出 CSV 試算表
+                    匯出 CSV 試算表
                   
                   
-                    🖨️ 列印履歷與存為 PDF
+                    列印履歷與存為 PDF
                   
                 
               
@@ -152,7 +157,7 @@ export default function SearchVehicles({
                               備註描述：{wo.description || '無'}
                               
                                 維修項目：
-                                {wo.work_order_items?.map((i: any) => i.item_name).join('、 ') || '無'}
+                                {formatItemNames(wo.work_order_items)}
                               
                             
                           ))}
