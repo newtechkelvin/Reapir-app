@@ -15,9 +15,13 @@ export default function Home() {
   const [nextMaintenanceDate, setNextMaintenanceDate] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState([
-    { item_name: '', type: 'Labor', quantity: 1, unit_price: 0 }
+    { item_name: '', type: 'Labor' }
   ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Excel 批量貼上 Modal 狀態
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteText, setPasteText] = useState('');
 
   // 搜尋車牌狀態
   const [searchPlate, setSearchPlate] = useState('');
@@ -26,7 +30,7 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(false);
 
   const addItem = () => {
-    setItems([...items, { item_name: '', type: 'Labor', quantity: 1, unit_price: 0 }]);
+    setItems([...items, { item_name: '', type: 'Labor' }]);
   };
 
   const removeItem = (index: number) => {
@@ -39,8 +43,41 @@ export default function Home() {
     setItems(newItems);
   };
 
-  const calculateTotal = () => {
-    return items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
+  // 解析 Excel / 試算表貼上的文字資料
+  const handleApplyPaste = () => {
+    if (!pasteText.trim()) return;
+
+    const lines = pasteText.trim().split(/\r?\n/);
+    const parsedItems = lines.map(line => {
+      const cols = line.split('\t').map(c => c.trim());
+      
+      let type = 'Labor';
+      let name = '';
+
+      if (cols.length >= 2) {
+        if (cols[0].includes('零件') || cols[0].toLowerCase() === 'part') {
+          type = 'Part';
+          name = cols[1];
+        } else if (cols[0].includes('工時') || cols[0].includes('人工') || cols[0].toLowerCase() === 'labor') {
+          type = 'Labor';
+          name = cols[1];
+        } else {
+          name = cols[0];
+        }
+      } else if (cols.length === 1) {
+        name = cols[0];
+      }
+
+      return { item_name: name, type };
+    }).filter(item => item.item_name !== '');
+
+    if (parsedItems.length > 0) {
+      setItems(parsedItems);
+      setPasteText('');
+      setShowPasteModal(false);
+    } else {
+      alert('無法解析貼上內容，請確認內容格式');
+    }
   };
 
   const getMaintenanceStatus = (dateStr: string) => {
@@ -81,11 +118,7 @@ export default function Home() {
           mileage: Number(mileage) || 0,
           next_maintenance_date: nextMaintenanceDate,
           description,
-          items: items.map(item => ({
-            ...item,
-            quantity: Number(item.quantity),
-            unit_price: Number(item.unit_price)
-          }))
+          items
         })
       });
 
@@ -100,7 +133,7 @@ export default function Home() {
         setMileage('');
         setNextMaintenanceDate('');
         setDescription('');
-        setItems([{ item_name: '', type: 'Labor', quantity: 1, unit_price: 0 }]);
+        setItems([{ item_name: '', type: 'Labor' }]);
       } else {
         alert(`開單失敗：${data.error}`);
       }
@@ -264,83 +297,139 @@ export default function Home() {
               />
             </div>
 
-            {/* 明細清單 */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-semibold text-gray-700">維修與零件項目</h3>
-                <button
-                  type="button"
-                  onClick={addItem}
-                  className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 cursor-pointer"
-                >
-                  + 新增項目
-                </button>
+            {/* 簡化版：維修與零件項目清單 */}
+            <div className="border rounded-lg p-4 bg-gray-50">
+              <div className="flex flex-wrap justify-between items-center mb-3 gap-2">
+                <div>
+                  <h3 className="font-bold text-gray-800 text-base">維修與零件項目明細</h3>
+                  <p className="text-xs text-gray-500">可逐列輸入或從 Excel 複製多行直接貼上</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPasteModal(true)}
+                    className="px-3 py-1.5 bg-purple-600 text-white rounded text-sm font-semibold hover:bg-purple-700 cursor-pointer shadow-xs"
+                  >
+                    快捷貼上 Excel 資料
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addItem}
+                    className="px-3 py-1.5 bg-green-600 text-white rounded text-sm font-semibold hover:bg-green-700 cursor-pointer shadow-xs"
+                  >
+                    + 新增一列
+                  </button>
+                </div>
               </div>
 
-              {items.map((item, idx) => (
-                <div key={idx} className="flex flex-wrap md:flex-nowrap gap-2 mb-2 items-center border-b pb-2">
-                  <select
-                    value={item.type}
-                    onChange={(e) => handleItemChange(idx, 'type', e.target.value)}
-                    className="p-2 border rounded text-black bg-white"
-                  >
-                    <option value="Labor">工時 / 服務</option>
-                    <option value="Part">零件 / 耗材</option>
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="項目名稱 (如: 更換機油/剎車片)"
-                    value={item.item_name}
-                    onChange={(e) => handleItemChange(idx, 'item_name', e.target.value)}
-                    className="flex-1 p-2 border rounded text-black"
-                    required
-                  />
-                  <input
-                    type="number"
-                    placeholder="數量"
-                    min="1"
-                    value={item.quantity}
-                    onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                    className="w-20 p-2 border rounded text-black"
-                    required
-                  />
-                  <input
-                    type="number"
-                    placeholder="單價"
-                    min="0"
-                    value={item.unit_price}
-                    onChange={(e) => handleItemChange(idx, 'unit_price', e.target.value)}
-                    className="w-28 p-2 border rounded text-black"
-                    required
-                  />
-                  <div className="w-24 text-right font-semibold text-gray-700">
-                    ${(Number(item.quantity) || 0) * (Number(item.unit_price) || 0)}
-                  </div>
-                  {items.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeItem(idx)}
-                      className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 cursor-pointer"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              <div className="text-right text-lg font-bold text-gray-800 mt-4">
-                總金額: <span className="text-blue-600">${calculateTotal()}</span>
+              {/* 簡化網格表格 */}
+              <div className="overflow-x-auto border rounded-lg bg-white shadow-xs">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-gray-100 border-b text-gray-700">
+                      <th className="p-2.5 w-32 font-semibold">類別</th>
+                      <th className="p-2.5 font-semibold">維修項目 / 零件名稱</th>
+                      <th className="p-2.5 w-16 text-center font-semibold">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item, idx) => (
+                      <tr key={idx} className="border-b hover:bg-blue-50/50">
+                        <td className="p-1.5">
+                          <select
+                            value={item.type}
+                            onChange={(e) => handleItemChange(idx, 'type', e.target.value)}
+                            className="w-full p-2 border rounded text-black bg-white focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="Labor">工時 / 服務</option>
+                            <option value="Part">零件 / 耗材</option>
+                          </select>
+                        </td>
+                        <td className="p-1.5">
+                          <input
+                            type="text"
+                            placeholder="輸入項目或零件名稱 (例: 更換機油 / 剎車皮檢修)..."
+                            value={item.item_name}
+                            onChange={(e) => handleItemChange(idx, 'item_name', e.target.value)}
+                            className="w-full p-2 border rounded text-black focus:ring-1 focus:ring-blue-500"
+                            required
+                          />
+                        </td>
+                        <td className="p-1.5 text-center">
+                          {items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeItem(idx)}
+                              className="text-red-500 hover:text-red-700 font-bold p-1 cursor-pointer"
+                              title="刪除此列"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 cursor-pointer"
+              className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 cursor-pointer text-lg shadow-sm"
             >
               {isSubmitting ? '儲存中...' : '儲存並開立工單'}
             </button>
           </form>
+        )}
+
+        {/* Excel 批量貼上 Modal 彈出視窗 */}
+        {showPasteModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
+              <div className="flex justify-between items-center border-b pb-2">
+                <h3 className="text-lg font-bold text-gray-800">從 Excel / 試算表批量貼上</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowPasteModal(false)}
+                  className="text-gray-400 hover:text-gray-600 font-bold text-xl cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="text-xs text-gray-600 space-y-1 bg-blue-50 p-3 rounded-lg">
+                <p className="font-semibold text-blue-900">💡 貼上說明：可以從 Excel 複製多列項目貼到下方：</p>
+                <p>• 每一行會自動識別為一個維修項目或零件。</p>
+              </div>
+
+              <textarea
+                rows={8}
+                placeholder={"可以直接從 Excel 複製多列貼至此處，例如：\n更換機油\n剎車皮更換\n車身油漆塗裝修補"}
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-500 text-black font-mono text-sm"
+              />
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPasteModal(false)}
+                  className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyPaste}
+                  className="px-5 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 cursor-pointer"
+                >
+                  解析並套用
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* TAB 2: 車牌歷史與保養查詢 */}
@@ -456,7 +545,6 @@ export default function Home() {
                                 {new Date(wo.created_at).toLocaleDateString()}
                               </span>
                             </div>
-                            <span className="font-bold text-green-700">${wo.total_cost}</span>
                           </div>
 
                           <p className="text-sm text-gray-600 mb-2">備註描述：{wo.description || '無'}</p>
@@ -466,7 +554,7 @@ export default function Home() {
                             <ul className="list-disc list-inside space-y-1">
                               {wo.work_order_items?.map((item: any) => (
                                 <li key={item.id} className="text-gray-600">
-                                  {item.item_name} ({item.type === 'Part' ? '零件' : '工時'}) - {item.quantity} x ${item.unit_price} = ${item.subtotal}
+                                  {item.item_name} ({item.type === 'Part' ? '零件' : '工時'})
                                 </li>
                               ))}
                             </ul>
