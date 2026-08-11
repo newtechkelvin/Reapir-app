@@ -231,30 +231,21 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
-  const createOrderProps = {
-    handleCreateOrder: handleCreateOrder,
-    plateNumber: plateNumber, setPlateNumber: setPlateNumber,
-    vin: vin, setVin: setVin,
-    project: project, setProject: setProject,
-    brand: brand, setBrand: setBrand,
-    model: model, setModel: setModel,
-    location: location, setLocation: setLocation,
-    claimFormDate: claimFormDate, setClaimFormDate: setClaimFormDate,
-    description: description, setDescription: setDescription,
-    items: items, handleItemChange: handleItemChange,
-    removeItem: removeItem, addItem: addItem,
-    setShowPasteModal: setShowPasteModal,
-    isSubmitting: isSubmitting
+  const handlePrint = function() {
+    window.print();
   };
 
-  const searchProps = {
-    searchQuery: searchQuery, setSearchQuery: setSearchQuery,
-    handleSearch: handleSearch, isSearching: isSearching,
-    hasSearched: hasSearched, searchVehicles: searchVehicles,
-    getMaintenanceStatus: getMaintenanceStatus,
-    exportToCSV: exportToCSV,
-    handlePrint: function() { window.print(); }
+  const closeModal = function() {
+    setShowPasteModal(false);
   };
+
+  const handleTextareaChange = function(e: React.ChangeEvent) {
+    setPasteText(e.target.value);
+  };
+
+  const createClass = activeTab === 'create' ? 'block' : 'hidden';
+  const searchClass = activeTab === 'search' ? 'block' : 'hidden';
+  const modalClass = showPasteModal ? 'fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 print:hidden' : 'hidden';
 
   return (
     
@@ -265,41 +256,45 @@ export default function Home() {
 
         
 
-        {activeTab === 'create' ?  : }
+        
+          
+        
 
-        {showPasteModal && (
+        
+          
+        
+
+        
           
             
+              從 Excel 或試算表批量貼上
               
-                從 Excel 或試算表批量貼上
-                
-                  ✕
-                
+                ✕
               
+            
 
-              
-                貼上說明：可以從 Excel 複製多列項目貼到下方。
-              
+            
+              貼上說明：可以從 Excel 複製多列項目貼到下方。
+            
 
-                            <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={function() { setShowPasteModal(false); }}
-                  className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyPaste}
-                  className="px-5 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 cursor-pointer"
-                >
-                  解析並套用
-                </button>
-              </div>
+                        <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyPaste}
+                className="px-5 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 cursor-pointer"
+              >
+                解析並套用
+              </button>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
