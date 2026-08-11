@@ -7,6 +7,7 @@ export default function Home() {
 
   // --- 新增工單 State ---
   const [plateNumber, setPlateNumber] = useState('');
+  const [project, setProject] = useState('');
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [mileage, setMileage] = useState('');
@@ -19,7 +20,7 @@ export default function Home() {
 
   // --- 搜尋車牌 State ---
   const [searchPlate, setSearchPlate] = useState('');
-  const [searchResult, setSearchResult] = useState<any>(null);
+  const [searchResult, setSearchResult] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -41,7 +42,6 @@ export default function Home() {
     return items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
   };
 
-  // 計算保養到期狀態（過期 / 即將到期 / 正常）
   const getMaintenanceStatus = (dateStr: string) => {
     if (!dateStr) return { label: '未設定', color: 'bg-gray-100 text-gray-600' };
     const targetDate = new Date(dateStr);
@@ -59,7 +59,6 @@ export default function Home() {
     }
   };
 
-  // 1. 提交新工單
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!plateNumber.trim()) {
@@ -74,6 +73,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plate_number: plateNumber,
+          project,
           brand,
           model,
           mileage: Number(mileage) || 0,
@@ -91,6 +91,7 @@ export default function Home() {
       if (data.success) {
         alert(`工單開立成功！單號：${data.order_number}`);
         setPlateNumber('');
+        setProject('');
         setBrand('');
         setModel('');
         setMileage('');
@@ -107,7 +108,6 @@ export default function Home() {
     }
   };
 
-  // 2. 搜尋車牌歷史與保養資訊
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
@@ -136,102 +136,74 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+    
+      
+        
           {"🚗 車輛維修與保養管理系統"}
-        </h1>
+        
 
         {/* 分頁切換 */}
-        <div className="flex border-b border-gray-200 mb-6">
-          <button
-            type="button"
-            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
-              activeTab === 'create'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setActiveTab('create')}
+        
+           setActiveTab('create')}
           >
             {"➕ 開立新工單"}
-          </button>
-          <button
-            type="button"
-            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
-              activeTab === 'search'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setActiveTab('search')}
+          
+           setActiveTab('search')}
           >
             {"🔍 車牌歷史與保養查詢"}
-          </button>
-        </div>
+          
+        
 
         {/* TAB 1: 新增工單頁面 */}
         {activeTab === 'create' && (
-          <form onSubmit={handleCreateOrder} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">車牌號碼 *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="例如: AB-1234"
-                  value={plateNumber}
-                  onChange={(e) => setPlateNumber(e.target.value)}
+          
+            
+              
+                車牌號碼 *
+                 setPlateNumber(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">汽車品牌</label>
-                <input
-                  type="text"
-                  placeholder="例如: Toyota / Benz / Scania"
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">車型名稱</label>
-                <input
-                  type="text"
-                  placeholder="例如: HiAce / Coaster"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">最新里程數 (km)</label>
-                <input
-                  type="number"
-                  placeholder="例如: 85000"
-                  value={mileage}
-                  onChange={(e) => setMileage(e.target.value)}
-                  className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
-                />
-              </div>
-            </div>
+              
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">下一次保養到期日</label>
-              <input
-                type="date"
-                value={nextMaintenanceDate}
-                onChange={(e) => setNextMaintenanceDate(e.target.value)}
-                className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
-              />
-            </div>
+              
+                項目 / Project
+                 setProject(e.target.value)}
+                  className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
+                />
+              
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">維修狀況描述</label>
-              <textarea
-                rows={2}
-                placeholder="請輸入客訴問題或維修備註..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+              
+                汽車品牌
+                 setBrand(e.target.value)}
+                  className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
+                />
+              
+
+              
+                車型名稱
+                 setModel(e.target.value)}
+                  className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
+                />
+              
+
+              
+                最新里程數 (km)
+                 setMileage(e.target.value)}
+                  className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
+                />
+              
+
+              
+                下一次保養到期日
+                 setNextMaintenanceDate(e.target.value)}
+                  className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
+                />
+              
+            
+
+            
+              維修狀況描述
+               setDescription(e.target.value)}
                 className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
               />
             </div>
@@ -351,7 +323,6 @@ export default function Home() {
                         <h3 className="text-xl font-extrabold text-blue-900">
                           車牌：{searchResult.vehicle.plate_number}
                         </h3>
-                        {/* 保養狀態標籤 */}
                         {(() => {
                           const status = getMaintenanceStatus(searchResult.vehicle.next_maintenance_date);
                           return (
@@ -364,12 +335,14 @@ export default function Home() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                         <div>
-                          <span className="font-semibold text-gray-600">品牌：</span>
-                          <span className="font-bold text-gray-800">{searchResult.vehicle.brand || '未填寫'}</span>
+                          <span className="font-semibold text-gray-600">所屬項目 / Project：</span>
+                          <span className="font-bold text-blue-800">{searchResult.vehicle.project || '未設定'}</span>
                         </div>
                         <div>
-                          <span className="font-semibold text-gray-600">車型：</span>
-                          <span className="font-bold text-gray-800">{searchResult.vehicle.model || '未填寫'}</span>
+                          <span className="font-semibold text-gray-600">品牌 / 車型：</span>
+                          <span className="font-bold text-gray-800">
+                            {searchResult.vehicle.brand || '未設定'} / {searchResult.vehicle.model || '未設定'}
+                          </span>
                         </div>
                         <div>
                           <span className="font-semibold text-gray-600">保養到期日：</span>
@@ -414,6 +387,11 @@ export default function Home() {
                           <div className="flex justify-between items-center mb-2 border-b pb-2">
                             <div>
                               <span className="font-bold text-blue-700">{wo.order_number}</span>
+                              {wo.project && (
+                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded ml-2 font-medium">
+                                  {wo.project}
+                                </span>
+                              )}
                               <span className="text-xs text-gray-500 ml-2">
                                 {new Date(wo.created_at).toLocaleDateString()}
                               </span>
