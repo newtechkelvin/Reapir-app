@@ -13,7 +13,7 @@ function getSupabaseClient() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-// 🔍 【GET】查詢車牌詳細資料（含 VIN）
+// 🔍 【GET】查詢車牌詳細資料與歷史紀錄
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
   }
 }
 
-// ➕ 【POST】開立工單並儲存 VIN
+// ➕ 【POST】開立工單（只儲存項目名稱與類別）
 export async function POST(request: Request) {
   try {
     const supabase = getSupabaseClient();
@@ -118,7 +118,6 @@ export async function POST(request: Request) {
     if (!vehicle) throw new Error('無法取得車輛資料');
 
     // 2. 建立工單
-    const total_cost = items.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price), 0);
     const order_number = `WO-${Date.now().toString().slice(-8)}`;
 
     const { data: workOrder, error: woErr } = await supabase
@@ -129,7 +128,7 @@ export async function POST(request: Request) {
         project: project || null,
         mileage,
         description,
-        total_cost,
+        total_cost: 0,
         status: 'Completed'
       })
       .select()
@@ -137,21 +136,21 @@ export async function POST(request: Request) {
 
     if (woErr || !workOrder) throw new Error(woErr?.message || '工單建立失敗');
 
-    // 3. 寫入明細
+    // 3. 寫入明細（預設數量為1，單價為0）
     const formattedItems = items.map((item: any) => ({
       work_order_id: workOrder.id,
       part_id: item.part_id || null,
       item_name: item.item_name,
-      type: item.type,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      subtotal: item.quantity * item.unit_price
+      type: item.type || 'Labor',
+      quantity: 1,
+      unit_price: 0,
+      subtotal: 0
     }));
 
     const { error: itemErr } = await supabase.from('work_order_items').insert(formattedItems);
     if (itemErr) throw itemErr;
 
-    return NextResponse.json({ success: true, order_number, total_cost });
+    return NextResponse.json({ success: true, order_number });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 400 });
   }
