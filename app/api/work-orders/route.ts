@@ -73,13 +73,13 @@ export async function POST(request: Request) {
   try {
     const supabase = getSupabaseClient();
     const body = await request.json();
-    const { plate_number, vin, project, brand, model, mileage, next_maintenance_date, description, items } = body;
+    const { plate_number, vin, project, brand, model, location, claim_form_date, description, items } = body;
 
     const formattedPlate = plate_number.trim().toUpperCase();
 
     let { data: vehicle } = await supabase
       .from('vehicles')
-      .select('id, mileage')
+      .select('id')
       .eq('plate_number', formattedPlate)
       .maybeSingle();
 
@@ -90,10 +90,10 @@ export async function POST(request: Request) {
           plate_number: formattedPlate,
           vin: vin || null,
           project: project || null,
-          brand,
-          model,
-          mileage,
-          next_maintenance_date: next_maintenance_date || null
+          brand: brand || null,
+          model: model || null,
+          location: location || null,
+          claim_form_date: claim_form_date || null
         })
         .select()
         .single();
@@ -106,8 +106,8 @@ export async function POST(request: Request) {
       if (project) updateData.project = project;
       if (brand) updateData.brand = brand;
       if (model) updateData.model = model;
-      if (mileage > vehicle.mileage) updateData.mileage = mileage;
-      if (next_maintenance_date) updateData.next_maintenance_date = next_maintenance_date;
+      if (location) updateData.location = location;
+      if (claim_form_date) updateData.claim_form_date = claim_form_date;
 
       if (Object.keys(updateData).length > 0) {
         await supabase.from('vehicles').update(updateData).eq('id', vehicle.id);
@@ -124,7 +124,6 @@ export async function POST(request: Request) {
         order_number,
         vehicle_id: vehicle.id,
         project: project || null,
-        mileage,
         description,
         total_cost: 0,
         status: 'Completed'
