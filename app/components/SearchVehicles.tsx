@@ -25,10 +25,21 @@ export default function SearchVehicles({
   exportToCSV,
   handlePrint,
 }: SearchVehiclesProps) {
-  const formatItemNames = (items: any[]) => {
-    if (!items || items.length === 0) return '無';
-    return items.map((i: any) => i.item_name).filter(Boolean).join(', ');
-  };
+  function renderWorkOrderItems(items: any[]) {
+    if (!items || items.length === 0) {
+      return '無';
+    }
+    const names: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i] && items[i].item_name) {
+        names.push(items[i].item_name);
+      }
+    }
+    if (names.length === 0) {
+      return '無';
+    }
+    return names.join('、 ');
+  }
 
   return (
     
@@ -157,7 +168,7 @@ export default function SearchVehicles({
                               備註描述：{wo.description || '無'}
                               
                                 維修項目：
-                                {formatItemNames(wo.work_order_items)}
+                                {renderWorkOrderItems(wo.work_order_items)}
                               
                             
                           ))}
