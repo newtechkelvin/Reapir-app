@@ -232,10 +232,6 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
-  const handlePrint = function() {
-    window.print();
-  };
-
   const createClass = activeTab === 'create' ? 'block' : 'hidden';
   const searchClass = activeTab === 'search' ? 'block' : 'hidden';
 
@@ -243,7 +239,7 @@ export default function Home() {
     
       
         
-          {"車輛維修管理系統"}
+          車輛維修管理系統
         
 
         
