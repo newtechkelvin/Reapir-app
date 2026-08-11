@@ -24,18 +24,18 @@ export default function PasteModal({
       
         
           
-            {"從 Excel 或試算表批量貼上"}
+            從 Excel 或試算表批量貼上
           
            setShowPasteModal(false)}
             className="text-gray-400 hover:text-gray-600 font-bold text-xl cursor-pointer"
           >
-            {"✕"}
+            ✕
           
         
 
         
           
-            {"貼上說明：可以從 Excel 複製多列項目貼到下方。"}
+            貼上說明：可以從 Excel 複製多列項目貼到下方。
           
         
 
@@ -49,14 +49,14 @@ export default function PasteModal({
             onClick={() => setShowPasteModal(false)}
             className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
           >
-            {"取消"}
+            取消
           </button>
           <button
             type="button"
             onClick={handleApplyPaste}
             className="px-5 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 cursor-pointer"
           >
-            {"解析並套用"}
+            解析並套用
           </button>
         </div>
       </div>
