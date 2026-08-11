@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-supabase-js'; // 或使用自訂 pg/prisma 連線
+import { createClient } from '@supabase/supabase-js'; // 或使用自訂 pg/prisma 連線
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
