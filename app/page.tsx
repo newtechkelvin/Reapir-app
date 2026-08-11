@@ -213,7 +213,7 @@ export default function Home() {
     <div className="min-h-screen bg-gray-100 p-4 md:p-8 print:bg-white print:p-0">
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 print:shadow-none print:m-0 print:max-w-full print:p-0">
         <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
-          車輛維修與保養管理系統
+          車輛維修管理系統
         </h1>
 
         <div className="flex border-b border-gray-200 mb-6 print:hidden">
