@@ -7,6 +7,7 @@ export default function Home() {
 
   // 新增工單狀態
   const [plateNumber, setPlateNumber] = useState('');
+  const [vin, setVin] = useState('');
   const [project, setProject] = useState('');
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
@@ -73,6 +74,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plate_number: plateNumber,
+          vin,
           project,
           brand,
           model,
@@ -91,6 +93,7 @@ export default function Home() {
       if (data.success) {
         alert(`工單開立成功！單號：${data.order_number}`);
         setPlateNumber('');
+        setVin('');
         setProject('');
         setBrand('');
         setModel('');
@@ -180,6 +183,17 @@ export default function Home() {
                   placeholder="例如: AB-1234"
                   value={plateNumber}
                   onChange={(e) => setPlateNumber(e.target.value)}
+                  className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">車架號碼 (VIN)</label>
+                <input
+                  type="text"
+                  placeholder="例如: 1HGCR2F83HA000000"
+                  value={vin}
+                  onChange={(e) => setVin(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
               </div>
@@ -377,6 +391,10 @@ export default function Home() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                         <div>
+                          <span className="font-semibold text-gray-600">車架號碼 (VIN)：</span>
+                          <span className="font-mono font-bold text-gray-800">{searchResult.vehicle.vin || '未設定'}</span>
+                        </div>
+                        <div>
                           <span className="font-semibold text-gray-600">所屬項目 / Project：</span>
                           <span className="font-bold text-blue-800">{searchResult.vehicle.project || '未設定'}</span>
                         </div>
@@ -400,7 +418,7 @@ export default function Home() {
                               : '無歷史紀錄'}
                           </span>
                         </div>
-                        <div className="md:col-span-2">
+                        <div>
                           <span className="font-semibold text-gray-600">最新記錄里程：</span>
                           <span className="font-bold text-gray-800">{searchResult.vehicle.mileage} km</span>
                         </div>
