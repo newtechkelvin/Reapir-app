@@ -79,7 +79,6 @@ export default function Home() {
     }
   };
 
-  // 計算保養狀態與剩餘時間
   const getMaintenanceStatus = (dateStr: string) => {
     if (!dateStr) {
       return {
