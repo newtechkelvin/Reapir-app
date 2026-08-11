@@ -1,13 +1,21 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// 💡 關鍵 1：告知 Next.js 此 API 為動態路由，禁止在 Build 時間點進行靜態預載
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('環境變數缺失：請確認 Vercel 已設定 NEXT_PUBLIC_SUPABASE_URL 與 SUPABASE_SERVICE_ROLE_KEY');
+    }
+
+    // 💡 關鍵 2：改在請求進來時才初始化 Supabase Client
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
     const body = await request.json();
     const { plate_number, model, mileage, description, items } = body;
 
@@ -37,7 +45,6 @@ export async function POST(request: Request) {
         .eq('id', vehicle.id);
     }
 
-    // 💡 關鍵修復：向 TypeScript 保證 vehicle 絕不為 null
     if (!vehicle) {
       throw new Error('無法取得或建立車輛資料');
     }
@@ -51,7 +58,7 @@ export async function POST(request: Request) {
       .from('work_orders')
       .insert({
         order_number,
-        vehicle_id: vehicle.id, // 此時 TS 已確定 vehicle 必定存在
+        vehicle_id: vehicle.id,
         mileage,
         description,
         total_cost,
