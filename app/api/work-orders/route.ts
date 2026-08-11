@@ -13,7 +13,7 @@ function getSupabaseClient() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-// 🔍 【GET】查詢車牌詳細資料、項目與歷史紀錄
+// 🔍 【GET】查詢車牌詳細資料（含 VIN）
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -68,12 +68,12 @@ export async function GET(request: Request) {
   }
 }
 
-// ➕ 【POST】開立工單並寫入「項目 / Project」
+// ➕ 【POST】開立工單並儲存 VIN
 export async function POST(request: Request) {
   try {
     const supabase = getSupabaseClient();
     const body = await request.json();
-    const { plate_number, project, brand, model, mileage, next_maintenance_date, description, items } = body;
+    const { plate_number, vin, project, brand, model, mileage, next_maintenance_date, description, items } = body;
 
     const formattedPlate = plate_number.trim().toUpperCase();
 
@@ -89,6 +89,7 @@ export async function POST(request: Request) {
         .from('vehicles')
         .insert({
           plate_number: formattedPlate,
+          vin: vin || null,
           project: project || null,
           brand,
           model,
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
       vehicle = newVehicle;
     } else {
       const updateData: any = {};
+      if (vin) updateData.vin = vin;
       if (project) updateData.project = project;
       if (brand) updateData.brand = brand;
       if (model) updateData.model = model;
@@ -115,7 +117,7 @@ export async function POST(request: Request) {
 
     if (!vehicle) throw new Error('無法取得車輛資料');
 
-    // 2. 建立工單（記錄當次工單屬性項目）
+    // 2. 建立工單
     const total_cost = items.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price), 0);
     const order_number = `WO-${Date.now().toString().slice(-8)}`;
 
