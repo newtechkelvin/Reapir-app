@@ -25,7 +25,7 @@ export default function Home() {
 
   // 搜尋狀態
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchVehicles, setSearchVehicles] = useState([]);
+  const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -197,7 +197,6 @@ export default function Home() {
       ].join(',');
     });
 
-    // 加上 \uFEFF 避免 Excel 開啟中文亂碼
     const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -215,84 +214,137 @@ export default function Home() {
   };
 
   return (
-    
-      {/* 列印專用 CSS 隱藏非必要元件 */}
-      
+    <div className="min-h-screen bg-gray-100 p-4 md:p-8">
+      {/* 標準 React style 標籤防禦 Turbopack 解析錯誤 */}
+      <style>{`
+        @media print {
+          body { background: white !important; color: black !important; padding: 0 !important; }
+          .no-print { display: none !important; }
+          .print-container { box-shadow: none !important; margin: 0 !important; max-width: 100% !important; padding: 0 !important; }
+          .print-card { border: 1px solid #ccc !important; page-break-inside: avoid; }
+        }
+      `}</style>
 
-      
-        
-          車輛維修與保養管理系統
-        
+      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 print-container">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+          {"車輛維修與保養管理系統"}
+        </h1>
 
-        {/* 分頁切換按鈕 (列印時隱藏) */}
-        
-           setActiveTab('create')}
+        {/* 分頁切換按鈕 */}
+        <div className="flex border-b border-gray-200 mb-6 no-print">
+          <button
+            type="button"
+            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+              activeTab === 'create'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('create')}
           >
             開立新工單
-          
-           setActiveTab('search')}
+          </button>
+          <button
+            type="button"
+            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+              activeTab === 'search'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('search')}
           >
             車牌 / VIN / 專案綜合搜尋
-          
-        
+          </button>
+        </div>
 
         {/* TAB 1: 新增工單 */}
         {activeTab === 'create' && (
-          
-            
-              
-                車牌號碼 *
-                 setPlateNumber(e.target.value)}
+          <form onSubmit={handleCreateOrder} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">車牌號碼 *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例如: AB-1234"
+                  value={plateNumber}
+                  onChange={(e) => setPlateNumber(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                車架號碼 (VIN)
-                 setVin(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">車架號碼 (VIN)</label>
+                <input
+                  type="text"
+                  placeholder="例如: 1HGCR2F83HA000000"
+                  value={vin}
+                  onChange={(e) => setVin(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                項目 / Project
-                 setProject(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">項目 / Project</label>
+                <input
+                  type="text"
+                  placeholder="例如: 醫院管理局工程 / 隧道維修合約"
+                  value={project}
+                  onChange={(e) => setProject(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                汽車品牌
-                 setBrand(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">汽車品牌</label>
+                <input
+                  type="text"
+                  placeholder="例如: Toyota / Benz / Scania"
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                車型名稱
-                 setModel(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">車型名稱</label>
+                <input
+                  type="text"
+                  placeholder="例如: HiAce / Coaster"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                最新里程數 (km)
-                 setMileage(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">最新里程數 (km)</label>
+                <input
+                  type="number"
+                  placeholder="例如: 85000"
+                  value={mileage}
+                  onChange={(e) => setMileage(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
+              </div>
 
-              
-                下一次保養到期日
-                 setNextMaintenanceDate(e.target.value)}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">下一次保養到期日</label>
+                <input
+                  type="date"
+                  value={nextMaintenanceDate}
+                  onChange={(e) => setNextMaintenanceDate(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              
-            
+              </div>
+            </div>
 
-            
-              維修狀況描述
-               setDescription(e.target.value)}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">維修狀況描述</label>
+              <textarea
+                rows={2}
+                placeholder="請輸入客訴問題或維修備註..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
               />
             </div>
@@ -587,8 +639,6 @@ export default function Home() {
               </div>
             )}
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
+        </div>
+      );
+    }
