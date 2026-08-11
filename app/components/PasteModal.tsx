@@ -17,7 +17,17 @@ export default function PasteModal({
   setPasteText,
   handleApplyPaste,
 }: PasteModalProps) {
-  if (!showPasteModal) return null;
+  if (!showPasteModal) {
+    return null;
+  }
+
+  function handleClose() {
+    setShowPasteModal(false);
+  }
+
+  function handleTextChange(e: React.ChangeEvent) {
+    setPasteText(e.target.value);
+  }
 
   return (
     
@@ -26,9 +36,7 @@ export default function PasteModal({
           
             從 Excel 或試算表批量貼上
           
-           setShowPasteModal(false)}
-            className="text-gray-400 hover:text-gray-600 font-bold text-xl cursor-pointer"
-          >
+          
             ✕
           
         
@@ -39,14 +47,10 @@ export default function PasteModal({
           
         
 
-         setPasteText(e.target.value)}
-          className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-500 text-black font-mono text-sm"
-        />
-
-        <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
-            onClick={() => setShowPasteModal(false)}
+            onClick={handleClose}
             className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
           >
             取消
