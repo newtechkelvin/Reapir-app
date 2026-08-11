@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js'; // 或使用自訂 pg/prisma 連線
+import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       .from('vehicles')
       .select('id, mileage')
       .eq('plate_number', plate_number)
-      .single();
+      .maybeSingle();
 
     if (!vehicle) {
       const { data: newVehicle, error: vErr } = await supabase
@@ -24,7 +24,10 @@ export async function POST(request: Request) {
         .insert({ plate_number, model, mileage })
         .select()
         .single();
-      if (vErr) throw vErr;
+      
+      if (vErr || !newVehicle) {
+        throw new Error(vErr?.message || '車輛建立失敗');
+      }
       vehicle = newVehicle;
     } else if (mileage > vehicle.mileage) {
       // 更新車輛最新里程數
@@ -34,7 +37,12 @@ export async function POST(request: Request) {
         .eq('id', vehicle.id);
     }
 
-    // 2. 算總金額
+    // 💡 關鍵修復：向 TypeScript 保證 vehicle 絕不為 null
+    if (!vehicle) {
+      throw new Error('無法取得或建立車輛資料');
+    }
+
+    // 2. 計算總金額
     const total_cost = items.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price), 0);
     const order_number = `WO-${Date.now().toString().slice(-8)}`;
 
@@ -43,7 +51,7 @@ export async function POST(request: Request) {
       .from('work_orders')
       .insert({
         order_number,
-        vehicle_id: vehicle.id,
+        vehicle_id: vehicle.id, // 此時 TS 已確定 vehicle 必定存在
         mileage,
         description,
         total_cost,
@@ -52,7 +60,9 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (woErr) throw woErr;
+    if (woErr || !workOrder) {
+      throw new Error(woErr?.message || '工單建立失敗');
+    }
 
     // 4. 寫入工單明細（自動觸發庫存扣減 Trigger）
     const formattedItems = items.map((item: any) => ({
@@ -69,7 +79,9 @@ export async function POST(request: Request) {
       .from('work_order_items')
       .insert(formattedItems);
 
-    if (itemErr) throw itemErr;
+    if (itemErr) {
+      throw itemErr;
+    }
 
     return NextResponse.json({ success: true, order_number, total_cost });
   } catch (err: any) {
