@@ -49,7 +49,6 @@ export default function Home() {
     const lines = cleanText.split('\n');
     const parsedItems = lines.map(line => {
       const cols = line.split('\t').map(c => c.trim());
-      
       let type = 'Labor';
       let name = '';
 
@@ -270,7 +269,7 @@ export default function Home() {
               
 
               
-                💡 貼上說明：可以從 Excel 複製多列項目貼到下方。
+                貼上說明：可以從 Excel 複製多列項目貼到下方。
               
 
                setPasteText(e.target.value)}
