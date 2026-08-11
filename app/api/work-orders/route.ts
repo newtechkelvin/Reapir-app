@@ -13,7 +13,6 @@ function getSupabaseClient() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-// 🔍 【GET】多條件模糊查詢（車牌 / VIN / Project 專案）
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -26,7 +25,6 @@ export async function GET(request: Request) {
     const supabase = getSupabaseClient();
     const keyword = `%${query.trim()}%`;
 
-    // 1. 同時對 plate_number, vin, project 進行不區分大小寫的模糊比對 (改用 created_at 排序)
     const { data: vehicles, error: vErr } = await supabase
       .from('vehicles')
       .select('*')
@@ -38,7 +36,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, vehicles: [] });
     }
 
-    // 2. 抓取這批車輛的所有歷史工單
     const vehicleIds = vehicles.map(v => v.id);
     const { data: workOrders, error: woErr } = await supabase
       .from('work_orders')
@@ -51,7 +48,6 @@ export async function GET(request: Request) {
 
     if (woErr) throw woErr;
 
-    // 3. 組合車輛履歷與工單紀錄
     const results = vehicles.map(vehicle => {
       const vWorkOrders = workOrders?.filter(wo => wo.vehicle_id === vehicle.id) || [];
       const lastRepairDate = vWorkOrders.length > 0 ? vWorkOrders[0].created_at : null;
@@ -73,7 +69,6 @@ export async function GET(request: Request) {
   }
 }
 
-// ➕ 【POST】開立工單
 export async function POST(request: Request) {
   try {
     const supabase = getSupabaseClient();
@@ -82,7 +77,6 @@ export async function POST(request: Request) {
 
     const formattedPlate = plate_number.trim().toUpperCase();
 
-    // 1. 取得或建立/更新車輛
     let { data: vehicle } = await supabase
       .from('vehicles')
       .select('id, mileage')
@@ -122,7 +116,6 @@ export async function POST(request: Request) {
 
     if (!vehicle) throw new Error('無法取得車輛資料');
 
-    // 2. 建立工單
     const order_number = `WO-${Date.now().toString().slice(-8)}`;
 
     const { data: workOrder, error: woErr } = await supabase
@@ -141,7 +134,6 @@ export async function POST(request: Request) {
 
     if (woErr || !workOrder) throw new Error(woErr?.message || '工單建立失敗');
 
-    // 3. 寫入明細
     const formattedItems = items.map((item: any) => ({
       work_order_id: workOrder.id,
       part_id: item.part_id || null,
