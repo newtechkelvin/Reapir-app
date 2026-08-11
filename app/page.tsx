@@ -23,9 +23,9 @@ export default function Home() {
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
-  // 搜尋車牌狀態
-  const [searchPlate, setSearchPlate] = useState('');
-  const [searchResult, setSearchResult] = useState<any>(null);
+  // 搜尋狀態
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchVehicles, setSearchVehicles] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -43,7 +43,6 @@ export default function Home() {
     setItems(newItems);
   };
 
-  // 解析 Excel / 試算表貼上的文字資料
   const handleApplyPaste = () => {
     if (!pasteText.trim()) return;
 
@@ -144,23 +143,24 @@ export default function Home() {
     }
   };
 
+  // 支援多條件模糊搜尋
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    const trimmedPlate = searchPlate.trim();
-    if (!trimmedPlate) {
-      alert('請輸入車牌號碼再點擊搜尋');
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      alert('請輸入車牌、VIN 車架號或 Project 專案名稱進行搜尋');
       return;
     }
 
     setIsSearching(true);
     setHasSearched(true);
     try {
-      const res = await fetch(`/api/work-orders?plate=${encodeURIComponent(trimmedPlate)}`);
+      const res = await fetch(`/api/work-orders?q=${encodeURIComponent(trimmed)}`);
       const data = await res.json();
 
       if (data.success) {
-        setSearchResult(data);
+        setSearchVehicles(data.vehicles || []);
       } else {
         alert(data.error || '查詢發生錯誤');
       }
@@ -172,132 +172,86 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+    
+      
+        
           車輛維修與保養管理系統
-        </h1>
+        
 
         {/* 分頁切換 */}
-        <div className="flex border-b border-gray-200 mb-6">
-          <button
-            type="button"
-            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
-              activeTab === 'create'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setActiveTab('create')}
+        
+           setActiveTab('create')}
           >
             開立新工單
-          </button>
-          <button
-            type="button"
-            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
-              activeTab === 'search'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setActiveTab('search')}
+          
+           setActiveTab('search')}
           >
-            車牌歷史與保養查詢
-          </button>
-        </div>
+            車牌 / VIN / 專案綜合搜尋
+          
+        
 
         {/* TAB 1: 新增工單 */}
         {activeTab === 'create' && (
-          <form onSubmit={handleCreateOrder} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">車牌號碼 *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="例如: AB-1234"
-                  value={plateNumber}
-                  onChange={(e) => setPlateNumber(e.target.value)}
+          
+            
+              
+                車牌號碼 *
+                 setPlateNumber(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              </div>
+              
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">車架號碼 (VIN)</label>
-                <input
-                  type="text"
-                  placeholder="例如: 1HGCR2F83HA000000"
-                  value={vin}
-                  onChange={(e) => setVin(e.target.value)}
+              
+                車架號碼 (VIN)
+                 setVin(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              </div>
+              
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">項目 / Project</label>
-                <input
-                  type="text"
-                  placeholder="例如: 醫院管理局工程 / 隧道維修合約"
-                  value={project}
-                  onChange={(e) => setProject(e.target.value)}
+              
+                項目 / Project
+                 setProject(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              </div>
+              
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">汽車品牌</label>
-                <input
-                  type="text"
-                  placeholder="例如: Toyota / Benz / Scania"
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
+              
+                汽車品牌
+                 setBrand(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              </div>
+              
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">車型名稱</label>
-                <input
-                  type="text"
-                  placeholder="例如: HiAce / Coaster"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
+              
+                車型名稱
+                 setModel(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              </div>
+              
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">最新里程數 (km)</label>
-                <input
-                  type="number"
-                  placeholder="例如: 85000"
-                  value={mileage}
-                  onChange={(e) => setMileage(e.target.value)}
+              
+                最新里程數 (km)
+                 setMileage(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              </div>
+              
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">下一次保養到期日</label>
-                <input
-                  type="date"
-                  value={nextMaintenanceDate}
-                  onChange={(e) => setNextMaintenanceDate(e.target.value)}
+              
+                下一次保養到期日
+                 setNextMaintenanceDate(e.target.value)}
                   className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
                 />
-              </div>
-            </div>
+              
+            
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">維修狀況描述</label>
-              <textarea
-                rows={2}
-                placeholder="請輸入客訴問題或維修備註..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+            
+              維修狀況描述
+               setDescription(e.target.value)}
                 className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
               />
             </div>
 
-            {/* 簡化版：維修與零件項目清單 */}
+            {/* 明細清單 */}
             <div className="border rounded-lg p-4 bg-gray-50">
               <div className="flex flex-wrap justify-between items-center mb-3 gap-2">
                 <div>
@@ -322,7 +276,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 簡化網格表格 */}
               <div className="overflow-x-auto border rounded-lg bg-white shadow-xs">
                 <table className="w-full text-left border-collapse text-sm">
                   <thead>
@@ -348,7 +301,7 @@ export default function Home() {
                         <td className="p-1.5">
                           <input
                             type="text"
-                            placeholder="輸入項目或零件名稱 (例: 更換機油 / 剎車皮檢修)..."
+                            placeholder="輸入項目或零件名稱..."
                             value={item.item_name}
                             onChange={(e) => handleItemChange(idx, 'item_name', e.target.value)}
                             className="w-full p-2 border rounded text-black focus:ring-1 focus:ring-blue-500"
@@ -384,7 +337,7 @@ export default function Home() {
           </form>
         )}
 
-        {/* Excel 批量貼上 Modal 彈出視窗 */}
+        {/* Excel 批量貼上 Modal */}
         {showPasteModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
@@ -399,14 +352,13 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="text-xs text-gray-600 space-y-1 bg-blue-50 p-3 rounded-lg">
-                <p className="font-semibold text-blue-900">💡 貼上說明：可以從 Excel 複製多列項目貼到下方：</p>
-                <p>• 每一行會自動識別為一個維修項目或零件。</p>
+              <div className="text-xs text-gray-600 bg-blue-50 p-3 rounded-lg">
+                <p className="font-semibold text-blue-900">💡 貼上說明：可以從 Excel 複製多列項目貼到下方。</p>
               </div>
 
               <textarea
                 rows={8}
-                placeholder={"可以直接從 Excel 複製多列貼至此處，例如：\n更換機油\n剎車皮更換\n車身油漆塗裝修補"}
+                placeholder={"例如：\n更換機油\n剎車皮更換\n車身油漆塗裝修補"}
                 value={pasteText}
                 onChange={(e) => setPasteText(e.target.value)}
                 className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-500 text-black font-mono text-sm"
@@ -432,136 +384,139 @@ export default function Home() {
           </div>
         )}
 
-        {/* TAB 2: 車牌歷史與保養查詢 */}
+        {/* TAB 2: 多條件模糊搜尋 */}
         {activeTab === 'search' && (
           <div className="space-y-6">
             <form onSubmit={handleSearch} className="flex gap-2">
               <input
                 type="text"
-                placeholder="輸入完整車牌號碼 (例: AB-1234)"
-                value={searchPlate}
-                onChange={(e) => setSearchPlate(e.target.value)}
-                className="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black text-lg"
+                placeholder="輸入車牌 / VIN 車架號 / Project 專案名稱 (支援模糊搜尋)"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black text-base md:text-lg"
               />
               <button
                 type="submit"
                 onClick={() => handleSearch()}
                 disabled={isSearching}
-                className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 cursor-pointer"
+                className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 cursor-pointer whitespace-nowrap"
               >
-                {isSearching ? '搜尋中...' : '搜尋車輛'}
+                {isSearching ? '搜尋中...' : '搜尋'}
               </button>
             </form>
 
-            {/* 搜尋結果 */}
+            {/* 搜尋結果列表 */}
             {hasSearched && (
               <div className="mt-6 border-t pt-4">
-                {!searchResult?.vehicle ? (
+                {searchVehicles.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    查無該車牌的歷史保養紀錄。
+                    查無符合「{searchQuery}」的車輛或保養紀錄。
                   </div>
                 ) : (
-                  <div>
-                    {/* 車輛資訊卡片 */}
-                    <div className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 p-5 rounded-xl mb-6 text-black shadow-sm">
-                      <div className="flex flex-wrap justify-between items-center mb-3 border-b border-blue-200 pb-2">
-                        <h3 className="text-xl font-extrabold text-blue-900">
-                          車牌：{searchResult.vehicle.plate_number}
-                        </h3>
-                        {(() => {
-                          const status = getMaintenanceStatus(searchResult.vehicle.next_maintenance_date);
-                          return (
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${status.color}`}>
-                              保養狀態：{status.label}
-                            </span>
-                          );
-                        })()}
-                      </div>
+                  <div className="space-y-8">
+                    <p className="text-sm text-gray-600 font-semibold">
+                      找到 {searchVehicles.length} 筆符合條件的車輛：
+                    </p>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <span className="font-semibold text-gray-600">車架號碼 (VIN)：</span>
-                          <span className="font-mono font-bold text-gray-800">{searchResult.vehicle.vin || '未設定'}</span>
-                        </div>
-                        <div>
-                          <span className="font-semibold text-gray-600">所屬項目 / Project：</span>
-                          <span className="font-bold text-blue-800">{searchResult.vehicle.project || '未設定'}</span>
-                        </div>
-                        <div>
-                          <span className="font-semibold text-gray-600">品牌 / 車型：</span>
-                          <span className="font-bold text-gray-800">
-                            {searchResult.vehicle.brand || '未設定'} / {searchResult.vehicle.model || '未設定'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-semibold text-gray-600">保養到期日：</span>
-                          <span className="font-bold text-gray-800">
-                            {searchResult.vehicle.next_maintenance_date || '未設定'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-semibold text-gray-600">最後一次維修時間：</span>
-                          <span className="font-bold text-gray-800">
-                            {searchResult.vehicle.last_repair_date
-                              ? new Date(searchResult.vehicle.last_repair_date).toLocaleString()
-                              : '無歷史紀錄'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-semibold text-gray-600">最新記錄里程：</span>
-                          <span className="font-bold text-gray-800">{searchResult.vehicle.mileage} km</span>
-                        </div>
-                      </div>
-
-                      {/* 曾維修項目總覽 */}
-                      {searchResult.vehicle.maintenance_items_summary?.length > 0 && (
-                        <div className="mt-4 pt-3 border-t border-blue-100">
-                          <span className="font-semibold text-gray-700 block mb-1">過往曾維修/更換項目：</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {searchResult.vehicle.maintenance_items_summary.map((item: string, idx: number) => (
-                              <span key={idx} className="bg-white border text-gray-700 text-xs px-2.5 py-1 rounded-md shadow-xs">
-                                {item}
+                    {searchVehicles.map((vehicle: any) => (
+                      <div key={vehicle.id} className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 p-5 rounded-xl text-black shadow-sm space-y-4">
+                        {/* 車輛標題與狀態 */}
+                        <div className="flex flex-wrap justify-between items-center border-b border-blue-200 pb-2 gap-2">
+                          <h3 className="text-xl font-extrabold text-blue-900">
+                            車牌：{vehicle.plate_number}
+                          </h3>
+                          {(() => {
+                            const status = getMaintenanceStatus(vehicle.next_maintenance_date);
+                            return (
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${status.color}`}>
+                                保養狀態：{status.label}
                               </span>
-                            ))}
+                            );
+                          })()}
+                        </div>
+
+                        {/* 詳細屬性網格 */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="font-semibold text-gray-600">車架號碼 (VIN)：</span>
+                            <span className="font-mono font-bold text-gray-800">{vehicle.vin || '未設定'}</span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-600">所屬項目 / Project：</span>
+                            <span className="font-bold text-blue-800">{vehicle.project || '未設定'}</span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-600">品牌 / 車型：</span>
+                            <span className="font-bold text-gray-800">
+                              {vehicle.brand || '未設定'} / {vehicle.model || '未設定'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-600">保養到期日：</span>
+                            <span className="font-bold text-gray-800">
+                              {vehicle.next_maintenance_date || '未設定'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-600">最後維修時間：</span>
+                            <span className="font-bold text-gray-800">
+                              {vehicle.last_repair_date
+                                ? new Date(vehicle.last_repair_date).toLocaleString()
+                                : '無歷史紀錄'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-600">最新記錄里程：</span>
+                            <span className="font-bold text-gray-800">{vehicle.mileage} km</span>
                           </div>
                         </div>
-                      )}
-                    </div>
 
-                    {/* 歷史工單紀錄 */}
-                    <h4 className="font-bold text-gray-800 mb-3">詳細歷史工單紀錄：</h4>
-                    <div className="space-y-4">
-                      {searchResult.workOrders?.map((wo: any) => (
-                        <div key={wo.id} className="border rounded-lg p-4 bg-gray-50 text-black shadow-xs">
-                          <div className="flex justify-between items-center mb-2 border-b pb-2">
-                            <div>
-                              <span className="font-bold text-blue-700">{wo.order_number}</span>
-                              {wo.project && (
-                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded ml-2 font-medium">
-                                  {wo.project}
+                        {/* 曾維修項目總覽 */}
+                        {vehicle.maintenance_items_summary?.length > 0 && (
+                          <div className="pt-2 border-t border-blue-100">
+                            <span className="font-semibold text-gray-700 block mb-1 text-xs">過往曾維修/更換項目彙整：</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {vehicle.maintenance_items_summary.map((item: string, idx: number) => (
+                                <span key={idx} className="bg-white border text-gray-700 text-xs px-2.5 py-1 rounded-md shadow-xs">
+                                  {item}
                                 </span>
-                              )}
-                              <span className="text-xs text-gray-500 ml-2">
-                                {new Date(wo.created_at).toLocaleDateString()}
-                              </span>
+                              ))}
                             </div>
                           </div>
+                        )}
 
-                          <p className="text-sm text-gray-600 mb-2">備註描述：{wo.description || '無'}</p>
-
-                          <div className="bg-white p-2.5 rounded border text-sm">
-                            <div className="font-semibold text-gray-700 mb-1">本單維修項目明細：</div>
-                            <ul className="list-disc list-inside space-y-1">
-                              {wo.work_order_items?.map((item: any) => (
-                                <li key={item.id} className="text-gray-600">
-                                  {item.item_name} ({item.type === 'Part' ? '零件' : '工時'})
-                                </li>
+                        {/* 該車輛的歷史工單折疊/展開 */}
+                        {vehicle.workOrders?.length > 0 && (
+                          <div className="pt-2">
+                            <h4 className="font-bold text-gray-800 text-sm mb-2">歷史工單紀錄 ({vehicle.workOrders.length} 筆)：</h4>
+                            <div className="space-y-3">
+                              {vehicle.workOrders.map((wo: any) => (
+                                <div key={wo.id} className="border rounded-lg p-3 bg-white text-black shadow-xs text-sm">
+                                  <div className="flex justify-between items-center mb-1 border-b pb-1">
+                                    <div>
+                                      <span className="font-bold text-blue-700">{wo.order_number}</span>
+                                      {wo.project && (
+                                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded ml-2 font-medium">
+                                          {wo.project}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(wo.created_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-600 mb-1">備註描述：{wo.description || '無'}</p>
+                                  <div className="text-xs text-gray-700">
+                                    <span className="font-semibold">維修項目：</span>
+                                    {wo.work_order_items?.map((i: any) => i.item_name).join('、 ') || '無'}
+                                  </div>
+                                </div>
                               ))}
-                            </ul>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
