@@ -247,66 +247,69 @@ export default function Home() {
     window.print();
   };
 
-  return (
-    
+  let tabContent = null;
+  if (activeTab === 'create') {
+    tabContent = (
+      
+    );
+  } else if (activeTab === 'search') {
+    tabContent = (
+      
+    );
+  }
+
+  let modalContent = null;
+  if (showPasteModal) {
+    modalContent = (
       
         
-          車輛維修管理系統
-        
-
-        
-
-        {activeTab === 'create' && (
           
-        )}
-
-        {showPasteModal && (
-          
+            從 Excel 或試算表批量貼上
             
-              
-                從 Excel 或試算表批量貼上
-                
-                  ✕
-                
-              
+              ✕
+            
+          
 
-              
-                貼上說明：可以從 Excel 複製多列項目貼到下方。
-              
+          
+            貼上說明：可以從 Excel 複製多列項目貼到下方。
+          
 
-                            <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={handleClosePasteModal}
-                  className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyPaste}
-                  className="px-5 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 cursor-pointer"
-                >
-                  解析並套用
-                </button>
-              </div>
-            </div>
+                    <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={handleClosePasteModal}
+              className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleApplyPaste}
+              className="px-5 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 cursor-pointer"
+            >
+              解析並套用
+            </button>
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
 
-        {activeTab === 'search' && (
-          <SearchVehicles
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            handleSearch={handleSearch}
-            isSearching={isSearching}
-            hasSearched={hasSearched}
-            searchVehicles={searchVehicles}
-            getMaintenanceStatus={getMaintenanceStatus}
-            exportToCSV={exportToCSV}
-            handlePrint={handlePrint}
-          />
-        )}
+  return (
+    <div className="min-h-screen bg-gray-100 p-4 md:p-8 print:bg-white print:p-0">
+      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 print:shadow-none print:m-0 print:max-w-full print:p-0">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+          車輛維修管理系統
+        </h1>
+
+        <TabNavigation
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+
+        {tabContent}
+
+        {modalContent}
       </div>
     </div>
   );
