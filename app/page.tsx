@@ -16,8 +16,30 @@ export default function MaintenanceApp() {
   ]);
 
   // 查詢 State
-  const [searchPlate, setSearchPlate] = useState('');
-  const [searchResult, setSearchResult] = useState<any>(null);
+const [searchPlate, setSearchPlate] = useState('');
+const [searchResult, setSearchResult] = useState(null);
+const [isSearching, setIsSearching] = useState(false);
+
+const handleSearch = async (e: React.FormEvent) => {
+  e.preventDefault(); // 防禦：避免表單重新整理網頁
+  if (!searchPlate.trim()) return;
+
+  setIsSearching(true);
+  try {
+    const res = await fetch(`/api/work-orders?plate=${encodeURIComponent(searchPlate.trim())}`);
+    const data = await res.json();
+
+    if (data.success) {
+      setSearchResult(data);
+    } else {
+      alert(data.error || '查詢失敗');
+    }
+  } catch (err) {
+    alert('網路連線失敗，請檢查主控台');
+  } finally {
+    setIsSearching(false);
+  }
+};
 
   // 動態增加明細
   const addItem = () => {
