@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import CreateWorkOrder from './components/CreateWorkOrder';
 import SearchVehicles from './components/SearchVehicles';
+import TabNavigation from './components/TabNavigation';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'create' | 'search'>('create');
@@ -28,27 +29,39 @@ export default function Home() {
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
-  const addItem = () => {
+  const addItem = function() {
     setItems([...items, { item_name: '', type: 'Labor' }]);
   };
 
-  const removeItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
+  const removeItem = function(index: number) {
+    setItems(items.filter(function(_, i) { return i !== index; }));
   };
 
-  const handleItemChange = (index: number, field: string, value: any) => {
+  const handleItemChange = function(index: number, field: string, value: any) {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
   };
 
-  const handleApplyPaste = () => {
+  const handleClosePasteModal = function() {
+    setShowPasteModal(false);
+  };
+
+  const handleOpenPasteModal = function() {
+    setShowPasteModal(true);
+  };
+
+  const handlePasteTextChange = function(e: React.ChangeEvent) {
+    setPasteText(e.target.value);
+  };
+
+  const handleApplyPaste = function() {
     if (!pasteText.trim()) return;
 
     const cleanText = pasteText.trim().replace(/\r/g, '');
     const lines = cleanText.split('\n');
-    const parsedItems = lines.map(line => {
-      const cols = line.split('\t').map(c => c.trim());
+    const parsedItems = lines.map(function(line) {
+      const cols = line.split('\t').map(function(c) { return c.trim(); });
       let type = 'Labor';
       let name = '';
 
@@ -66,8 +79,8 @@ export default function Home() {
         name = cols[0];
       }
 
-      return { item_name: name, type };
-    }).filter(item => item.item_name !== '');
+      return { item_name: name, type: type };
+    }).filter(function(item) { return item.item_name !== ''; });
 
     if (parsedItems.length > 0) {
       setItems(parsedItems);
@@ -78,7 +91,7 @@ export default function Home() {
     }
   };
 
-  const getMaintenanceStatus = (dateStr: string) => {
+  const getMaintenanceStatus = function(dateStr: string) {
     if (!dateStr) {
       return {
         label: '未設定保養日',
@@ -119,7 +132,7 @@ export default function Home() {
     }
   };
 
-  const handleCreateOrder = async (e: React.FormEvent) => {
+  const handleCreateOrder = async function(e: React.FormEvent) {
     e.preventDefault();
     if (!plateNumber.trim()) {
       alert('請輸入車牌號碼');
@@ -133,14 +146,14 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plate_number: plateNumber,
-          vin,
-          project,
-          brand,
-          model,
-          location,
+          vin: vin,
+          project: project,
+          brand: brand,
+          model: model,
+          location: location,
           claim_form_date: claimFormDate,
-          description,
-          items
+          description: description,
+          items: items
         })
       });
 
@@ -166,7 +179,7 @@ export default function Home() {
     }
   };
 
-  const handleSearch = async (e?: React.FormEvent) => {
+  const handleSearch = async function(e?: React.FormEvent) {
     if (e) e.preventDefault();
 
     const trimmed = searchQuery.trim();
@@ -193,7 +206,7 @@ export default function Home() {
     }
   };
 
-  const exportToCSV = () => {
+  const exportToCSV = function() {
     if (!searchVehicles || searchVehicles.length === 0) {
       alert('沒有可匯出的車輛資料');
       return;
@@ -201,7 +214,7 @@ export default function Home() {
 
     const headers = ['車牌號碼', '車架號碼(VIN)', '所屬項目(Project)', '品牌', '車型', '車輛位置', 'Claim Form 日期', '保養到期日', '距離保養剩餘時間', '保養狀態', '最後維修時間'];
 
-    const rows = searchVehicles.map(v => {
+    const rows = searchVehicles.map(function(v) {
       const status = getMaintenanceStatus(v.next_maintenance_date);
       const lastRepair = v.last_repair_date ? new Date(v.last_repair_date).toLocaleDateString() : '無';
       return [
@@ -230,7 +243,7 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
-  const handlePrint = () => {
+  const handlePrint = function() {
     window.print();
   };
 
@@ -242,15 +255,6 @@ export default function Home() {
         
 
         
-           setActiveTab('create')}
-          >
-            開立新工單
-          
-           setActiveTab('search')}
-          >
-            車牌、VIN 與專案綜合搜尋
-          
-        
 
         {activeTab === 'create' && (
           
@@ -261,9 +265,7 @@ export default function Home() {
             
               
                 從 Excel 或試算表批量貼上
-                 setShowPasteModal(false)}
-                  className="text-gray-400 hover:text-gray-600 font-bold text-xl cursor-pointer"
-                >
+                
                   ✕
                 
               
@@ -272,14 +274,10 @@ export default function Home() {
                 貼上說明：可以從 Excel 複製多列項目貼到下方。
               
 
-               setPasteText(e.target.value)}
-                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-500 text-black font-mono text-sm"
-              />
-
-              <div className="flex justify-end gap-2 pt-2">
+                            <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowPasteModal(false)}
+                  onClick={handleClosePasteModal}
                   className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
                 >
                   取消
