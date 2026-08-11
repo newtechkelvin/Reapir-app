@@ -96,6 +96,7 @@ export default function Home() {
     }
   };
 
+  // 1. 提交新工單
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!plateNumber.trim()) {
@@ -143,13 +144,13 @@ export default function Home() {
     }
   };
 
-  // 支援多條件模糊搜尋
+  // 2. 搜尋車輛
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
     const trimmed = searchQuery.trim();
     if (!trimmed) {
-      alert('請輸入車牌、VIN 車架號或 Project 專案名稱進行搜尋');
+      alert('請輸入搜尋關鍵字');
       return;
     }
 
@@ -171,14 +172,59 @@ export default function Home() {
     }
   };
 
+  // 3. 匯出 CSV 報表
+  const exportToCSV = () => {
+    if (!searchVehicles || searchVehicles.length === 0) {
+      alert('沒有可匯出的車輛資料');
+      return;
+    }
+
+    const headers = ['車牌號碼', '車架號碼(VIN)', '所屬項目(Project)', '品牌', '車型', '最新里程(km)', '保養到期日', '保養狀態', '最後維修時間'];
+
+    const rows = searchVehicles.map(v => {
+      const status = getMaintenanceStatus(v.next_maintenance_date).label;
+      const lastRepair = v.last_repair_date ? new Date(v.last_repair_date).toLocaleDateString() : '無';
+      return [
+        `"${v.plate_number || ''}"`,
+        `"${v.vin || ''}"`,
+        `"${v.project || ''}"`,
+        `"${v.brand || ''}"`,
+        `"${v.model || ''}"`,
+        v.mileage || 0,
+        `"${v.next_maintenance_date || ''}"`,
+        `"${status}"`,
+        `"${lastRepair}"`
+      ].join(',');
+    });
+
+    // 加上 \uFEFF 避免 Excel 開啟中文亂碼
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `車輛維修與保養紀錄表_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 4. 觸發列印 / PDF 導出
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     
+      {/* 列印專用 CSS 隱藏非必要元件 */}
+      
+
       
         
           車輛維修與保養管理系統
         
 
-        {/* 分頁切換 */}
+        {/* 分頁切換按鈕 (列印時隱藏) */}
         
            setActiveTab('create')}
           >
@@ -339,7 +385,7 @@ export default function Home() {
 
         {/* Excel 批量貼上 Modal */}
         {showPasteModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 no-print">
             <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
               <div className="flex justify-between items-center border-b pb-2">
                 <h3 className="text-lg font-bold text-gray-800">從 Excel / 試算表批量貼上</h3>
@@ -384,10 +430,10 @@ export default function Home() {
           </div>
         )}
 
-        {/* TAB 2: 多條件模糊搜尋 */}
+        {/* TAB 2: 多條件模糊搜尋與報表操作 */}
         {activeTab === 'search' && (
           <div className="space-y-6">
-            <form onSubmit={handleSearch} className="flex gap-2">
+            <form onSubmit={handleSearch} className="flex gap-2 no-print">
               <input
                 type="text"
                 placeholder="輸入車牌 / VIN 車架號 / Project 專案名稱 (支援模糊搜尋)"
@@ -414,12 +460,31 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="space-y-8">
-                    <p className="text-sm text-gray-600 font-semibold">
-                      找到 {searchVehicles.length} 筆符合條件的車輛：
-                    </p>
+                    {/* 報表功能操作區 (列印時隱藏) */}
+                    <div className="flex flex-wrap justify-between items-center gap-2 bg-slate-100 p-3 rounded-lg no-print">
+                      <p className="text-sm text-gray-700 font-semibold">
+                        找到 {searchVehicles.length} 筆符合條件的車輛紀錄
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={exportToCSV}
+                          className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 cursor-pointer shadow-xs flex items-center gap-1"
+                        >
+                          📊 匯出 CSV 試算表
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handlePrint}
+                          className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-lg hover:bg-slate-800 cursor-pointer shadow-xs flex items-center gap-1"
+                        >
+                          🖨️ 列印履歷 / 存為 PDF
+                        </button>
+                      </div>
+                    </div>
 
                     {searchVehicles.map((vehicle: any) => (
-                      <div key={vehicle.id} className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 p-5 rounded-xl text-black shadow-sm space-y-4">
+                      <div key={vehicle.id} className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 p-5 rounded-xl text-black shadow-sm space-y-4 print-card">
                         {/* 車輛標題與狀態 */}
                         <div className="flex flex-wrap justify-between items-center border-b border-blue-200 pb-2 gap-2">
                           <h3 className="text-xl font-extrabold text-blue-900">
@@ -485,7 +550,7 @@ export default function Home() {
                           </div>
                         )}
 
-                        {/* 該車輛的歷史工單折疊/展開 */}
+                        {/* 歷史工單紀錄 */}
                         {vehicle.workOrders?.length > 0 && (
                           <div className="pt-2">
                             <h4 className="font-bold text-gray-800 text-sm mb-2">歷史工單紀錄 ({vehicle.workOrders.length} 筆)：</h4>
