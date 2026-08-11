@@ -8,13 +8,13 @@ interface TabNavigationProps {
 }
 
 export default function TabNavigation({ activeTab, setActiveTab }: TabNavigationProps) {
-  const handleCreate = () => {
+  function handleCreate() {
     setActiveTab('create');
-  };
+  }
 
-  const handleSearch = () => {
+  function handleSearch() {
     setActiveTab('search');
-  };
+  }
 
   const createClass = activeTab === 'create'
     ? 'flex-1 py-3 text-center font-medium cursor-pointer border-b-2 border-blue-600 text-blue-600'
