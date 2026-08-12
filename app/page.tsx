@@ -3,8 +3,6 @@
 import React, { useState } from 'react';
 import CreateWorkOrder from './components/CreateWorkOrder';
 import SearchVehicles from './components/SearchVehicles';
-import TabNavigation from './components/TabNavigation';
-import PasteModal from './components/PasteModal';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'create' | 'search'>('create');
@@ -26,31 +24,32 @@ export default function Home() {
   const [pasteText, setPasteText] = useState('');
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchVehicles, setSearchVehicles] = useState([]);
+  const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
-  const addItem = function() {
+  const addItem = () => {
     setItems([...items, { item_name: '', type: 'Labor' }]);
   };
 
-  const removeItem = function(index: number) {
-    setItems(items.filter(function(_, i) { return i !== index; }));
+  const removeItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
   };
 
-  const handleItemChange = function(index: number, field: string, value: any) {
+  const handleItemChange = (index: number, field: string, value: any) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
   };
 
-  const handleApplyPaste = function() {
+  const handleApplyPaste = () => {
     if (!pasteText.trim()) return;
 
     const cleanText = pasteText.trim().replace(/\r/g, '');
     const lines = cleanText.split('\n');
-    const parsedItems = lines.map(function(line) {
-      const cols = line.split('\t').map(function(c) { return c.trim(); });
+    const parsedItems = lines.map(line => {
+      const cols = line.split('\t').map(c => c.trim());
+      
       let type = 'Labor';
       let name = '';
 
@@ -68,8 +67,8 @@ export default function Home() {
         name = cols[0];
       }
 
-      return { item_name: name, type: type };
-    }).filter(function(item) { return item.item_name !== ''; });
+      return { item_name: name, type };
+    }).filter(item => item.item_name !== '');
 
     if (parsedItems.length > 0) {
       setItems(parsedItems);
@@ -80,7 +79,7 @@ export default function Home() {
     }
   };
 
-  const getMaintenanceStatus = function(dateStr: string) {
+  const getMaintenanceStatus = (dateStr: string) => {
     if (!dateStr) {
       return {
         label: '未設定保養日',
@@ -121,7 +120,7 @@ export default function Home() {
     }
   };
 
-  const handleCreateOrder = async function(e: React.FormEvent) {
+  const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!plateNumber.trim()) {
       alert('請輸入車牌號碼');
@@ -135,14 +134,14 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plate_number: plateNumber,
-          vin: vin,
-          project: project,
-          brand: brand,
-          model: model,
-          location: location,
+          vin,
+          project,
+          brand,
+          model,
+          location,
           claim_form_date: claimFormDate,
-          description: description,
-          items: items
+          description,
+          items
         })
       });
 
@@ -168,7 +167,7 @@ export default function Home() {
     }
   };
 
-  const handleSearch = async function(e?: React.FormEvent) {
+  const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
     const trimmed = searchQuery.trim();
@@ -195,7 +194,7 @@ export default function Home() {
     }
   };
 
-  const exportToCSV = function() {
+  const exportToCSV = () => {
     if (!searchVehicles || searchVehicles.length === 0) {
       alert('沒有可匯出的車輛資料');
       return;
@@ -203,7 +202,7 @@ export default function Home() {
 
     const headers = ['車牌號碼', '車架號碼(VIN)', '所屬項目(Project)', '品牌', '車型', '車輛位置', 'Claim Form 日期', '保養到期日', '距離保養剩餘時間', '保養狀態', '最後維修時間'];
 
-    const rows = searchVehicles.map(function(v) {
+    const rows = searchVehicles.map(v => {
       const status = getMaintenanceStatus(v.next_maintenance_date);
       const lastRepair = v.last_repair_date ? new Date(v.last_repair_date).toLocaleDateString() : '無';
       return [
@@ -232,29 +231,130 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
-  const createClass = activeTab === 'create' ? 'block' : 'hidden';
-  const searchClass = activeTab === 'search' ? 'block' : 'hidden';
+  const handlePrint = () => {
+    window.print();
+  };
 
   return (
-    
-      
-        
+    <div className="min-h-screen bg-gray-100 p-4 md:p-8 print:bg-white print:p-0">
+      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 print:shadow-none print:m-0 print:max-w-full print:p-0">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
           車輛維修管理系統
-        
+        </h1>
 
-        
+        <div className="flex border-b border-gray-200 mb-6 print:hidden">
+          <button
+            type="button"
+            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+              activeTab === 'create'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('create')}
+          >
+            開立新工單
+          </button>
+          <button
+            type="button"
+            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
+              activeTab === 'search'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('search')}
+          >
+            車牌、VIN 與專案綜合搜尋
+          </button>
+        </div>
 
-        
-          
-        
+        {activeTab === 'create' && (
+          <CreateWorkOrder
+            handleCreateOrder={handleCreateOrder}
+            plateNumber={plateNumber}
+            setPlateNumber={setPlateNumber}
+            vin={vin}
+            setVin={setVin}
+            project={project}
+            setProject={setProject}
+            brand={brand}
+            setBrand={setBrand}
+            model={model}
+            setModel={setModel}
+            location={location}
+            setLocation={setLocation}
+            claimFormDate={claimFormDate}
+            setClaimFormDate={setClaimFormDate}
+            description={description}
+            setDescription={setDescription}
+            items={items}
+            handleItemChange={handleItemChange}
+            removeItem={removeItem}
+            addItem={addItem}
+            setShowPasteModal={setShowPasteModal}
+            isSubmitting={isSubmitting}
+          />
+        )}
 
-        
-          
-        
+        {showPasteModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 print:hidden">
+            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
+              <div className="flex justify-between items-center border-b pb-2">
+                <h3 className="text-lg font-bold text-gray-800">從 Excel 或試算表批量貼上</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowPasteModal(false)}
+                  className="text-gray-400 hover:text-gray-600 font-bold text-xl cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
 
-        
-      
-    
+              <div className="text-xs text-gray-600 bg-blue-50 p-3 rounded-lg">
+                <p className="font-semibold text-blue-900">💡 貼上說明：可以從 Excel 複製多列項目貼到下方。</p>
+              </div>
+
+              <textarea
+                rows={8}
+                placeholder="例如：更換機油、剎車皮更換"
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-500 text-black font-mono text-sm"
+              />
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPasteModal(false)}
+                  className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyPaste}
+                  className="px-5 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 cursor-pointer"
+                >
+                  解析並套用
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'search' && (
+          <SearchVehicles
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            handleSearch={handleSearch}
+            isSearching={isSearching}
+            hasSearched={hasSearched}
+            searchVehicles={searchVehicles}
+            getMaintenanceStatus={getMaintenanceStatus}
+            exportToCSV={exportToCSV}
+            handlePrint={handlePrint}
+          />
+        )}
+      </div>
+    </div>
   );
 }
-
