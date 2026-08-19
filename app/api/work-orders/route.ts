@@ -25,10 +25,24 @@ export async function GET(request: Request) {
     const supabase = getSupabaseClient();
     const keyword = `%${query.trim()}%`;
 
+    // 1. 支援搜尋車牌、VIN、Project 以及工單編號 (order_number)
+    const { data: matchedWorkOrders } = await supabase
+      .from('work_orders')
+      .select('vehicle_id')
+      .ilike('order_number', keyword);
+
+    const matchedVehicleIdsFromOrders = matchedWorkOrders?.map(wo => wo.vehicle_id) || [];
+
+    // 2. 查詢車輛表 (直接符合屬性 或 經由工單號關聯)
+    let orCondition = `plate_number.ilike.${keyword},vin.ilike.${keyword},project.ilike.${keyword}`;
+    if (matchedVehicleIdsFromOrders.length > 0) {
+      orCondition += `,id.in.(${matchedVehicleIdsFromOrders.join(',')})`;
+    }
+
     const { data: vehicles, error: vErr } = await supabase
       .from('vehicles')
       .select('*')
-      .or(`plate_number.ilike.${keyword},vin.ilike.${keyword},project.ilike.${keyword}`)
+      .or(orCondition)
       .order('created_at', { ascending: false });
 
     if (vErr) throw vErr;
@@ -36,6 +50,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, vehicles: [] });
     }
 
+    // 3. 抓取完整工單與更換項目
     const vehicleIds = vehicles.map(v => v.id);
     const { data: workOrders, error: woErr } = await supabase
       .from('work_orders')

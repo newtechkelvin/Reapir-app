@@ -24,7 +24,7 @@ export default function Home() {
   const [pasteText, setPasteText] = useState('');
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
+  const [searchVehicles, setSearchVehicles] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -200,10 +200,9 @@ export default function Home() {
       return;
     }
 
-    const headers = ['車牌號碼', '車架號碼(VIN)', '所屬項目(Project)', '品牌', '車型', '車輛位置', 'Claim Form 日期', '保養到期日', '距離保養剩餘時間', '保養狀態', '最後維修時間'];
+    const headers = ['車牌號碼', '車架號碼(VIN)', '所屬項目(Project)', '品牌', '車型', '車輛位置', 'Claim Form 日期', '最後維修時間'];
 
     const rows = searchVehicles.map(v => {
-      const status = getMaintenanceStatus(v.next_maintenance_date);
       const lastRepair = v.last_repair_date ? new Date(v.last_repair_date).toLocaleDateString() : '無';
       return [
         `"${v.plate_number || ''}"`,
@@ -213,9 +212,6 @@ export default function Home() {
         `"${v.model || ''}"`,
         `"${v.location || ''}"`,
         `"${v.claim_form_date || ''}"`,
-        `"${v.next_maintenance_date || ''}"`,
-        `"${status.daysRemainingText}"`,
-        `"${status.label}"`,
         `"${lastRepair}"`
       ].join(',');
     });
@@ -236,88 +232,44 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8 print:bg-white print:p-0">
-      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 print:shadow-none print:m-0 print:max-w-full print:p-0">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+    
+      
+        
           車輛維修管理系統
-        </h1>
+        
 
-        <div className="flex border-b border-gray-200 mb-6 print:hidden">
-          <button
-            type="button"
-            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
-              activeTab === 'create'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setActiveTab('create')}
+        
+           setActiveTab('create')}
           >
             開立新工單
-          </button>
-          <button
-            type="button"
-            className={`flex-1 py-3 text-center font-medium cursor-pointer ${
-              activeTab === 'search'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setActiveTab('search')}
+          
+           setActiveTab('search')}
           >
-            車牌、VIN 與專案綜合搜尋
-          </button>
-        </div>
+            車牌、VIN、工單號與專案綜合搜尋
+          
+        
 
         {activeTab === 'create' && (
-          <CreateWorkOrder
-            handleCreateOrder={handleCreateOrder}
-            plateNumber={plateNumber}
-            setPlateNumber={setPlateNumber}
-            vin={vin}
-            setVin={setVin}
-            project={project}
-            setProject={setProject}
-            brand={brand}
-            setBrand={setBrand}
-            model={model}
-            setModel={setModel}
-            location={location}
-            setLocation={setLocation}
-            claimFormDate={claimFormDate}
-            setClaimFormDate={setClaimFormDate}
-            description={description}
-            setDescription={setDescription}
-            items={items}
-            handleItemChange={handleItemChange}
-            removeItem={removeItem}
-            addItem={addItem}
-            setShowPasteModal={setShowPasteModal}
-            isSubmitting={isSubmitting}
-          />
+          
         )}
 
         {showPasteModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 print:hidden">
-            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
-              <div className="flex justify-between items-center border-b pb-2">
-                <h3 className="text-lg font-bold text-gray-800">從 Excel 或試算表批量貼上</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowPasteModal(false)}
+          
+            
+              
+                從 Excel 或試算表批量貼上
+                 setShowPasteModal(false)}
                   className="text-gray-400 hover:text-gray-600 font-bold text-xl cursor-pointer"
                 >
                   ✕
-                </button>
-              </div>
+                
+              
 
-              <div className="text-xs text-gray-600 bg-blue-50 p-3 rounded-lg">
-                <p className="font-semibold text-blue-900">💡 貼上說明：可以從 Excel 複製多列項目貼到下方。</p>
-              </div>
+              
+                💡 貼上說明：可以從 Excel 複製多列項目貼到下方。
+              
 
-              <textarea
-                rows={8}
-                placeholder="例如：更換機油、剎車皮更換"
-                value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
+               setPasteText(e.target.value)}
                 className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-500 text-black font-mono text-sm"
               />
 
