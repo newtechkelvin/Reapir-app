@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
     const matchedVehicleIdsFromOrders = matchedWorkOrders?.map(wo => wo.vehicle_id) || [];
 
-    // 2. 查詢車輛表 (直接符合屬性 或 經由工單號關聯)
+    // 2. 查詢車輛表
     let orCondition = `plate_number.ilike.${keyword},vin.ilike.${keyword},project.ilike.${keyword}`;
     if (matchedVehicleIdsFromOrders.length > 0) {
       orCondition += `,id.in.(${matchedVehicleIdsFromOrders.join(',')})`;
@@ -133,12 +133,14 @@ export async function POST(request: Request) {
 
     const order_number = `WO-${Date.now().toString().slice(-8)}`;
 
+    // 自動填入 mileage: 0 以滿足資料庫 NOT NULL 限制
     const { data: workOrder, error: woErr } = await supabase
       .from('work_orders')
       .insert({
         order_number,
         vehicle_id: vehicle.id,
         project: project || null,
+        mileage: 0,
         description,
         total_cost: 0,
         status: 'Completed'
