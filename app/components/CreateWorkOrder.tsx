@@ -54,61 +54,93 @@ export default function CreateWorkOrder({
   isSubmitting,
 }: CreateWorkOrderProps) {
   return (
-    
-      
-        
-          車牌號碼 *
-           setPlateNumber(e.target.value)}
+    <form onSubmit={handleCreateOrder} className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">車牌號碼 *</label>
+          <input
+            type="text"
+            required
+            placeholder="例如: AB-1234"
+            value={plateNumber}
+            onChange={(e) => setPlateNumber(e.target.value)}
             className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
           />
-        
+        </div>
 
-        
-          車架號碼 (VIN)
-           setVin(e.target.value)}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">車架號碼 (VIN)</label>
+          <input
+            type="text"
+            placeholder="例如: 1HGCR2F83HA000000"
+            value={vin}
+            onChange={(e) => setVin(e.target.value)}
             className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
           />
-        
+        </div>
 
-        
-          項目 (Project)
-           setProject(e.target.value)}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">項目 (Project)</label>
+          <input
+            type="text"
+            placeholder="例如: 醫院管理局工程 或 隧道維修合約"
+            value={project}
+            onChange={(e) => setProject(e.target.value)}
             className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
           />
-        
+        </div>
 
-        
-          汽車品牌
-           setBrand(e.target.value)}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">汽車品牌</label>
+          <input
+            type="text"
+            placeholder="例如: Toyota 或 Benz 或 Scania"
+            value={brand}
+            onChange={(e) => setBrand(e.target.value)}
             className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
           />
-        
+        </div>
 
-        
-          車型名稱
-           setModel(e.target.value)}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">車型名稱</label>
+          <input
+            type="text"
+            placeholder="例如: HiAce 或 Coaster"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
             className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
           />
-        
+        </div>
 
-        
-          車輛位置
-           setLocation(e.target.value)}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">車輛位置</label>
+          <input
+            type="text"
+            placeholder="例如: 唐人新村車廠 / 葵涌營運中心"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
             className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
           />
-        
+        </div>
 
-        
-          Claim Form 日期
-           setClaimFormDate(e.target.value)}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Claim Form 日期</label>
+          <input
+            type="date"
+            value={claimFormDate}
+            onChange={(e) => setClaimFormDate(e.target.value)}
             className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
           />
-        
-      
+        </div>
+      </div>
 
-      
-        維修狀況描述
-         setDescription(e.target.value)}
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">維修狀況描述</label>
+        <textarea
+          rows={2}
+          placeholder="請輸入客訴問題或維修備註..."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
           className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 text-black"
         />
       </div>
