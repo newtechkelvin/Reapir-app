@@ -136,78 +136,80 @@ export default function SearchVehicles({
               })}
             </div>
           )}
+        </div>
+      )}
 
-          {selectedWorkOrder && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 print:p-0">
-              <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-5 print:shadow-none print:w-full print:max-w-full">
-                <div className="flex justify-between items-center border-b pb-3 print:border-black">
-                  <div>
-                    <h2 className="text-xl font-bold text-blue-900">工單明細表：{selectedWorkOrder.order_number}</h2>
-                    <p className="text-xs text-gray-500">開單時間：{new Date(selectedWorkOrder.created_at).toLocaleString()}</p>
-                  </div>
-                  <button type="button" onClick={() => setSelectedWorkOrder(null)} className="text-gray-400 hover:text-gray-700 font-bold text-2xl cursor-pointer print:hidden">✕</button>
-                </div>
+      {selectedWorkOrder && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 print:p-0">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-5 print:shadow-none print:w-full print:max-w-full">
+            <div className="flex justify-between items-center border-b pb-3 print:border-black">
+              <div>
+                <h2 className="text-xl font-bold text-blue-900">工單明細表：{selectedWorkOrder.order_number}</h2>
+                <p className="text-xs text-gray-500">開單時間：{new Date(selectedWorkOrder.created_at).toLocaleString()}</p>
+              </div>
+              <button type="button" onClick={() => setSelectedWorkOrder(null)} className="text-gray-400 hover:text-gray-700 font-bold text-2xl cursor-pointer print:hidden">✕</button>
+            </div>
 
-                <div className="grid grid-cols-2 gap-3 text-sm bg-gray-50 p-3 rounded-lg border">
-                  <div><span className="font-semibold">車牌號碼：</span>{selectedWorkOrder.plate_number}</div>
-                  <div><span className="font-semibold">專案項目：</span>{selectedWorkOrder.project || '無'}</div>
-                  <div><span className="font-semibold">車輛位置：</span>{selectedWorkOrder.location || '未設定'}</div>
-                  <div><span className="font-semibold">工單狀態：</span>{selectedWorkOrder.status || '已開單'}</div>
-                </div>
+            <div className="grid grid-cols-2 gap-3 text-sm bg-gray-50 p-3 rounded-lg border">
+              <div><span className="font-semibold">車牌號碼：</span>{selectedWorkOrder.plate_number}</div>
+              <div><span className="font-semibold">專案項目：</span>{selectedWorkOrder.project || '無'}</div>
+              <div><span className="font-semibold">車輛位置：</span>{selectedWorkOrder.location || '未設定'}</div>
+              <div><span className="font-semibold">工單狀態：</span>{selectedWorkOrder.status || '已開單'}</div>
+            </div>
 
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-1 text-sm">維修狀況描述：</h3>
-                  <p className="text-sm text-gray-700 bg-amber-50/50 p-2.5 rounded border border-amber-200">{selectedWorkOrder.description || '無描述備註'}</p>
-                </div>
+            <div>
+              <h3 className="font-bold text-gray-800 mb-1 text-sm">維修狀況描述：</h3>
+              <p className="text-sm text-gray-700 bg-amber-50/50 p-2.5 rounded border border-amber-200">{selectedWorkOrder.description || '無描述備註'}</p>
+            </div>
 
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-2 text-sm">維修與更換項目清單：</h3>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-left text-sm border-collapse">
-                      <thead>
-                        <tr className="bg-gray-100 border-b text-gray-700">
-                          <th className="p-2.5 font-semibold w-24">類別</th>
-                          <th className="p-2.5 font-semibold">項目與零件名稱</th>
+            <div>
+              <h3 className="font-bold text-gray-800 mb-2 text-sm">維修與更換項目清單：</h3>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 border-b text-gray-700">
+                      <th className="p-2.5 font-semibold w-24">類別</th>
+                      <th className="p-2.5 font-semibold">項目與零件名稱</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedWorkOrder.work_order_items && selectedWorkOrder.work_order_items.length > 0 ? (
+                      selectedWorkOrder.work_order_items.map((item: any, idx: number) => (
+                        <tr key={idx} className="border-b">
+                          <td className="p-2.5"><span className={`px-2 py-0.5 rounded text-xs font-semibold ${item.type === 'Part' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>{item.type === 'Part' ? '零件與耗材' : '工時與服務'}</span></td>
+                          <td className="p-2.5 font-medium text-gray-800">{item.item_name}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {selectedWorkOrder.work_order_items && selectedWorkOrder.work_order_items.length > 0 ? (
-                          selectedWorkOrder.work_order_items.map((item: any, idx: number) => (
-                            <tr key={idx} className="border-b">
-                              <td className="p-2.5"><span className={`px-2 py-0.5 rounded text-xs font-semibold ${item.type === 'Part' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>{item.type === 'Part' ? '零件與耗材' : '工時與服務'}</span></td>
-                              <td className="p-2.5 font-medium text-gray-800">{item.item_name}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr><td colSpan={2} className="p-4 text-center text-gray-500">無細項紀錄</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                      ))
+                    ) : (
+                      <tr><td colSpan={2} className="p-4 text-center text-gray-500">無細項紀錄</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                <div className="border-t pt-4 bg-slate-50 p-4 rounded-lg space-y-3">
-                  <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1">✍️ 員工維修完成填寫與確認欄位：</h3>
-                  <div className="flex flex-wrap items-center gap-4 text-sm">
-                    <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-800">
-                      <input type="checkbox" checked={orderStatusMap[selectedWorkOrder.id]?.completed ?? false} onChange={(e) => toggleOrderCompletion(selectedWorkOrder.id, e.target.checked)} className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer" />
-                      <span>此工單所有維修項目已全部完成</span>
-                    </label>
+            <div className="border-t pt-4 bg-slate-50 p-4 rounded-lg space-y-3">
+              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1">✍️ 員工維修完成填寫與確認欄位：</h3>
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-800">
+                  <input type="checkbox" checked={orderStatusMap[selectedWorkOrder.id]?.completed ?? false} onChange={(e) => toggleOrderCompletion(selectedWorkOrder.id, e.target.checked)} className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer" />
+                  <span>此工單所有維修項目已全部完成</span>
+                </label>
 
-                    <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-                      <span className="text-xs font-semibold text-gray-600 whitespace-nowrap">負責員工姓名：</span>
-                      <input type="text" placeholder="請輸入姓名" value={orderStatusMap[selectedWorkOrder.id]?.workerName || ''} onChange={(e) => updateWorkerName(selectedWorkOrder.id, e.target.value)} className="p-1.5 border rounded text-xs w-full text-black bg-white" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center pt-2 print:hidden">
-                  <button type="button" onClick={() => window.print()} className="px-4 py-2 bg-slate-700 text-white rounded-lg font-semibold hover:bg-slate-800 text-sm">🖨️ 列印此單據</button>
-                  <button type="button" onClick={() => setSelectedWorkOrder(null)} className="px-5 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 text-sm">關閉並儲存進度</button>
+                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                  <span className="text-xs font-semibold text-gray-600 whitespace-nowrap">負責員工姓名：</span>
+                  <input type="text" placeholder="請輸入姓名" value={orderStatusMap[selectedWorkOrder.id]?.workerName || ''} onChange={(e) => updateWorkerName(selectedWorkOrder.id, e.target.value)} className="p-1.5 border rounded text-xs w-full text-black bg-white" />
                 </div>
               </div>
             </div>
-          )}
+
+            <div className="flex justify-between items-center pt-2 print:hidden">
+              <button type="button" onClick={() => window.print()} className="px-4 py-2 bg-slate-700 text-white rounded-lg font-semibold hover:bg-slate-800 text-sm">🖨️ 列印此單據</button>
+              <button type="button" onClick={() => setSelectedWorkOrder(null)} className="px-5 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 text-sm">關閉並儲存進度</button>
+            </div>
+          </div>
         </div>
-      );
-    }
+      )}
+    </div>
+  );
+}
