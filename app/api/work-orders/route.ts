@@ -25,7 +25,6 @@ export async function GET(request: Request) {
     const supabase = getSupabaseClient();
     const keyword = `%${query.trim()}%`;
 
-    // 1. 支援搜尋車牌、VIN、Project 以及工單編號 (order_number)
     const { data: matchedWorkOrders } = await supabase
       .from('work_orders')
       .select('vehicle_id')
@@ -33,7 +32,6 @@ export async function GET(request: Request) {
 
     const matchedVehicleIdsFromOrders = matchedWorkOrders?.map(wo => wo.vehicle_id) || [];
 
-    // 2. 查詢車輛表
     let orCondition = `plate_number.ilike.${keyword},vin.ilike.${keyword},project.ilike.${keyword}`;
     if (matchedVehicleIdsFromOrders.length > 0) {
       orCondition += `,id.in.(${matchedVehicleIdsFromOrders.join(',')})`;
@@ -50,7 +48,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, vehicles: [] });
     }
 
-    // 3. 抓取完整工單與更換項目
     const vehicleIds = vehicles.map(v => v.id);
     const { data: workOrders, error: woErr } = await supabase
       .from('work_orders')
@@ -133,7 +130,6 @@ export async function POST(request: Request) {
 
     const order_number = `WO-${Date.now().toString().slice(-8)}`;
 
-    // 自動填入 mileage: 0 以滿足資料庫 NOT NULL 限制
     const { data: workOrder, error: woErr } = await supabase
       .from('work_orders')
       .insert({
@@ -143,7 +139,7 @@ export async function POST(request: Request) {
         mileage: 0,
         description,
         total_cost: 0,
-        status: 'Completed'
+        status: 'Open'
       })
       .select()
       .single();
