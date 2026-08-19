@@ -27,10 +27,10 @@ export default function Home() {
   // 搜尋與資料狀態
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(true); // 預設為 true 讓結果能直接顯示
   const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
 
-  // 頁面載入時自動拉取所有車輛/工單資料，供 Summary 與預設查詢使用
+  // 頁面載入時自動拉取所有車輛/工單資料
   useEffect(() => {
     fetchAllVehicles();
   }, []);
@@ -249,7 +249,10 @@ export default function Home() {
         <div className="flex gap-2 border-b pb-2 print:hidden">
           <button
             type="button"
-            onClick={() => setActiveTab('search')}
+            onClick={() => {
+              setActiveTab('search');
+              handleSearch();
+            }}
             className={`px-4 py-2.5 rounded-lg font-bold text-sm cursor-pointer transition-all ${
               activeTab === 'search'
                 ? 'bg-blue-600 text-white shadow-sm'
