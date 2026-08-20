@@ -8,42 +8,59 @@ interface WorkOrdersSummaryProps {
 }
 
 export default function WorkOrdersSummary({ allVehicles, onSelectWorkOrder }: WorkOrdersSummaryProps) {
-  // 精準篩選出狀態為 Open 的工單，並計算開單至今的天數，最後按開單時間最遠（最久以前）排最頂
+  // 自動解析與篩選進行中的工單
   const openOrders = useMemo(() => {
     const list: any[] = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    allVehicles.forEach((vehicle) => {
-      // 支援 API 回傳的 workOrders 或 work_orders 兩種欄位命名
-      const orders = vehicle.workOrders || vehicle.work_orders;
-      if (orders && Array.isArray(orders)) {
+    if (!Array.isArray(allVehicles)) return list;
+
+    allVehicles.forEach((item) => {
+      // 情況 A: item 是車輛 (Vehicle)，裡面包含歷史工單陣列
+      const orders = item.workOrders || item.work_orders || item.workOrdersList;
+      
+      if (Array.isArray(orders)) {
         orders.forEach((wo: any) => {
-          // 檢查狀態：如果不帶 status 欄位，預設視為 Open；如果有 status，不分大小寫比對是否為 'open'
-          const statusStr = (wo.status || 'open').toString().toLowerCase().trim();
-          
-          if (statusStr === 'open') {
-            const createdDate = new Date(wo.created_at || wo.createdAt || Date.now());
-            createdDate.setHours(0, 0, 0, 0);
-
-            // 計算距離今天的日數 (開單當天計為 1 天)
-            const diffTime = today.getTime() - createdDate.getTime();
-            const daysOpen = Math.floor(diffTime / (1000 * 3600 * 24)) + 1;
-
-            list.push({
-              ...wo,
-              vehiclePlate: vehicle.plate_number,
-              vehicleProject: vehicle.project || wo.project,
-              vehicleLocation: vehicle.location || wo.location,
-              daysOpen: daysOpen < 1 ? 1 : daysOpen,
-              createdDateObj: createdDate,
-            });
-          }
+          checkAndAddWorkOrder(wo, item);
         });
+      } 
+      // 情況 B: item 本身就是一張工單 (Work Order)
+      else if (item.order_number || item.orderNumber || item.id) {
+        checkAndAddWorkOrder(item, item);
       }
     });
 
-    // 依開單日期由最遠（最早）排序至最近
+    function checkAndAddWorkOrder(wo: any, vehicleContext: any) {
+      if (!wo) return;
+
+      const rawStatus = (wo.status || '').toString().trim().toLowerCase();
+      
+      // 只要不是已完成/已關閉 (completed / closed / 已完成)，一律視為進行中 (Open) 工單
+      const isClosed = rawStatus === 'completed' || rawStatus === 'closed' || rawStatus === '已完成';
+
+      if (!isClosed) {
+        const createdDateStr = wo.created_at || wo.createdAt || wo.date || Date.now();
+        const createdDate = new Date(createdDateStr);
+        createdDate.setHours(0, 0, 0, 0);
+
+        // 計算開單至今積壓的天數 (開單當天算第 1 天)
+        const diffTime = today.getTime() - createdDate.getTime();
+        const daysOpen = Math.floor(diffTime / (1000 * 3600 * 24)) + 1;
+
+        list.push({
+          ...wo,
+          vehiclePlate: vehicleContext.plate_number || vehicleContext.plateNumber || wo.plate_number || '未設定',
+          vehicleProject: vehicleContext.project || wo.project || '未設定',
+          vehicleLocation: vehicleContext.location || wo.location || '未設定',
+          daysOpen: daysOpen < 1 ? 1 : daysOpen,
+          createdDateObj: createdDate,
+          itemsCount: wo.work_order_items?.length || wo.items?.length || 0,
+        });
+      }
+    }
+
+    // 依開單時間由遠到近（最早開單的排最頂端）
     list.sort((a, b) => a.createdDateObj.getTime() - b.createdDateObj.getTime());
 
     return list;
@@ -61,8 +78,9 @@ export default function WorkOrdersSummary({ allVehicles, onSelectWorkOrder }: Wo
       </div>
 
       {openOrders.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-500">
-          🎉 目前沒有任何進行中 (Open) 的工單！
+        <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-500 space-y-2">
+          <p className="text-lg font-bold">🎉 目前沒有任何進行中 (Open) 的工單！</p>
+          <p className="text-xs text-gray-400">（如果剛建立了工單，請確認 API 回傳資料或重新整理頁面）</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
@@ -82,11 +100,11 @@ export default function WorkOrdersSummary({ allVehicles, onSelectWorkOrder }: Wo
               >
                 <div className="space-y-1 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-extrabold text-blue-900 text-lg">📋 {order.order_number}</span>
+                    <span className="font-extrabold text-blue-900 text-lg">📋 {order.order_number || order.orderNumber || 'WO-未知'}</span>
                     <span className="bg-slate-100 text-slate-700 text-xs px-2.5 py-0.5 rounded font-bold border">
                       車牌: {order.vehiclePlate}
                     </span>
-                    {order.vehicleProject && (
+                    {order.vehicleProject !== '未設定' && (
                       <span className="bg-purple-50 text-purple-700 text-xs px-2.5 py-0.5 rounded font-medium border border-purple-200">
                         專案: {order.vehicleProject}
                       </span>
@@ -102,9 +120,9 @@ export default function WorkOrdersSummary({ allVehicles, onSelectWorkOrder }: Wo
                   </p>
 
                   <div className="text-xs text-gray-500 flex flex-wrap gap-4 pt-1">
-                    <span>車輛位置: <strong>{order.vehicleLocation || '未設定'}</strong></span>
+                    <span>車輛位置: <strong>{order.vehicleLocation}</strong></span>
                     <span>開單日期: <strong>{order.createdDateObj.toLocaleDateString()}</strong></span>
-                    <span>維修項目: <strong>{order.work_order_items?.length || 0} 項</strong></span>
+                    <span>維修項目: <strong>{order.itemsCount} 項</strong></span>
                   </div>
                 </div>
 
