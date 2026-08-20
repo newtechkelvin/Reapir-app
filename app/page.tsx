@@ -30,15 +30,15 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(true);
   const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
 
-  // 頁面載入時自動拉取所有資料 (帶入默認通配關鍵字或空字串)
+  // 頁面載入時自動拉取所有資料
   useEffect(() => {
     fetchAllVehicles();
   }, []);
 
+  // 專門拉取全廠所有車輛/工單 (清除任何搜尋條件)
   const fetchAllVehicles = async () => {
     try {
       setIsSearching(true);
-      // 統一指向 /api/work-orders
       const res = await fetch('/api/work-orders?q=%');
       if (res.ok) {
         const data = await res.json();
@@ -57,7 +57,6 @@ export default function Home() {
     setHasSearched(true);
     try {
       const q = searchQuery.trim() || '%';
-      // 統一指向 /api/work-orders
       const res = await fetch(`/api/work-orders?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const data = await res.json();
@@ -252,7 +251,6 @@ export default function Home() {
             type="button"
             onClick={() => {
               setActiveTab('search');
-              fetchAllVehicles();
             }}
             className={`px-4 py-2.5 rounded-lg font-bold text-sm cursor-pointer transition-all ${
               activeTab === 'search'
@@ -266,7 +264,8 @@ export default function Home() {
             type="button"
             onClick={() => {
               setActiveTab('summary');
-              fetchAllVehicles();
+              setSearchQuery(''); // 清空搜尋欄
+              fetchAllVehicles(); // 強制抓取全廠車輛資料
             }}
             className={`px-4 py-2.5 rounded-lg font-bold text-sm cursor-pointer transition-all ${
               activeTab === 'summary'
