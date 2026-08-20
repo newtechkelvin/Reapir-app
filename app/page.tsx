@@ -16,24 +16,22 @@ export default function Home() {
   const [model, setModel] = useState('');
   const [location, setLocation] = useState('');
   const [claimFormDate, setClaimFormDate] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [warrantyExpiryDate, setWarrantyExpiryDate] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<any[]>([{ type: 'Labor', item_name: '' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Excel 多行快速貼上 Modal
+  // Modal 貼上
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pastedText, setPastedText] = useState('');
 
-  // 搜尋與資料狀態
+  // 搜尋狀態
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(true);
-
-  // 車輛資料狀態
-  const [allVehicles, setAllVehicles] = useState<any[]>([]);
   const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
 
-  // 頁面載入時自動拉取所有資料
   useEffect(() => {
     fetchAllVehicles();
   }, []);
@@ -41,14 +39,10 @@ export default function Home() {
   const fetchAllVehicles = async () => {
     try {
       setIsSearching(true);
-      const res = await fetch('/api/work-orders?q=%');
+      const res = await fetch('/api/work-orders');
       if (res.ok) {
         const data = await res.json();
-        const vehiclesList = data.vehicles || [];
-        setAllVehicles(vehiclesList);
-        if (!searchQuery.trim()) {
-          setSearchVehicles(vehiclesList);
-        }
+        setSearchVehicles(data.vehicles || []);
       }
     } catch (err) {
       console.error('拉取資料失敗:', err);
@@ -104,6 +98,8 @@ export default function Home() {
           model,
           location,
           claim_form_date: claimFormDate,
+          delivery_date: deliveryDate,
+          warranty_expiry_date: warrantyExpiryDate,
           description,
           items: validItems,
         }),
@@ -118,6 +114,8 @@ export default function Home() {
         setModel('');
         setLocation('');
         setClaimFormDate('');
+        setDeliveryDate('');
+        setWarrantyExpiryDate('');
         setDescription('');
         setItems([{ type: 'Labor', item_name: '' }]);
 
@@ -213,16 +211,16 @@ export default function Home() {
   const exportToCSV = () => {
     if (searchVehicles.length === 0) return;
     let csvContent = '\uFEFF';
-    csvContent += '車牌號碼,VIN,所屬專案,汽車品牌,車型,車輛位置,Claim Form日期,工單編號,工單描述,維修項目\n';
+    csvContent += '車牌號碼,VIN,所屬專案,汽車品牌,車型,車輛位置,交車日期,原保固到期日,工單編號,工單描述,維修項目\n';
 
     searchVehicles.forEach((v) => {
       if (v.workOrders && v.workOrders.length > 0) {
         v.workOrders.forEach((wo: any) => {
           const itemsStr = wo.work_order_items?.map((i: any) => i.item_name).join('; ') || '';
-          csvContent += `"${v.plate_number || ''}","${v.vin || ''}","${v.project || ''}","${v.brand || ''}","${v.model || ''}","${v.location || ''}","${v.claim_form_date || ''}","${wo.order_number || ''}","${wo.description || ''}","${itemsStr}"\n`;
+          csvContent += `"${v.plate_number || ''}","${v.vin || ''}","${v.project || ''}","${v.brand || ''}","${v.model || ''}","${v.location || ''}","${v.delivery_date || ''}","${v.warranty_expiry_date || ''}","${wo.order_number || ''}","${wo.description || ''}","${itemsStr}"\n`;
         });
       } else {
-        csvContent += `"${v.plate_number || ''}","${v.vin || ''}","${v.project || ''}","${v.brand || ''}","${v.model || ''}","${v.location || ''}","${v.claim_form_date || ''}","無","無","無"\n`;
+        csvContent += `"${v.plate_number || ''}","${v.vin || ''}","${v.project || ''}","${v.brand || ''}","${v.model || ''}","${v.location || ''}","${v.delivery_date || ''}","${v.warranty_expiry_date || ''}","無","無","無"\n`;
       }
     });
 
@@ -243,21 +241,17 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-50 text-black p-4 md:p-8">
       <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6 md:p-8 space-y-6">
-        {/* 頂部標題列 */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4 print:hidden">
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-blue-900">🚗 車輛維修與工單管理系統</h1>
-            <p className="text-sm text-gray-500 mt-1">即時工單監控、車歷查詢與履歷管理</p>
+            <p className="text-sm text-gray-500 mt-1">即時工單監控、車輛合約可用率 (Availability) 與保固期風險管理</p>
           </div>
         </div>
 
-        {/* 頁籤導覽列 */}
         <div className="flex gap-2 border-b pb-2 print:hidden">
           <button
             type="button"
-            onClick={() => {
-              setActiveTab('search');
-            }}
+            onClick={() => setActiveTab('search')}
             className={`px-4 py-2.5 rounded-lg font-bold text-sm cursor-pointer transition-all ${
               activeTab === 'search'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -268,9 +262,7 @@ export default function Home() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setActiveTab('summary');
-            }}
+            onClick={() => setActiveTab('summary')}
             className={`px-4 py-2.5 rounded-lg font-bold text-sm cursor-pointer transition-all ${
               activeTab === 'summary'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -292,12 +284,10 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 1. 工單即時 Summary 頁面 */}
         {activeTab === 'summary' && (
           <WorkOrdersSummary />
         )}
 
-        {/* 2. 車輛與工單查詢頁面 */}
         {activeTab === 'search' && (
           <SearchVehicles
             searchQuery={searchQuery}
@@ -312,7 +302,6 @@ export default function Home() {
           />
         )}
 
-        {/* 3. 開立新工單頁面 */}
         {activeTab === 'create' && (
           <CreateWorkOrder
             handleCreateOrder={handleCreateOrder}
@@ -330,6 +319,10 @@ export default function Home() {
             setLocation={setLocation}
             claimFormDate={claimFormDate}
             setClaimFormDate={setClaimFormDate}
+            deliveryDate={deliveryDate}
+            setDeliveryDate={setDeliveryDate}
+            warrantyExpiryDate={warrantyExpiryDate}
+            setWarrantyExpiryDate={setWarrantyExpiryDate}
             description={description}
             setDescription={setDescription}
             items={items}
@@ -341,7 +334,6 @@ export default function Home() {
           />
         )}
 
-        {/* Excel 多行貼上 Modal */}
         {showPasteModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 space-y-4">

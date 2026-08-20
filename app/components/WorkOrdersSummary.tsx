@@ -33,28 +33,71 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
 
       vehicles.forEach((vehicle: any) => {
         const orders = vehicle.workOrders || vehicle.work_orders || [];
+        
+        // 1. 計算該車輛在當前合約年度累積停修總天數
+        const deliveryDate = vehicle.delivery_date ? new Date(vehicle.delivery_date) : null;
+        let currentYearStart = new Date(today.getFullYear(), 0, 1);
+        
+        if (deliveryDate) {
+          currentYearStart = new Date(deliveryDate);
+          currentYearStart.setFullYear(today.getFullYear());
+          if (currentYearStart > today) {
+            currentYearStart.setFullYear(today.getFullYear() - 1);
+          }
+        }
+
+        let totalAnnualRepairDays = 0;
+
         if (Array.isArray(orders)) {
           orders.forEach((wo: any) => {
-            const statusStr = (wo.status || 'open').toString().trim().toLowerCase();
+            const woStart = new Date(wo.created_at || wo.createdAt || Date.now());
+            const woEnd = wo.completed_date ? new Date(wo.completed_date) : today;
 
-            // 只要狀態不是 completed / closed / 已完成，皆視為 Open 進行中的工單
+            if (woEnd >= currentYearStart) {
+              const effectiveStart = woStart < currentYearStart ? currentYearStart : woStart;
+              const diff = Math.ceil((woEnd.getTime() - effectiveStart.getTime()) / (1000 * 3600 * 24));
+              totalAnnualRepairDays += diff > 0 ? diff : 0;
+            }
+          });
+
+          // 2. 篩選出 Open 進行中工單
+          orders.forEach((wo: any) => {
+            const statusStr = (wo.status || 'open').toString().trim().toLowerCase();
             const isClosed = statusStr === 'completed' || statusStr === 'closed' || statusStr === '已完成';
 
             if (!isClosed) {
-              const createdDateStr = wo.created_at || wo.createdAt || Date.now();
-              const createdDate = new Date(createdDateStr);
+              const createdDate = new Date(wo.created_at || wo.createdAt || Date.now());
               createdDate.setHours(0, 0, 0, 0);
 
-              // 計算累積開單天數 (開單當天算第 1 天)
               const diffTime = today.getTime() - createdDate.getTime();
               const daysOpen = Math.floor(diffTime / (1000 * 3600 * 24)) + 1;
+
+              // 計算剩餘安全額度 (上限 18.25 天 = 365 * 5%)
+              const maxAllowedDays = 18.25;
+              const remainingDays = Math.max(0, maxAllowedDays - totalAnnualRepairDays);
+              const isWarrantyExtendedTriggered = totalAnnualRepairDays >= maxAllowedDays;
+
+              // 計算推延後的保固到期日
+              let newWarrantyExpiryStr = '未設定';
+              if (vehicle.warranty_expiry_date) {
+                const origExpiry = new Date(vehicle.warranty_expiry_date);
+                if (isWarrantyExtendedTriggered) {
+                  origExpiry.setMonth(origExpiry.getMonth() + 6);
+                }
+                newWarrantyExpiryStr = origExpiry.toLocaleDateString();
+              }
 
               list.push({
                 ...wo,
                 vehiclePlate: vehicle.plate_number || wo.plate_number || '未設定',
                 vehicleProject: vehicle.project || wo.project || '未設定',
                 vehicleLocation: vehicle.location || wo.location || '未設定',
+                deliveryDateStr: deliveryDate ? deliveryDate.toLocaleDateString() : '未設定',
                 daysOpen: daysOpen < 1 ? 1 : daysOpen,
+                totalAnnualRepairDays,
+                remainingDays,
+                isWarrantyExtendedTriggered,
+                newWarrantyExpiryStr,
                 createdDateObj: createdDate,
                 itemsCount: wo.work_order_items?.length || 0,
               });
@@ -63,8 +106,13 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
         }
       });
 
-      // 按開單日期最遠（最久以前）排最頂端
-      list.sort((a, b) => a.createdDateObj.getTime() - b.createdDateObj.getTime());
+      // 排序邏輯：剩餘額度少者優先排最頂，天數相同者開單最久優先
+      list.sort((a, b) => {
+        if (a.remainingDays !== b.remainingDays) {
+          return a.remainingDays - b.remainingDays;
+        }
+        return a.createdDateObj.getTime() - b.createdDateObj.getTime();
+      });
 
       setOpenOrders(list);
     } catch (err) {
@@ -79,10 +127,8 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
     <div className="space-y-6">
       <div className="flex flex-wrap justify-between items-center bg-slate-800 text-white p-4 rounded-xl shadow-sm gap-2">
         <div>
-          <h2 className="text-xl font-bold">📊 工單即時總覽 (Real-time Summary)</h2>
-          <p className="text-xs text-slate-300 mt-1">
-            目前全廠進行中 (Open) 的工單共有 <span className="font-bold text-amber-400 text-sm">{openOrders.length}</span> 張（按開單時間最久的優先排序）
-          </p>
+          <h2 className="text-xl font-bold">📊 工單即時總覽與可用率 (Availability Summary)</h2>
+          <p className="text-xs text-slate-300 mt-1">目前全廠進行中 (Open) 工單共有 <span className="font-bold text-amber-400 text-sm">{openOrders.length}</span> 張（系統依可用率風險自動排列處理優先順序）</p>
         </div>
         <button
           type="button"
@@ -94,9 +140,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">
-          ⏳ 正在向資料庫讀取所有進行中 (Open) 的工單...
-        </div>
+        <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在向資料庫讀取所有進行中 (Open) 的工單與可用率...</div>
       ) : openOrders.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-500 space-y-2">
           <p className="text-lg font-bold">🎉 目前資料庫中沒有任何狀態為 Open 的工單！</p>
@@ -105,10 +149,14 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
         <div className="grid grid-cols-1 gap-4">
           {openOrders.map((order, idx) => {
             let badgeBg = 'bg-blue-100 text-blue-800 border-blue-300';
-            if (order.daysOpen >= 7) {
-              badgeBg = 'bg-red-100 text-red-800 border-red-300 font-extrabold animate-pulse';
-            } else if (order.daysOpen >= 3) {
-              badgeBg = 'bg-amber-100 text-amber-800 border-amber-300 font-bold';
+            let riskLabel = '合約可用率正常';
+
+            if (order.isWarrantyExtendedTriggered) {
+              badgeBg = 'bg-red-600 text-white border-red-700 font-black animate-pulse';
+              riskLabel = '⚠️ 已逾 5% 限額！保固自動延長 6 個月';
+            } else if (order.remainingDays <= 3) {
+              badgeBg = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
+              riskLabel = `⚠️ 臨界警示 (額度剩 ${order.remainingDays} 天)`;
             }
 
             return (
@@ -117,7 +165,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
                 onClick={() => onSelectWorkOrder && onSelectWorkOrder(order)}
                 className="bg-white border rounded-xl p-4 shadow-xs hover:shadow-md transition-all border-slate-200 cursor-pointer flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
               >
-                <div className="space-y-1 flex-1">
+                <div className="space-y-2 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-extrabold text-blue-900 text-lg">📋 {order.order_number || 'WO-未知'}</span>
                     <span className="bg-slate-100 text-slate-700 text-xs px-2.5 py-0.5 rounded font-bold border">
@@ -139,17 +187,18 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
                   </p>
 
                   <div className="text-xs text-gray-500 flex flex-wrap gap-4 pt-1">
-                    <span>車輛位置: <strong>{order.vehicleLocation}</strong></span>
-                    <span>開單日期: <strong>{order.createdDateObj.toLocaleDateString()}</strong></span>
-                    <span>維修項目: <strong>{order.itemsCount} 項</strong></span>
+                    <span>交車日期: <strong>{order.deliveryDateStr}</strong></span>
+                    <span>本年合約累積停修: <strong className="text-red-600">{order.totalAnnualRepairDays} 天</strong> / 18.25 天</span>
+                    <span>保固到期日: <strong>{order.newWarrantyExpiryStr}</strong></span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 self-end md:self-center">
+                <div className="flex flex-col items-end gap-2 self-end md:self-center">
                   <div className={`px-4 py-2 rounded-lg border text-center ${badgeBg}`}>
-                    <div className="text-xs">已開單累積</div>
+                    <div className="text-xs">本單累積停修</div>
                     <div className="text-lg font-black">{order.daysOpen} 天</div>
                   </div>
+                  <span className="text-xs font-bold text-slate-600">{riskLabel}</span>
                 </div>
               </div>
             );

@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// 直接從環境變數初始化 Supabase Client（無需外部 import）
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(request: Request) {
   try {
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ message: 'Supabase 環境變數未設定', vehicles: [] }, { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('q')?.trim() || searchParams.get('query')?.trim() || '';
 
-    // 1. 先嘗試以 vehicles 為主表連表查詢
     let dbQuery = supabase
       .from('vehicles')
       .select(`
@@ -23,49 +25,37 @@ export async function GET(request: Request) {
       `)
       .order('created_at', { ascending: false });
 
-    // 只有在輸入特定關鍵字時過濾
     if (query && query !== '%') {
       dbQuery = dbQuery.or(`plate_number.ilike.%${query}%,vin.ilike.%${query}%,project.ilike.%${query}%,brand.ilike.%${query}%,model.ilike.%${query}%`);
     }
 
-    const { data: vehicles, error } = await dbQuery;
+    const { data: vehicles, error: vError } = await dbQuery;
 
-    if (error) {
-      console.error('Supabase 查詢 vehicles 錯誤:', error);
-    }
+    if (vError) console.error('Supabase vehicles 查詢錯誤:', vError.message);
 
     if (vehicles && vehicles.length > 0) {
       return NextResponse.json({ vehicles });
     }
 
-    // 2. 備用方案：如果連表沒資料，直接單獨查詢 work_orders 表
-    const { data: rawOrders, error: woError } = await supabase
+    // Fallback: 直接從 work_orders 抓取
+    const { data: rawOrders } = await supabase
       .from('work_orders')
-      .select(`
-        *,
-        work_order_items(*),
-        vehicles(*)
-      `)
+      .select(`*, work_order_items(*)`)
       .order('created_at', { ascending: false });
 
-    if (woError) {
-      console.error('Supabase 查詢 work_orders 錯誤:', woError);
-      return NextResponse.json({ vehicles: [] });
-    }
-
     if (rawOrders && rawOrders.length > 0) {
-      const vehicleMap: Record<string, any> = {};
+      const vehicleMap: { [key: string]: any } = {};
 
       rawOrders.forEach((wo: any) => {
-        const v = wo.vehicles || {};
-        const vId = v.id || wo.vehicle_id || 'unknown';
-
+        const vId = wo.vehicle_id || wo.plate_number || 'unknown';
         if (!vehicleMap[vId]) {
           vehicleMap[vId] = {
             id: vId,
-            plate_number: v.plate_number || wo.plate_number || '未設定',
-            project: v.project || wo.project || '未設定',
-            location: v.location || wo.location || '未設定',
+            plate_number: wo.plate_number || '未設定',
+            project: wo.project || '未設定',
+            location: wo.location || '未設定',
+            delivery_date: null,
+            warranty_expiry_date: null,
             workOrders: [],
           };
         }
@@ -77,7 +67,71 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ vehicles: [] });
   } catch (err: any) {
-    console.error('API 伺服器內部錯誤:', err);
+    console.error('API 錯誤:', err);
     return NextResponse.json({ message: '伺服器內部錯誤', vehicles: [] }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { plate_number, vin, project, brand, model, location, claim_form_date, description, items, delivery_date, warranty_expiry_date } = body;
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // 1. 檢查或建立車輛
+    let { data: vehicle } = await supabase
+      .from('vehicles')
+      .select('*')
+      .eq('plate_number', plate_number)
+      .single();
+
+    if (!vehicle) {
+      const { data: newV, error: vErr } = await supabase
+        .from('vehicles')
+        .insert([{ plate_number, vin, project, brand, model, location, claim_form_date, delivery_date, warranty_expiry_date }])
+        .select()
+        .single();
+
+      if (vErr) throw vErr;
+      vehicle = newV;
+    } else if (delivery_date || warranty_expiry_date) {
+      // 更新車輛保固與交車資訊
+      await supabase
+        .from('vehicles')
+        .update({ delivery_date, warranty_expiry_date })
+        .eq('id', vehicle.id);
+    }
+
+    // 2. 建立新工單 (狀態預設 Open)
+    const order_number = `WO-${Date.now().toString().slice(-6)}`;
+    const { data: order, error: oErr } = await supabase
+      .from('work_orders')
+      .insert([{
+        vehicle_id: vehicle.id,
+        order_number,
+        description,
+        status: 'Open',
+        created_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (oErr) throw oErr;
+
+    // 3. 建立工單項目
+    if (items && items.length > 0) {
+      const itemsToInsert = items.map((i: any) => ({
+        work_order_id: order.id,
+        type: i.type,
+        item_name: i.item_name
+      }));
+      await supabase.from('work_order_items').insert(itemsToInsert);
+    }
+
+    return NextResponse.json({ success: true, order });
+  } catch (err: any) {
+    console.error('新建工單錯誤:', err);
+    return NextResponse.json({ error: err.message || '建立工單失敗' }, { status: 500 });
   }
 }
