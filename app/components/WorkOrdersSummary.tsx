@@ -40,7 +40,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
         const deliveryDate = vehicle.delivery_date ? new Date(vehicle.delivery_date) : null;
         let currentYearStart = new Date(today.getFullYear(), 0, 1);
         
-        if (deliveryDate) {
+        if (deliveryDate && !isNaN(deliveryDate.getTime())) {
           currentYearStart = new Date(deliveryDate);
           currentYearStart.setFullYear(today.getFullYear());
           if (currentYearStart > today) {
@@ -81,11 +81,15 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
               let newWarrantyExpiryStr = '未設定';
               if (vehicle.warranty_expiry_date) {
                 const origExpiry = new Date(vehicle.warranty_expiry_date);
-                if (isWarrantyExtendedTriggered) {
-                  origExpiry.setMonth(origExpiry.getMonth() + 6);
+                if (!isNaN(origExpiry.getTime())) {
+                  if (isWarrantyExtendedTriggered) {
+                    origExpiry.setMonth(origExpiry.getMonth() + 6);
+                  }
+                  newWarrantyExpiryStr = origExpiry.toLocaleDateString();
                 }
-                newWarrantyExpiryStr = origExpiry.toLocaleDateString();
               }
+
+              const items = wo.work_order_items || wo.items || [];
 
               list.push({
                 ...wo,
@@ -93,15 +97,16 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
                 vehicleVin: vehicle.vin || wo.vin || '未設定',
                 vehicleProject: vehicle.project || wo.project || '未設定',
                 vehicleLocation: vehicle.location || wo.location || '未設定',
-                deliveryDateStr: deliveryDate ? deliveryDate.toLocaleDateString() : '未設定',
+                deliveryDateStr: deliveryDate && !isNaN(deliveryDate.getTime()) ? deliveryDate.toLocaleDateString() : '未設定',
+                createdDateStr: !isNaN(createdDate.getTime()) ? createdDate.toLocaleDateString() : '未設定',
                 daysOpen: daysOpen < 1 ? 1 : daysOpen,
                 totalAnnualRepairDays,
                 remainingDays,
                 isWarrantyExtendedTriggered,
                 newWarrantyExpiryStr,
                 createdDateObj: createdDate,
-                itemsList: wo.work_order_items || wo.items || [],
-                itemsCount: wo.work_order_items?.length || wo.items?.length || 0,
+                itemsList: items,
+                itemsCount: items.length,
               });
             }
           });
@@ -245,9 +250,9 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
         </div>
       )}
 
-      {/* 工單詳細資料 Modal */}
+      {/* 工單詳細資料 Modal (加入完全安全空值防護) */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex justify-between items-start border-b pb-4">
@@ -260,12 +265,12 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
                     進行中 (Open)
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">開單時間: {selectedOrder.createdDateObj.toLocaleDateString()}</p>
+                <p className="text-xs text-gray-500 mt-1">開單時間: {selectedOrder.createdDateStr || '未設定'}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedOrder(null)}
-                className="text-gray-400 hover:text-gray-700 text-2xl font-bold px-2"
+                className="text-gray-400 hover:text-gray-700 text-2xl font-bold px-2 cursor-pointer"
               >
                 ✕
               </button>
@@ -285,12 +290,12 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
 
               <div className="pt-2 border-t flex justify-between items-center text-xs">
                 <div>
-                  本年合約累積停修天數: <span className="font-extrabold text-red-600 text-sm">{selectedOrder.totalAnnualRepairDays} 天</span> / 18.25 天
+                  本年合約累積停修天數: <span className="font-extrabold text-red-600 text-sm">{selectedOrder.totalAnnualRepairDays ?? 0} 天</span> / 18.25 天
                 </div>
                 {selectedOrder.isWarrantyExtendedTriggered ? (
                   <span className="text-red-700 font-bold bg-red-100 px-2 py-0.5 rounded">⚠️ 觸發保固延長 6 個月</span>
                 ) : (
-                  <span className="text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded">剩餘可用額度 {selectedOrder.remainingDays} 天</span>
+                  <span className="text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded">剩餘可用額度 {selectedOrder.remainingDays ?? 18.25} 天</span>
                 )}
               </div>
             </div>
@@ -305,7 +310,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
 
             {/* 維修與零件項目 */}
             <div className="space-y-2">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🛠️ 維修與零件明細 ({selectedOrder.itemsCount} 項)</h4>
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🛠️ 維修與零件明細 ({selectedOrder.itemsCount ?? 0} 項)</h4>
               {selectedOrder.itemsList && selectedOrder.itemsList.length > 0 ? (
                 <div className="border rounded-lg overflow-hidden">
                   <table className="w-full text-xs text-left">
@@ -339,7 +344,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
               <button
                 type="button"
                 onClick={() => setSelectedOrder(null)}
-                className="px-4 py-2 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100"
+                className="px-4 py-2 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 cursor-pointer"
               >
                 關閉視窗
               </button>
@@ -348,7 +353,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
                   type="button"
                   disabled={isUpdating}
                   onClick={() => handleCompleteWorkOrder(selectedOrder.id)}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition-all disabled:opacity-50"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {isUpdating ? '更新中...' : '✅ 標示為完工 (Completed)'}
                 </button>
