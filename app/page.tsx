@@ -27,10 +27,10 @@ export default function Home() {
   // 搜尋與資料狀態
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(true); // 預設為 true 讓結果能直接顯示
+  const [hasSearched, setHasSearched] = useState(true);
   const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
 
-  // 頁面載入時自動拉取所有車輛/工單資料
+  // 頁面載入時自動拉取所有資料 (帶入默認通配關鍵字或空字串)
   useEffect(() => {
     fetchAllVehicles();
   }, []);
@@ -38,7 +38,8 @@ export default function Home() {
   const fetchAllVehicles = async () => {
     try {
       setIsSearching(true);
-      const res = await fetch('/api/vehicles/search?query=');
+      // 統一指向 /api/work-orders
+      const res = await fetch('/api/work-orders?q=%');
       if (res.ok) {
         const data = await res.json();
         setSearchVehicles(data.vehicles || []);
@@ -55,7 +56,9 @@ export default function Home() {
     setIsSearching(true);
     setHasSearched(true);
     try {
-      const res = await fetch(`/api/vehicles/search?query=${encodeURIComponent(searchQuery)}`);
+      const q = searchQuery.trim() || '%';
+      // 統一指向 /api/work-orders
+      const res = await fetch(`/api/work-orders?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const data = await res.json();
         setSearchVehicles(data.vehicles || []);
@@ -103,7 +106,6 @@ export default function Home() {
 
       if (res.ok) {
         alert('工單建立成功！');
-        // 清空表單
         setPlateNumber('');
         setVin('');
         setProject('');
@@ -113,13 +115,12 @@ export default function Home() {
         setClaimFormDate('');
         setDescription('');
         setItems([{ type: 'Labor', item_name: '' }]);
-        
-        // 重新更新列表並切換至 Summary
+
         await fetchAllVehicles();
         setActiveTab('summary');
       } else {
         const err = await res.json();
-        alert(`建立失敗: ${err.message || '未知錯誤'}`);
+        alert(`建立失敗: ${err.error || err.message || '未知錯誤'}`);
       }
     } catch (err) {
       console.error('建立工單失敗:', err);
@@ -251,7 +252,7 @@ export default function Home() {
             type="button"
             onClick={() => {
               setActiveTab('search');
-              handleSearch();
+              fetchAllVehicles();
             }}
             className={`px-4 py-2.5 rounded-lg font-bold text-sm cursor-pointer transition-all ${
               activeTab === 'search'
