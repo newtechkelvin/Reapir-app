@@ -8,7 +8,7 @@ import WorkOrdersSummary from './components/WorkOrdersSummary';
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'search' | 'summary' | 'create'>('search');
 
-  // Form & Create Work Order State
+  // 表單與搜尋狀態
   const [plateNumber, setPlateNumber] = useState('');
   const [vin, setVin] = useState('');
   const [project, setProject] = useState('');
@@ -20,25 +20,24 @@ export default function Home() {
   const [items, setItems] = useState<any[]>([{ type: 'Labor', item_name: '' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Excel Paste Modal
+  // Excel 多行快速貼上 Modal
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pastedText, setPastedText] = useState('');
 
-  // Search & Data State
+  // 搜尋與資料狀態
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(true);
 
-  // Separate states for full dataset vs filtered search results
-  const [allVehicles, setAllVehicles] = useState<any[]>([]); // Master list for Summary
-  const [searchVehicles, setSearchVehicles] = useState<any[]>([]); // Filtered list for Search tab
+  // 車輛資料狀態
+  const [allVehicles, setAllVehicles] = useState<any[]>([]);
+  const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
 
-  // Load all vehicles on initial render
+  // 頁面載入時自動拉取所有資料
   useEffect(() => {
     fetchAllVehicles();
   }, []);
 
-  // Fetch the entire vehicle dataset for the Summary view
   const fetchAllVehicles = async () => {
     try {
       setIsSearching(true);
@@ -47,13 +46,12 @@ export default function Home() {
         const data = await res.json();
         const vehiclesList = data.vehicles || [];
         setAllVehicles(vehiclesList);
-        // Default search results to all vehicles if no active search query exists
         if (!searchQuery.trim()) {
           setSearchVehicles(vehiclesList);
         }
       }
     } catch (err) {
-      console.error('Failed to fetch vehicle dataset:', err);
+      console.error('拉取資料失敗:', err);
     } finally {
       setIsSearching(false);
     }
@@ -73,7 +71,7 @@ export default function Home() {
         setSearchVehicles([]);
       }
     } catch (err) {
-      console.error('Search error:', err);
+      console.error('搜尋錯誤:', err);
       setSearchVehicles([]);
     } finally {
       setIsSearching(false);
@@ -245,7 +243,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-50 text-black p-4 md:p-8">
       <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6 md:p-8 space-y-6">
-        {/* Header */}
+        {/* 頂部標題列 */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4 print:hidden">
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-blue-900">🚗 車輛維修與工單管理系統</h1>
@@ -253,7 +251,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Tab Navigation */}
+        {/* 頁籤導覽列 */}
         <div className="flex gap-2 border-b pb-2 print:hidden">
           <button
             type="button"
@@ -272,7 +270,6 @@ export default function Home() {
             type="button"
             onClick={() => {
               setActiveTab('summary');
-              fetchAllVehicles(); // Always pull fresh master data for summary
             }}
             className={`px-4 py-2.5 rounded-lg font-bold text-sm cursor-pointer transition-all ${
               activeTab === 'summary'
@@ -295,12 +292,12 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 1. Real-time Summary Tab */}
+        {/* 1. 工單即時 Summary 頁面 */}
         {activeTab === 'summary' && (
-          <WorkOrdersSummary allVehicles={allVehicles} />
+          <WorkOrdersSummary />
         )}
 
-        {/* 2. Vehicle & Work Order Search Tab */}
+        {/* 2. 車輛與工單查詢頁面 */}
         {activeTab === 'search' && (
           <SearchVehicles
             searchQuery={searchQuery}
@@ -315,7 +312,7 @@ export default function Home() {
           />
         )}
 
-        {/* 3. Create Work Order Tab */}
+        {/* 3. 開立新工單頁面 */}
         {activeTab === 'create' && (
           <CreateWorkOrder
             handleCreateOrder={handleCreateOrder}
@@ -344,7 +341,7 @@ export default function Home() {
           />
         )}
 
-        {/* Excel Import Modal */}
+        {/* Excel 多行貼上 Modal */}
         {showPasteModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 space-y-4">

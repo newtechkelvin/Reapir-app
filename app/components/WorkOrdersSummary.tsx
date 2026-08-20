@@ -1,86 +1,106 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface WorkOrdersSummaryProps {
-  allVehicles: any[];
+  allVehicles?: any[];
   onSelectWorkOrder?: (order: any) => void;
 }
 
-export default function WorkOrdersSummary({ allVehicles, onSelectWorkOrder }: WorkOrdersSummaryProps) {
-  // 自動解析與篩選進行中的工單
-  const openOrders = useMemo(() => {
-    const list: any[] = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSummaryProps) {
+  const [openOrders, setOpenOrders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-    if (!Array.isArray(allVehicles)) return list;
+  useEffect(() => {
+    fetchOpenWorkOrders();
+  }, []);
 
-    allVehicles.forEach((item) => {
-      // 情況 A: item 是車輛 (Vehicle)，裡面包含歷史工單陣列
-      const orders = item.workOrders || item.work_orders || item.workOrdersList;
-      
-      if (Array.isArray(orders)) {
-        orders.forEach((wo: any) => {
-          checkAndAddWorkOrder(wo, item);
-        });
-      } 
-      // 情況 B: item 本身就是一張工單 (Work Order)
-      else if (item.order_number || item.orderNumber || item.id) {
-        checkAndAddWorkOrder(item, item);
+  const fetchOpenWorkOrders = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch('/api/work-orders?q=%');
+      if (!res.ok) {
+        setOpenOrders([]);
+        return;
       }
-    });
 
-    function checkAndAddWorkOrder(wo: any, vehicleContext: any) {
-      if (!wo) return;
+      const data = await res.json();
+      const vehicles = data.vehicles || [];
 
-      const rawStatus = (wo.status || '').toString().trim().toLowerCase();
-      
-      // 只要不是已完成/已關閉 (completed / closed / 已完成)，一律視為進行中 (Open) 工單
-      const isClosed = rawStatus === 'completed' || rawStatus === 'closed' || rawStatus === '已完成';
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-      if (!isClosed) {
-        const createdDateStr = wo.created_at || wo.createdAt || wo.date || Date.now();
-        const createdDate = new Date(createdDateStr);
-        createdDate.setHours(0, 0, 0, 0);
+      const list: any[] = [];
 
-        // 計算開單至今積壓的天數 (開單當天算第 1 天)
-        const diffTime = today.getTime() - createdDate.getTime();
-        const daysOpen = Math.floor(diffTime / (1000 * 3600 * 24)) + 1;
+      vehicles.forEach((vehicle: any) => {
+        const orders = vehicle.workOrders || vehicle.work_orders || [];
+        if (Array.isArray(orders)) {
+          orders.forEach((wo: any) => {
+            const statusStr = (wo.status || 'open').toString().trim().toLowerCase();
 
-        list.push({
-          ...wo,
-          vehiclePlate: vehicleContext.plate_number || vehicleContext.plateNumber || wo.plate_number || '未設定',
-          vehicleProject: vehicleContext.project || wo.project || '未設定',
-          vehicleLocation: vehicleContext.location || wo.location || '未設定',
-          daysOpen: daysOpen < 1 ? 1 : daysOpen,
-          createdDateObj: createdDate,
-          itemsCount: wo.work_order_items?.length || wo.items?.length || 0,
-        });
-      }
+            // 只要 status 不是 completed / closed / 已完成，皆視為 Open 進行中的工單
+            const isClosed = statusStr === 'completed' || statusStr === 'closed' || statusStr === '已完成';
+
+            if (!isClosed) {
+              const createdDateStr = wo.created_at || wo.createdAt || Date.now();
+              const createdDate = new Date(createdDateStr);
+              createdDate.setHours(0, 0, 0, 0);
+
+              // 計算累積開單天數 (開單當天算第 1 天)
+              const diffTime = today.getTime() - createdDate.getTime();
+              const daysOpen = Math.floor(diffTime / (1000 * 3600 * 24)) + 1;
+
+              list.push({
+                ...wo,
+                vehiclePlate: vehicle.plate_number || wo.plate_number || '未設定',
+                vehicleProject: vehicle.project || wo.project || '未設定',
+                vehicleLocation: vehicle.location || wo.location || '未設定',
+                daysOpen: daysOpen < 1 ? 1 : daysOpen,
+                createdDateObj: createdDate,
+                itemsCount: wo.work_order_items?.length || 0,
+              });
+            }
+          });
+        }
+      });
+
+      // 按開單日期最遠（最久以前）排最頂端
+      list.sort((a, b) => a.createdDateObj.getTime() - b.createdDateObj.getTime());
+
+      setOpenOrders(list);
+    } catch (err) {
+      console.error('抓取 Open 工單失敗:', err);
+      setOpenOrders([]);
+    } finally {
+      setIsLoading(false);
     }
-
-    // 依開單時間由遠到近（最早開單的排最頂端）
-    list.sort((a, b) => a.createdDateObj.getTime() - b.createdDateObj.getTime());
-
-    return list;
-  }, [allVehicles]);
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-slate-800 text-white p-4 rounded-xl shadow-sm">
+      <div className="flex flex-wrap justify-between items-center bg-slate-800 text-white p-4 rounded-xl shadow-sm gap-2">
         <div>
           <h2 className="text-xl font-bold">📊 工單即時總覽 (Real-time Summary)</h2>
           <p className="text-xs text-slate-300 mt-1">
-            目前全廠進行中 (Open) 的工單共有 <span className="font-bold text-amber-400 text-sm">{openOrders.length}</span> 張（按開單日期最久的優先排序）
+            目前全廠進行中 (Open) 的工單共有 <span className="font-bold text-amber-400 text-sm">{openOrders.length}</span> 張（按開單時間最久的優先排序）
           </p>
         </div>
+        <button
+          type="button"
+          onClick={fetchOpenWorkOrders}
+          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all"
+        >
+          🔄 重新整理
+        </button>
       </div>
 
-      {openOrders.length === 0 ? (
+      {isLoading ? (
+        <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">
+          ⏳ 正在向資料庫讀取所有進行中 (Open) 的工單...
+        </div>
+      ) : openOrders.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-500 space-y-2">
-          <p className="text-lg font-bold">🎉 目前沒有任何進行中 (Open) 的工單！</p>
-          <p className="text-xs text-gray-400">（如果剛建立了工單，請確認 API 回傳資料或重新整理頁面）</p>
+          <p className="text-lg font-bold">🎉 目前資料庫中沒有任何狀態為 Open 的工單！</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
@@ -100,7 +120,7 @@ export default function WorkOrdersSummary({ allVehicles, onSelectWorkOrder }: Wo
               >
                 <div className="space-y-1 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-extrabold text-blue-900 text-lg">📋 {order.order_number || order.orderNumber || 'WO-未知'}</span>
+                    <span className="font-extrabold text-blue-900 text-lg">📋 {order.order_number || 'WO-未知'}</span>
                     <span className="bg-slate-100 text-slate-700 text-xs px-2.5 py-0.5 rounded font-bold border">
                       車牌: {order.vehiclePlate}
                     </span>
