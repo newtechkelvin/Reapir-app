@@ -21,7 +21,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const [modalItems, setModalItems] = useState<any[]>([]);
   const [lastModifiedStr, setLastModifiedStr] = useState<string>('');
 
-  // 靜態與可編輯動態欄位
   const [garageLocationInput, setGarageLocationInput] = useState('');
   const [vehicleLocationInput, setVehicleLocationInput] = useState('');
   const [pickupReturnDateInput, setPickupReturnDateInput] = useState('');
@@ -40,7 +39,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     setCompletedDateInput('');
     setStaffNameInput('');
 
-    // 初始化表單可編修欄位
     setGarageLocationInput(order.garage_location || order.location || vehicle.garage_location || vehicle.location || '');
     setVehicleLocationInput(order.vehicle_location || vehicle.vehicle_location || '');
     setPickupReturnDateInput(order.pickup_return_date || vehicle.pickup_return_date || '');
@@ -68,7 +66,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     setModalItems([]);
   };
 
-  // 防抖自動儲存
   const triggerAutoSave = (overrideData?: any) => {
     if (!selectedOrder?.id) return;
     setIsAutoSaving(true);
@@ -295,7 +292,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 工單詳細明細 Modal (直印可編輯模式) */}
+      {/* 工單詳細明細 Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
           <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
@@ -338,7 +335,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             </div>
 
-            {/* 1. 車輛與合約資訊欄 (具備即時修改編輯輸入功能) */}
+            {/* 1. 車輛與合約資訊欄 */}
             <div className="border-2 border-slate-400 rounded-xl print:rounded-lg p-3.5 print:p-3 bg-slate-50/50 print:bg-white space-y-2">
               <h4 className="text-xs print:text-sm font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1">🚘 車輛與合約基本資訊</h4>
               <div className="grid grid-cols-2 print:grid-cols-3 gap-2.5 text-xs print:text-sm">
@@ -347,19 +344,25 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                 <div><span className="text-gray-600 block">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
                 <div><span className="text-gray-600 block">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
 
-                {/* 支援可編修：車房位置 */}
+                {/* 支援下拉選單：車房位置 */}
                 <div>
                   <label className="text-gray-600 block font-semibold print:hidden">車房位置：</label>
-                  <input
-                    type="text"
+                  <select
                     value={garageLocationInput}
                     onChange={(e) => {
                       setGarageLocationInput(e.target.value);
                       triggerAutoSave({ garage_location: e.target.value });
                     }}
-                    placeholder="例如：廠房 A"
                     className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
-                  />
+                  >
+                    <option value="">-- 請選擇車房位置 --</option>
+                    <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
+                    <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
+                    <option value="機電 - 屯門">機電 - 屯門</option>
+                    <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
+                    <option value="機電 - 柴灣">機電 - 柴灣</option>
+                    <option value="車行">車行</option>
+                  </select>
                   <div className="hidden print:block"><span className="text-gray-600">車房位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
                 </div>
 
@@ -417,7 +420,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-xs print:text-sm text-gray-900 bg-gray-50 print:bg-white p-2.5 rounded-lg border border-slate-300 leading-snug">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 (可線上修改類別, 包含 收費項目 與 Recall項目) */}
+            {/* 3. 維修項目清單 */}
             <div className="space-y-1">
               <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
               {modalItems.length > 0 ? (
@@ -446,7 +449,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                               />
                             </td>
                             <td className="p-2 print:p-2 font-bold">
-                              {/* 螢幕上可隨時更新類別 */}
                               <select
                                 value={item.type || '進廠維修'}
                                 onChange={(e) => handleTypeChange(i, e.target.value)}
