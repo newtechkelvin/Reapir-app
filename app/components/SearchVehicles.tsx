@@ -18,6 +18,9 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
   
+  // 項目勾選狀態紀錄
+  const [checkedItems, setCheckedItems] = useState<{ [key: number]: boolean }>({});
+
   // 簽核/結案欄位 State (完成日期預設為空白)
   const [completedDateInput, setCompletedDateInput] = useState('');
   const [staffNameInput, setStaffNameInput] = useState('');
@@ -28,11 +31,28 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     setSelectedOrder(order);
     setCompletedDateInput('');
     setStaffNameInput('');
+
+    // 初始化勾選狀態：已 Completed 的預設全部勾選，Open 的預設未勾選
+    const items = order.work_order_items || order.items || [];
+    const isCompleted = order.status?.toLowerCase() === 'completed';
+    const initialChecked: { [key: number]: boolean } = {};
+    items.forEach((_: any, idx: number) => {
+      initialChecked[idx] = isCompleted;
+    });
+    setCheckedItems(initialChecked);
   };
 
   const handleCloseDetailModal = () => {
     setSelectedOrder(null);
     setSelectedVehicle(null);
+    setCheckedItems({});
+  };
+
+  const handleToggleCheck = (index: number) => {
+    setCheckedItems((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
   };
 
   const handleMarkAsCompleted = async () => {
@@ -218,29 +238,48 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-sm text-gray-800 bg-gray-50 p-3 rounded-lg border">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 維修項目清單 */}
+            {/* 維修項目清單 (含勾選框) */}
             <div className="space-y-2">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🛠️ 維修與零件項目明細 (點擊即可勾選進度)</h4>
               {(selectedOrder.work_order_items || selectedOrder.items || []).length > 0 ? (
                 <div className="border rounded-lg overflow-hidden">
                   <table className="w-full text-xs text-left">
                     <thead className="bg-gray-100 text-gray-700 font-bold border-b">
                       <tr>
-                        <th className="p-2.5">類別</th>
+                        <th className="p-2.5 w-12 text-center">狀態</th>
+                        <th className="p-2.5 w-24">類別</th>
                         <th className="p-2.5">項目名稱</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {(selectedOrder.work_order_items || selectedOrder.items || []).map((item: any, i: number) => (
-                        <tr key={i} className="hover:bg-gray-50">
-                          <td className="p-2.5 font-bold">
-                            <span className={`px-2 py-0.5 rounded text-[10px] ${item.type === 'Part' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
-                              {item.type === 'Part' ? '零件' : '工時'}
-                            </span>
-                          </td>
-                          <td className="p-2.5 text-gray-800">{item.item_name}</td>
-                        </tr>
-                      ))}
+                      {(selectedOrder.work_order_items || selectedOrder.items || []).map((item: any, i: number) => {
+                        const isChecked = !!checkedItems[i];
+
+                        return (
+                          <tr
+                            key={i}
+                            onClick={() => handleToggleCheck(i)}
+                            className={`cursor-pointer transition-colors ${isChecked ? 'bg-emerald-50/60' : 'hover:bg-gray-50'}`}
+                          >
+                            <td className="p-2.5 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleCheck(i)}
+                                className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                              />
+                            </td>
+                            <td className="p-2.5 font-bold">
+                              <span className={`px-2 py-0.5 rounded text-[10px] ${item.type === 'Part' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
+                                {item.type === 'Part' ? '零件' : '工時'}
+                              </span>
+                            </td>
+                            <td className={`p-2.5 text-gray-800 ${isChecked ? 'line-through text-gray-400 font-medium' : ''}`}>
+                              {item.item_name}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
