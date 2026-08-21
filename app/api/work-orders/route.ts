@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       dbQuery = dbQuery.or(`plate_number.ilike.%${query}%,vin.ilike.%${query}%,project.ilike.%${query}%,brand.ilike.%${query}%,model.ilike.%${query}%`);
     }
 
-    const { data: vehicles, error: vError } = await dbQuery;
+    const { data: vehicles } = await dbQuery;
 
     // 2. 若找不到，改從 work_orders 表依工單號 (order_number) 搜尋並反查 vehicles
     if (query && query !== '%' && (!vehicles || vehicles.length === 0)) {

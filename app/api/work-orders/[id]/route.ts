@@ -22,7 +22,7 @@ export async function PATCH(
     const supabase = createClient(supabaseUrl, supabaseKey);
     const now = new Date().toISOString();
 
-    // 1. 如果有提交備註/勾選更新 (items)
+    // 1. 更新工單項目 (備註與勾選進度)
     if (items && Array.isArray(items)) {
       for (const item of items) {
         if (item.id) {
@@ -37,7 +37,7 @@ export async function PATCH(
       }
     }
 
-    // 2. 更新工單本體（紀錄 updated_at，若有 status 才變更 status）
+    // 2. 更新工單本體
     const updatePayload: any = { updated_at: now };
     if (status) updatePayload.status = status;
     if (completed_date) updatePayload.completed_date = completed_date;
@@ -50,11 +50,14 @@ export async function PATCH(
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase 更新工單失敗:', error.message);
+      throw new Error(error.message);
+    }
 
     return NextResponse.json({ success: true, order: updatedOrder, updated_at: now });
   } catch (err: any) {
-    console.error('更新工單失敗:', err);
+    console.error('更新工單 API 錯誤:', err);
     return NextResponse.json({ error: err.message || '更新失敗' }, { status: 500 });
   }
 }

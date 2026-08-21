@@ -129,13 +129,14 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         }),
       });
 
-      if (res.ok) {
-        alert('工單已順利標示為結案 (Completed)！');
-        handleCloseDetailModal();
-        props.handleSearch();
-      } else {
-        alert('結案失敗，請稍後再試');
-      }
+     if (res.ok) {
+  alert('工單已順利標示為結案 (Completed)！');
+  handleCloseDetailModal();
+  props.handleSearch();
+} else {
+  const errData = await res.json().catch(() => null);
+  alert(`結案失敗: ${errData?.error || errData?.message || '請檢查網路連線或資料庫設定'}`);
+}
     } catch (err) {
       console.error('結案操作錯誤:', err);
       alert('網路連線失敗');
