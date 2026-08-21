@@ -84,7 +84,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             type="text"
             value={props.location}
             onChange={(e) => props.setLocation(e.target.value)}
-            placeholder="例如：台北一廠"
+            placeholder="例如：廠房 A"
             className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -124,6 +124,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
               <option value="更換零件">更換零件</option>
               <option value="現場處理">現場處理</option>
               <option value="外判處理">外判處理</option>
+              <option value="收費項目">收費項目</option>
+              <option value="Recall項目">Recall項目</option>
             </select>
             <input
               type="text"

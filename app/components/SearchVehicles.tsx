@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 
 interface SearchVehiclesProps {
   searchQuery: string;
@@ -21,6 +21,12 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const [modalItems, setModalItems] = useState<any[]>([]);
   const [lastModifiedStr, setLastModifiedStr] = useState<string>('');
 
+  // 靜態與可編輯動態欄位
+  const [garageLocationInput, setGarageLocationInput] = useState('');
+  const [vehicleLocationInput, setVehicleLocationInput] = useState('');
+  const [pickupReturnDateInput, setPickupReturnDateInput] = useState('');
+  const [claimFormDateInput, setClaimFormDateInput] = useState('');
+
   const [completedDateInput, setCompletedDateInput] = useState('');
   const [staffNameInput, setStaffNameInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,6 +39,12 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     setSelectedOrder(order);
     setCompletedDateInput('');
     setStaffNameInput('');
+
+    // 初始化表單可編修欄位
+    setGarageLocationInput(order.garage_location || order.location || vehicle.garage_location || vehicle.location || '');
+    setVehicleLocationInput(order.vehicle_location || vehicle.vehicle_location || '');
+    setPickupReturnDateInput(order.pickup_return_date || vehicle.pickup_return_date || '');
+    setClaimFormDateInput(order.claim_form_date || vehicle.claim_form_date || '');
 
     const rawItems = order.work_order_items || order.items || [];
     const formattedItems = rawItems.map((item: any) => ({
@@ -56,7 +68,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     setModalItems([]);
   };
 
-  const triggerAutoSave = (updatedItems: any[]) => {
+  // 防抖自動儲存
+  const triggerAutoSave = (overrideData?: any) => {
     if (!selectedOrder?.id) return;
     setIsAutoSaving(true);
 
@@ -64,12 +77,19 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
     saveTimerRef.current = setTimeout(async () => {
       try {
+        const payload = {
+          garage_location: garageLocationInput,
+          vehicle_location: vehicleLocationInput,
+          pickup_return_date: pickupReturnDateInput,
+          claim_form_date: claimFormDateInput,
+          items: modalItems,
+          ...overrideData
+        };
+
         const res = await fetch(`/api/work-orders/${selectedOrder.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            items: updatedItems,
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (res.ok) {
@@ -89,14 +109,21 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     const updated = [...modalItems];
     updated[index].is_completed = !updated[index].is_completed;
     setModalItems(updated);
-    triggerAutoSave(updated);
+    triggerAutoSave({ items: updated });
+  };
+
+  const handleTypeChange = (index: number, typeVal: string) => {
+    const updated = [...modalItems];
+    updated[index].type = typeVal;
+    setModalItems(updated);
+    triggerAutoSave({ items: updated });
   };
 
   const handleNoteChange = (index: number, val: string) => {
     const updated = [...modalItems];
     updated[index].notes = val;
     setModalItems(updated);
-    triggerAutoSave(updated);
+    triggerAutoSave({ items: updated });
   };
 
   const handlePrintModal = () => {
@@ -121,6 +148,10 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           status: 'Completed',
           completed_date: completedDateInput,
           staff_name: staffNameInput,
+          garage_location: garageLocationInput,
+          vehicle_location: vehicleLocationInput,
+          pickup_return_date: pickupReturnDateInput,
+          claim_form_date: claimFormDateInput,
           items: modalItems,
         }),
       });
@@ -264,7 +295,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 工單詳細明細 Modal */}
+      {/* 工單詳細明細 Modal (直印可編輯模式) */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
           <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
@@ -307,18 +338,76 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             </div>
 
-            {/* 1. 車輛與合約資訊欄 (新增車房位置、車輛位置與取車/回廠日期) */}
-            <div className="border-2 border-slate-400 rounded-xl print:rounded-lg p-3.5 print:p-3 bg-slate-50/50 print:bg-white space-y-1.5">
+            {/* 1. 車輛與合約資訊欄 (具備即時修改編輯輸入功能) */}
+            <div className="border-2 border-slate-400 rounded-xl print:rounded-lg p-3.5 print:p-3 bg-slate-50/50 print:bg-white space-y-2">
               <h4 className="text-xs print:text-sm font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1">🚘 車輛與合約基本資訊</h4>
               <div className="grid grid-cols-2 print:grid-cols-3 gap-2.5 text-xs print:text-sm">
-                <div><span className="text-gray-600">工單編號：</span><strong className="text-blue-900 font-black">{selectedOrder.order_number || 'WO-未知'}</strong></div>
-                <div><span className="text-gray-600">車牌號碼：</span><strong className="text-blue-900 font-black">{selectedVehicle?.plate_number || selectedOrder.plate_number || '未設定'}</strong></div>
-                <div><span className="text-gray-600">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
-                <div><span className="text-gray-600">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
-                <div><span className="text-gray-600">車房位置：</span><strong className="text-slate-900">{selectedOrder.garage_location || selectedOrder.location || selectedVehicle?.garage_location || selectedVehicle?.location || '未設定'}</strong></div>
-                <div><span className="text-gray-600">車輛位置：</span><strong className="text-slate-900">{selectedOrder.vehicle_location || selectedVehicle?.vehicle_location || '未設定'}</strong></div>
-                <div><span className="text-gray-600">取車/回廠日期：</span><strong className="text-slate-900">{selectedOrder.pickup_return_date || selectedVehicle?.pickup_return_date || '未設定'}</strong></div>
-                <div><span className="text-gray-600">Claim Form 日期：</span><strong className="text-slate-900">{selectedOrder.claim_form_date || selectedVehicle?.claim_form_date || '未設定'}</strong></div>
+                <div><span className="text-gray-600 block">工單編號：</span><strong className="text-blue-900 font-black">{selectedOrder.order_number || 'WO-未知'}</strong></div>
+                <div><span className="text-gray-600 block">車牌號碼：</span><strong className="text-blue-900 font-black">{selectedVehicle?.plate_number || selectedOrder.plate_number || '未設定'}</strong></div>
+                <div><span className="text-gray-600 block">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
+                <div><span className="text-gray-600 block">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
+
+                {/* 支援可編修：車房位置 */}
+                <div>
+                  <label className="text-gray-600 block font-semibold print:hidden">車房位置：</label>
+                  <input
+                    type="text"
+                    value={garageLocationInput}
+                    onChange={(e) => {
+                      setGarageLocationInput(e.target.value);
+                      triggerAutoSave({ garage_location: e.target.value });
+                    }}
+                    placeholder="例如：廠房 A"
+                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                  <div className="hidden print:block"><span className="text-gray-600">車房位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
+                </div>
+
+                {/* 支援可編修：車輛位置 */}
+                <div>
+                  <label className="text-gray-600 block font-semibold print:hidden">車輛位置：</label>
+                  <input
+                    type="text"
+                    value={vehicleLocationInput}
+                    onChange={(e) => {
+                      setVehicleLocationInput(e.target.value);
+                      triggerAutoSave({ vehicle_location: e.target.value });
+                    }}
+                    placeholder="例如：停泊位 B2"
+                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                  <div className="hidden print:block"><span className="text-gray-600">車輛位置：</span><strong className="text-slate-900">{vehicleLocationInput || '未設定'}</strong></div>
+                </div>
+
+                {/* 支援可編修：取車/回廠日期 */}
+                <div>
+                  <label className="text-gray-600 block font-semibold print:hidden">取車/回廠日期：</label>
+                  <input
+                    type="date"
+                    value={pickupReturnDateInput}
+                    onChange={(e) => {
+                      setPickupReturnDateInput(e.target.value);
+                      triggerAutoSave({ pickup_return_date: e.target.value });
+                    }}
+                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                  <div className="hidden print:block"><span className="text-gray-600">取車/回廠日期：</span><strong className="text-slate-900">{pickupReturnDateInput || '未設定'}</strong></div>
+                </div>
+
+                {/* 支援可編修：Claim Form 日期 */}
+                <div>
+                  <label className="text-gray-600 block font-semibold print:hidden">Claim Form 日期：</label>
+                  <input
+                    type="date"
+                    value={claimFormDateInput}
+                    onChange={(e) => {
+                      setClaimFormDateInput(e.target.value);
+                      triggerAutoSave({ claim_form_date: e.target.value });
+                    }}
+                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                  <div className="hidden print:block"><span className="text-gray-600">Claim Form 日期：</span><strong className="text-slate-900">{claimFormDateInput || '未設定'}</strong></div>
+                </div>
               </div>
             </div>
 
@@ -328,7 +417,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-xs print:text-sm text-gray-900 bg-gray-50 print:bg-white p-2.5 rounded-lg border border-slate-300 leading-snug">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 */}
+            {/* 3. 維修項目清單 (可線上修改類別, 包含 收費項目 與 Recall項目) */}
             <div className="space-y-1">
               <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
               {modalItems.length > 0 ? (
@@ -337,7 +426,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                     <thead className="bg-slate-200 text-slate-900 font-bold border-b-2 border-slate-400">
                       <tr>
                         <th className="p-2 w-10 text-center print:hidden">完成</th>
-                        <th className="p-2 print:p-2 w-28">類別</th>
+                        <th className="p-2 print:p-2 w-32">類別</th>
                         <th className="p-2 print:p-2 w-1/2">項目名稱</th>
                         <th className="p-2 print:p-2">進度備註 (Notes)</th>
                       </tr>
@@ -357,7 +446,20 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                               />
                             </td>
                             <td className="p-2 print:p-2 font-bold">
-                              <span className="px-2 py-0.5 bg-slate-100 text-slate-900 rounded border border-slate-400 text-xs print:text-xs">
+                              {/* 螢幕上可隨時更新類別 */}
+                              <select
+                                value={item.type || '進廠維修'}
+                                onChange={(e) => handleTypeChange(i, e.target.value)}
+                                className="p-1 border rounded text-xs bg-white text-slate-900 font-bold print:hidden focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="進廠維修">進廠維修</option>
+                                <option value="更換零件">更換零件</option>
+                                <option value="現場處理">現場處理</option>
+                                <option value="外判處理">外判處理</option>
+                                <option value="收費項目">收費項目</option>
+                                <option value="Recall項目">Recall項目</option>
+                              </select>
+                              <span className="hidden print:inline-block px-2 py-0.5 bg-slate-100 text-slate-900 rounded border border-slate-400 text-xs print:text-xs">
                                 {item.type || '進廠維修'}
                               </span>
                             </td>
@@ -384,7 +486,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               )}
             </div>
 
-            {/* 4. 簽核與結案欄位 (螢幕顯示) */}
+            {/* 4. 簽核與結案欄位 */}
             {selectedOrder.status?.toLowerCase() !== 'completed' && (
               <div className="border-t pt-2 space-y-2 bg-slate-50 print:bg-white p-3 print:p-0 rounded-xl border-slate-200 print:hidden">
                 <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">✍️ 工單完工簽核與結案設定 (提交後正式結案)</h4>
@@ -413,7 +515,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             )}
 
-            {/* 列印專屬區塊：含完工日期、主管簽署、交車日期與交車司機 */}
+            {/* 列印專屬簽名欄 */}
             <div className="hidden print:grid grid-cols-2 gap-x-6 gap-y-3 pt-4 text-xs print:text-sm font-bold border-t-2 border-slate-500">
               <div>完工日期：____________________</div>
               <div>維修主管簽署：____________________</div>
