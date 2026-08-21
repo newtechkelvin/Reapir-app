@@ -223,16 +223,16 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 工單詳細明細 Modal (完美限制為單頁 A4 列印) */}
+      {/* 工單詳細明細 Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
-          <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-4 print:space-y-2 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black print:text-xs">
+          <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
             
             {/* 公司正式 Header */}
-            <div className="text-center border-b-2 border-slate-800 pb-2 print:pb-1">
-              <h1 className="text-2xl print:text-xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
-              <p className="text-xs print:text-[10px] text-slate-600 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
-              <p className="text-sm print:text-xs font-extrabold text-blue-900 mt-1 bg-slate-100 py-0.5 rounded">車輛維修工單 (Repair Job Sheet)</p>
+            <div className="text-center border-b-2 border-slate-900 pb-2 print:pb-2">
+              <h1 className="text-2xl print:text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
+              <p className="text-xs print:text-sm text-slate-700 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
+              <p className="text-sm print:text-base font-extrabold text-blue-950 mt-1.5 bg-slate-100 print:bg-slate-200 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
             </div>
 
             {/* Header 控制區 (列印時隱藏) */}
@@ -247,9 +247,9 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                 <button
                   type="button"
                   onClick={handlePrintModal}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg cursor-pointer"
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg cursor-pointer shadow-sm"
                 >
-                  🖨️ 列印此工單 (自動適應1頁)
+                  🖨️ 列印此工單
                 </button>
                 <button
                   type="button"
@@ -262,66 +262,66 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
             </div>
 
             {/* 1. 車輛與合約資訊欄 */}
-            <div className="border border-slate-300 rounded-xl print:rounded-md p-3 print:p-2 bg-slate-50/50 print:bg-white space-y-1">
-              <h4 className="text-xs font-extrabold text-slate-600 uppercase tracking-wider border-b pb-0.5">🚘 車輛與合約基本資訊</h4>
-              <div className="grid grid-cols-3 gap-2 text-xs print:text-[11px]">
-                <div><span className="text-gray-500">工單編號：</span><strong className="text-blue-900 font-black">{selectedOrder.order_number || 'WO-未知'}</strong></div>
-                <div><span className="text-gray-500">車牌號碼：</span><strong className="text-blue-900 font-black">{selectedVehicle?.plate_number || selectedOrder.plate_number || '未設定'}</strong></div>
-                <div><span className="text-gray-500">VIN 碼：</span><strong>{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
-                <div><span className="text-gray-500">專案名稱：</span><strong>{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
-                <div><span className="text-gray-500">車輛位置：</span><strong>{selectedOrder.location || selectedVehicle?.location || '未設定'}</strong></div>
-                <div><span className="text-gray-500">Claim Form 日期：</span><strong>{selectedOrder.claim_form_date || selectedVehicle?.claim_form_date || '未設定'}</strong></div>
+            <div className="border-2 border-slate-400 rounded-xl print:rounded-lg p-3.5 print:p-3 bg-slate-50/50 print:bg-white space-y-1.5">
+              <h4 className="text-xs print:text-sm font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1">🚘 車輛與合約基本資訊</h4>
+              <div className="grid grid-cols-2 print:grid-cols-3 gap-2.5 text-xs print:text-sm">
+                <div><span className="text-gray-600">工單編號：</span><strong className="text-blue-900 font-black">{selectedOrder.order_number || 'WO-未知'}</strong></div>
+                <div><span className="text-gray-600">車牌號碼：</span><strong className="text-blue-900 font-black">{selectedVehicle?.plate_number || selectedOrder.plate_number || '未設定'}</strong></div>
+                <div><span className="text-gray-600">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
+                <div><span className="text-gray-600">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
+                <div><span className="text-gray-600">車輛位置：</span><strong className="text-slate-900">{selectedOrder.location || selectedVehicle?.location || '未設定'}</strong></div>
+                <div><span className="text-gray-600">Claim Form 日期：</span><strong className="text-slate-900">{selectedOrder.claim_form_date || selectedVehicle?.claim_form_date || '未設定'}</strong></div>
               </div>
             </div>
 
             {/* 2. 工單狀況敘述 */}
-            <div className="space-y-0.5">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">📝 狀況與故障描述</h4>
-              <p className="text-xs text-gray-800 bg-gray-50 print:bg-white p-2 rounded-lg border leading-snug">{selectedOrder.description || '無詳細描述'}</p>
+            <div className="space-y-1">
+              <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">📝 狀況與故障描述</h4>
+              <p className="text-xs print:text-sm text-gray-900 bg-gray-50 print:bg-white p-2.5 rounded-lg border border-slate-300 leading-snug">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
             {/* 3. 維修項目清單 */}
             <div className="space-y-1">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
+              <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
               {(selectedOrder.work_order_items || selectedOrder.items || []).length > 0 ? (
-                <div className="border rounded-lg overflow-hidden border-slate-300">
-                  <table className="w-full text-xs print:text-[11px] text-left">
-                    <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+                <div className="border-2 rounded-lg overflow-hidden border-slate-400">
+                  <table className="w-full text-xs print:text-sm text-left">
+                    <thead className="bg-slate-200 text-slate-900 font-bold border-b-2 border-slate-400">
                       <tr>
-                        <th className="p-2 print:p-1 w-10 text-center print:hidden">完成</th>
-                        <th className="p-2 print:p-1 w-20">類別</th>
-                        <th className="p-2 print:p-1 w-1/2">項目名稱</th>
-                        <th className="p-2 print:p-1">備註欄位 (Notes)</th>
+                        <th className="p-2 w-10 text-center print:hidden">完成</th>
+                        <th className="p-2 print:p-2 w-28">類別</th>
+                        <th className="p-2 print:p-2 w-1/2">項目名稱</th>
+                        <th className="p-2 print:p-2">備註欄位 (Notes)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody className="divide-y divide-slate-300">
                       {(selectedOrder.work_order_items || selectedOrder.items || []).map((item: any, i: number) => {
                         const isChecked = !!checkedItems[i];
 
                         return (
                           <tr key={i} className={isChecked ? 'bg-emerald-50/50' : ''}>
-                            <td className="p-2 print:p-1 text-center print:hidden">
+                            <td className="p-2 text-center print:hidden">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => handleToggleCheck(i)}
-                                className="w-3.5 h-3.5 text-emerald-600 rounded cursor-pointer"
+                                className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
                               />
                             </td>
-                            <td className="p-2 print:p-1 font-bold">
-                              <span className="px-1.5 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-300 text-[10px]">
+                            <td className="p-2 print:p-2 font-bold">
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-900 rounded border border-slate-400 text-xs print:text-xs">
                                 {item.type || '進廠維修'}
                               </span>
                             </td>
-                            <td className={`p-2 print:p-1 text-slate-800 font-medium ${isChecked ? 'line-through text-gray-400' : ''}`}>
+                            <td className={`p-2 print:p-2 text-slate-900 font-semibold ${isChecked ? 'line-through text-gray-400' : ''}`}>
                               {item.item_name}
                             </td>
-                            <td className="p-1 print:p-0.5">
+                            <td className="p-2 print:p-1.5">
                               <input
                                 type="text"
                                 value={itemNotes[i] || ''}
                                 onChange={(e) => handleNoteChange(i, e.target.value)}
-                                className="w-full p-0.5 border-b border-slate-400 print:border-b print:border-slate-800 rounded-none text-xs print:text-[11px] bg-transparent focus:outline-none"
+                                className="w-full p-1 border-b border-slate-400 print:border-b-2 print:border-slate-800 rounded-none text-xs print:text-sm bg-transparent focus:outline-none"
                               />
                             </td>
                           </tr>
@@ -364,12 +364,10 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             )}
 
-            {/* 列印專屬簽名與結案欄 (僅在紙本列印時呈現，壓縮間距防止分頁) */}
-            <div className="hidden print:grid grid-cols-2 gap-4 pt-4 text-[11px] border-t border-slate-400">
+            {/* 列印專屬簽名欄 (僅保留完工日期與維修主管簽署) */}
+            <div className="hidden print:grid grid-cols-2 gap-6 pt-5 text-xs print:text-sm font-bold border-t-2 border-slate-500">
               <div>完工日期：____________________</div>
-              <div>簽核員工：____________________</div>
-              <div className="pt-2">維修主管簽署：____________________</div>
-              <div className="pt-2">客戶 / 技師簽署：____________________</div>
+              <div>維修主管簽署：____________________</div>
             </div>
 
             {/* Footer 操作按鈕 (列印時隱藏) */}
@@ -396,16 +394,17 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 列印專用 CSS 樣式：強制設定 A4 尺寸並縮放到一頁 */}
+      {/* 列印專用 CSS 樣式 */}
       <style jsx global>{`
         @media print {
           @page {
             size: A4 portrait;
-            margin: 8mm 10mm;
+            margin: 10mm 12mm;
           }
           body {
             background-color: white !important;
-            font-size: 11px !important;
+            font-size: 14px !important;
+            color: black !important;
           }
           .print\\:hidden {
             display: none !important;
