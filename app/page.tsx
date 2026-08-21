@@ -4,9 +4,10 @@ import React, { useState, useEffect } from 'react';
 import CreateWorkOrder from './components/CreateWorkOrder';
 import SearchVehicles from './components/SearchVehicles';
 import WorkOrdersSummary from './components/WorkOrdersSummary';
+import ManageVehicles from './components/ManageVehicles';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'search' | 'summary' | 'create'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'summary' | 'create' | 'vehicles'>('search');
 
   // 表單與搜尋狀態
   const [plateNumber, setPlateNumber] = useState('');
@@ -16,8 +17,6 @@ export default function Home() {
   const [model, setModel] = useState('');
   const [location, setLocation] = useState('');
   const [claimFormDate, setClaimFormDate] = useState('');
-  const [deliveryDate, setDeliveryDate] = useState('');
-  const [warrantyExpiryDate, setWarrantyExpiryDate] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<any[]>([{ type: '進廠維修', item_name: '' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -98,8 +97,6 @@ export default function Home() {
           model,
           location,
           claim_form_date: claimFormDate,
-          delivery_date: deliveryDate,
-          warranty_expiry_date: warrantyExpiryDate,
           description,
           items: validItems,
         }),
@@ -114,8 +111,6 @@ export default function Home() {
         setModel('');
         setLocation('');
         setClaimFormDate('');
-        setDeliveryDate('');
-        setWarrantyExpiryDate('');
         setDescription('');
         setItems([{ type: '進廠維修', item_name: '' }]);
 
@@ -213,16 +208,16 @@ export default function Home() {
   const exportToCSV = () => {
     if (searchVehicles.length === 0) return;
     let csvContent = '\uFEFF';
-    csvContent += '車牌號碼,VIN,所屬專案,汽車品牌,車型,車輛位置,交車日期,原保固到期日,工單編號,工單描述,維修項目\n';
+    csvContent += '車牌號碼,VIN,所屬專案,汽車品牌,車型,車輛位置,Claim Form日期,交車日期,原保固到期日,工單編號,工單描述,維修項目\n';
 
     searchVehicles.forEach((v) => {
       if (v.workOrders && v.workOrders.length > 0) {
         v.workOrders.forEach((wo: any) => {
           const itemsStr = wo.work_order_items?.map((i: any) => i.item_name).join('; ') || '';
-          csvContent += `"${v.plate_number || ''}","${v.vin || ''}","${v.project || ''}","${v.brand || ''}","${v.model || ''}","${v.location || ''}","${v.delivery_date || ''}","${v.warranty_expiry_date || ''}","${wo.order_number || ''}","${wo.description || ''}","${itemsStr}"\n`;
+          csvContent += `"${v.plate_number || ''}","${v.vin || ''}","${v.project || ''}","${v.brand || ''}","${v.model || ''}","${v.location || ''}","${v.claim_form_date || ''}","${v.delivery_date || ''}","${v.warranty_expiry_date || ''}","${wo.order_number || ''}","${wo.description || ''}","${itemsStr}"\n`;
         });
       } else {
-        csvContent += `"${v.plate_number || ''}","${v.vin || ''}","${v.project || ''}","${v.brand || ''}","${v.model || ''}","${v.location || ''}","${v.delivery_date || ''}","${v.warranty_expiry_date || ''}","無","無","無"\n`;
+        csvContent += `"${v.plate_number || ''}","${v.vin || ''}","${v.project || ''}","${v.brand || ''}","${v.model || ''}","${v.location || ''}","${v.claim_form_date || ''}","${v.delivery_date || ''}","${v.warranty_expiry_date || ''}","無","無","無"\n`;
       }
     });
 
@@ -250,7 +245,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="flex gap-2 border-b pb-2 print:hidden">
+        <div className="flex flex-wrap gap-2 border-b pb-2 print:hidden">
           <button
             type="button"
             onClick={() => setActiveTab('search')}
@@ -284,11 +279,20 @@ export default function Home() {
           >
             ✏️ 開立新工單
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('vehicles')}
+            className={`px-4 py-2.5 rounded-lg font-bold text-sm cursor-pointer transition-all ${
+              activeTab === 'vehicles'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            🚘 車輛主表管理
+          </button>
         </div>
 
-        {activeTab === 'summary' && (
-          <WorkOrdersSummary />
-        )}
+        {activeTab === 'summary' && <WorkOrdersSummary />}
 
         {activeTab === 'search' && (
           <SearchVehicles
@@ -321,10 +325,6 @@ export default function Home() {
             setLocation={setLocation}
             claimFormDate={claimFormDate}
             setClaimFormDate={setClaimFormDate}
-            deliveryDate={deliveryDate}
-            setDeliveryDate={setDeliveryDate}
-            warrantyExpiryDate={warrantyExpiryDate}
-            setWarrantyExpiryDate={setWarrantyExpiryDate}
             description={description}
             setDescription={setDescription}
             items={items}
@@ -336,12 +336,14 @@ export default function Home() {
           />
         )}
 
+        {activeTab === 'vehicles' && <ManageVehicles />}
+
         {showPasteModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 space-y-4">
               <h3 className="text-lg font-bold text-gray-800">快捷貼上 Excel 資料</h3>
               <p className="text-xs text-gray-500">
-                請複製 Excel 欄位並貼於下方（系統自動辨識：進廠維修、更換零件、現場處理、外判處理）：
+                請複製 Excel 欄位並貼於下方：
               </p>
               <textarea
                 rows={6}

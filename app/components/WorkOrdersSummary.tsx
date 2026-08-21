@@ -36,7 +36,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
       vehicles.forEach((vehicle: any) => {
         const orders = vehicle.workOrders || vehicle.work_orders || [];
         
-        // 1. 計算該車輛在當前合約年度累積停修總天數
+        // 1. 合約年度起算日：固定以 delivery_date（交車日期）作為基準
         const deliveryDate = vehicle.delivery_date ? new Date(vehicle.delivery_date) : null;
         let currentYearStart = new Date(today.getFullYear(), 0, 1);
         
@@ -52,7 +52,12 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
 
         if (Array.isArray(orders)) {
           orders.forEach((wo: any) => {
-            const woStart = new Date(wo.created_at || wo.createdAt || Date.now());
+            // 工單停修起算時間：優先以 claim_form_date 取代工單開單時間
+            const rawClaimDate = wo.claim_form_date || vehicle.claim_form_date;
+            const woStart = rawClaimDate
+              ? new Date(rawClaimDate)
+              : new Date(wo.created_at || wo.createdAt || Date.now());
+
             const woEnd = wo.completed_date ? new Date(wo.completed_date) : today;
 
             if (woEnd >= currentYearStart) {
@@ -98,6 +103,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
                 vehicleProject: vehicle.project || wo.project || '未設定',
                 vehicleLocation: vehicle.location || wo.location || '未設定',
                 deliveryDateStr: deliveryDate && !isNaN(deliveryDate.getTime()) ? deliveryDate.toLocaleDateString() : '未設定',
+                claimFormDateStr: vehicle.claim_form_date ? new Date(vehicle.claim_form_date).toLocaleDateString() : '未設定',
                 createdDateStr: !isNaN(createdDate.getTime()) ? createdDate.toLocaleDateString() : '未設定',
                 daysOpen: daysOpen < 1 ? 1 : daysOpen,
                 totalAnnualRepairDays,
@@ -229,8 +235,9 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
 
                   <div className="text-xs text-gray-500 flex flex-wrap gap-4 pt-1">
                     <span>交車日期: <strong>{order.deliveryDateStr}</strong></span>
+                    <span>Claim Form 日期: <strong>{order.claimFormDateStr}</strong></span>
                     <span>本年合約累積停修: <strong className="text-red-600">{order.totalAnnualRepairDays} 天</strong> / 18.25 天</span>
-                    <span>保固到期日: <strong>{order.newWarrantyExpiryStr}</strong></span>
+                    <span>推延保固到期日: <strong>{order.newWarrantyExpiryStr}</strong></span>
                   </div>
                 </div>
 
@@ -250,7 +257,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
         </div>
       )}
 
-      {/* 工單詳細資料 Modal (加入完全安全空值防護) */}
+      {/* 工單詳細資料 Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
@@ -284,8 +291,9 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
                 <div><span className="text-gray-500 text-xs block">VIN 碼</span><strong>{selectedOrder.vehicleVin}</strong></div>
                 <div><span className="text-gray-500 text-xs block">專案名稱</span><strong>{selectedOrder.vehicleProject}</strong></div>
                 <div><span className="text-gray-500 text-xs block">車輛位置</span><strong>{selectedOrder.vehicleLocation}</strong></div>
-                <div><span className="text-gray-500 text-xs block">交車日期</span><strong>{selectedOrder.deliveryDateStr}</strong></div>
-                <div><span className="text-gray-500 text-xs block">推延保固到期日</span><strong className="text-purple-700">{selectedOrder.newWarrantyExpiryStr}</strong></div>
+                <div><span className="text-gray-500 text-xs block">交車日期 (年度起算日)</span><strong>{selectedOrder.deliveryDateStr}</strong></div>
+                <div><span className="text-gray-500 text-xs block">Claim Form 日期</span><strong>{selectedOrder.claimFormDateStr}</strong></div>
+                <div className="col-span-2 md:col-span-1"><span className="text-gray-500 text-xs block">推延保固到期日</span><strong className="text-purple-700">{selectedOrder.newWarrantyExpiryStr}</strong></div>
               </div>
 
               <div className="pt-2 border-t flex justify-between items-center text-xs">
@@ -324,8 +332,8 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
                       {selectedOrder.itemsList.map((item: any, i: number) => (
                         <tr key={i} className="hover:bg-gray-50">
                           <td className="p-2.5 font-bold">
-                            <span className={`px-2 py-0.5 rounded text-[10px] ${item.type === 'Part' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
-                              {item.type === 'Part' ? '零件 (Part)' : '工時 (Labor)'}
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px]">
+                              {item.type || '維修項目'}
                             </span>
                           </td>
                           <td className="p-2.5 text-gray-800">{item.item_name}</td>

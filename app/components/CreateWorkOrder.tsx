@@ -18,10 +18,6 @@ interface CreateWorkOrderProps {
   setLocation: (v: string) => void;
   claimFormDate: string;
   setClaimFormDate: (v: string) => void;
-  deliveryDate: string;
-  setDeliveryDate: (v: string) => void;
-  warrantyExpiryDate: string;
-  setWarrantyExpiryDate: (v: string) => void;
   description: string;
   setDescription: (v: string) => void;
   items: any[];
@@ -36,11 +32,10 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   return (
     <form onSubmit={props.handleCreateOrder} className="space-y-6">
       <div className="border-b pb-2">
-        <h2 className="text-xl font-bold text-gray-800">開立維修工單與車輛設定</h2>
-        <p className="text-xs text-gray-500 mt-1">請填寫車輛基本資訊與交車日期，系統將自動計算合約停修可用率 (Availability)</p>
+        <h2 className="text-xl font-bold text-gray-800">開立維修工單</h2>
+        <p className="text-xs text-gray-500 mt-1">請填寫工單與 Claim Form 日期，系統將自動以此日子計算車輛停修可用率 (Availability)</p>
       </div>
 
-      {/* 車輛與合約資訊 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-bold text-gray-700 mb-1">車牌號碼 *</label>
@@ -49,8 +44,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             required
             value={props.plateNumber}
             onChange={(e) => props.setPlateNumber(e.target.value)}
-            placeholder="例如：ABC-1234"
-            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
+            placeholder="AM1234"
+            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500 font-bold"
           />
         </div>
         <div>
@@ -75,20 +70,11 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">交車日期 (Delivery Date)</label>
+          <label className="block text-xs font-bold text-gray-700 mb-1">Claim Form 日期 (工單停修起算)</label>
           <input
             type="date"
-            value={props.deliveryDate}
-            onChange={(e) => props.setDeliveryDate(e.target.value)}
-            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">原保固到期日</label>
-          <input
-            type="date"
-            value={props.warrantyExpiryDate}
-            onChange={(e) => props.setWarrantyExpiryDate(e.target.value)}
+            value={props.claimFormDate}
+            onChange={(e) => props.setClaimFormDate(e.target.value)}
             className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -104,7 +90,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         </div>
       </div>
 
-      {/* 工單描述 */}
       <div>
         <label className="block text-xs font-bold text-gray-700 mb-1">狀況與維修描述</label>
         <textarea
@@ -116,7 +101,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         />
       </div>
 
-      {/* 維修項目清單 */}
       <div className="space-y-3 border-t pt-4">
         <div className="flex justify-between items-center">
           <h3 className="text-sm font-bold text-gray-800">維修與零件項目</h3>
@@ -145,7 +129,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
               type="text"
               value={item.item_name}
               onChange={(e) => props.handleItemChange(idx, 'item_name', e.target.value)}
-              placeholder="項目名稱 (例如：定期保養檢測或更換煞車片)"
+              placeholder="項目名稱"
               className="flex-1 p-2 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
             />
             {props.items.length > 1 && (
