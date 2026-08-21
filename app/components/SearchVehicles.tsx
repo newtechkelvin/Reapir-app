@@ -77,7 +77,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         });
 
         if (res.ok) {
-          const data = await res.json();
           const newTime = new Date().toLocaleString();
           setLastModifiedStr(newTime);
           props.handleSearch();
@@ -326,15 +325,15 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-xs print:text-sm text-gray-900 bg-gray-50 print:bg-white p-2.5 rounded-lg border border-slate-300 leading-snug">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 (支援防抖即時自動儲存) */}
+            {/* 3. 維修項目清單 */}
             <div className="space-y-1">
-              <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細 (修改會自動儲存)</h4>
+              <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
               {modalItems.length > 0 ? (
                 <div className="border-2 rounded-lg overflow-hidden border-slate-400">
                   <table className="w-full text-xs print:text-sm text-left">
                     <thead className="bg-slate-200 text-slate-900 font-bold border-b-2 border-slate-400">
                       <tr>
-                        <th className="p-2 w-12 text-center print:hidden">完成</th>
+                        <th className="p-2 w-10 text-center print:hidden">完成</th>
                         <th className="p-2 print:p-2 w-28">類別</th>
                         <th className="p-2 print:p-2 w-1/2">項目名稱</th>
                         <th className="p-2 print:p-2">進度備註 (Notes)</th>
@@ -368,7 +367,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                                 value={item.notes || ''}
                                 onChange={(e) => handleNoteChange(i, e.target.value)}
                                 placeholder="輸入每日工程進度..."
-                                className="w-full p-1 border-b border-slate-400 print:border-b-2 print:border-slate-800 rounded-none text-xs print:text-sm bg-transparent focus:outline-none focus:border-blue-600"
+                                className="note-input w-full p-1 border-b border-slate-400 print:border-b-2 print:border-slate-800 rounded-none text-xs print:text-sm bg-transparent focus:outline-none focus:border-blue-600"
                               />
                             </td>
                           </tr>
@@ -441,7 +440,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 列印專用 CSS 樣式 */}
+      {/* 列印專用 CSS 樣式：隱藏輸入框的 placeholder */}
       <style jsx global>{`
         @media print {
           @page {
@@ -455,6 +454,12 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           }
           .print\\:hidden {
             display: none !important;
+          }
+          /* 列印時將 input 的 placeholder 完全隱藏 */
+          input::placeholder,
+          .note-input::placeholder {
+            color: transparent !important;
+            opacity: 0 !important;
           }
         }
       `}</style>
