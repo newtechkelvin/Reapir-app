@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
 interface CreateWorkOrderProps {
   handleCreateOrder: (e: React.FormEvent) => void;
@@ -29,8 +29,63 @@ interface CreateWorkOrderProps {
 }
 
 export default function CreateWorkOrder(props: CreateWorkOrderProps) {
+  const [isScanning, setIsScanning] = useState(false);
+
+  // 處理拍照或選擇相片
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/ocr-translate', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.items && data.items.length > 0) {
+        // 自動覆蓋或新增辨識出來的中文項目
+        const newItems = data.items.map((i: any) => ({
+          type: i.type || '進廠維修',
+          item_name: i.item_name || '',
+        }));
+
+        if (confirm(`成功辨識並翻譯了 ${newItems.length} 項維修項目，是否自動填入表格中？`)) {
+          // 若原本只有一個空白項目，直接替換
+          if (props.items.length === 1 && !props.items[0].item_name) {
+            newItems.forEach((item: any, idx: number) => {
+              if (idx === 0) {
+                props.handleItemChange(0, 'type', item.type);
+                props.handleItemChange(0, 'item_name', item.item_name);
+              } else {
+                props.items.push(item);
+              }
+            });
+          } else {
+            // 追加至既有項目下方
+            newItems.forEach((item: any) => props.items.push(item));
+          }
+          alert('維修項目已自動翻譯並匯入！');
+        }
+      } else {
+        alert(data.error || '無法辨識相片內容，請確保字跡清晰再試一次');
+      }
+    } catch (err) {
+      console.error('上傳照片失敗:', err);
+      alert('上傳相片處理失敗');
+    } finally {
+      setIsScanning(false);
+      e.target.value = ''; // 清空檔案選擇器
+    }
+  };
+
   return (
-    <form onSubmit={props.handleCreateOrder} className="space-y-6">
+    <form onSubmit={props.handleCreateOrder} className="space-y-6 text-black">
       <div className="border-b pb-2">
         <h2 className="text-xl font-bold text-gray-800">開立維修工單</h2>
         <p className="text-xs text-gray-500 mt-1">請填寫工單與 Claim Form 日期，系統將自動以此日子計算車輛停修可用率 (Availability)</p>
@@ -101,16 +156,33 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         />
       </div>
 
+      {/* 維修項目區塊 (支援 AI 照片辨識自動翻譯匯入) */}
       <div className="space-y-3 border-t pt-4">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-wrap justify-between items-center gap-2">
           <h3 className="text-sm font-bold text-gray-800">維修與零件項目</h3>
-          <button
-            type="button"
-            onClick={() => props.setShowPasteModal(true)}
-            className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 cursor-pointer"
-          >
-            快速貼上 Excel 項目
-          </button>
+          
+          <div className="flex gap-2">
+            {/* AI 拍照/辨識按鈕 */}
+            <label className="text-xs bg-blue-50 text-blue-800 border border-blue-300 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100 cursor-pointer flex items-center gap-1 shadow-2xs">
+              {isScanning ? '⏳ 正在讀取與翻譯相片中...' : '📷 拍照 / 辨識紙本維修單 (自動翻譯中文字)'}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageUpload}
+                disabled={isScanning}
+                className="hidden"
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={() => props.setShowPasteModal(true)}
+              className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 cursor-pointer"
+            >
+              快速貼上 Excel 項目
+            </button>
+          </div>
         </div>
 
         {props.items.map((item, idx) => (
