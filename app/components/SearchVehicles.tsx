@@ -18,17 +18,14 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
   
-  // 項目狀態 (含 DB 中的 id, is_completed, notes)
   const [modalItems, setModalItems] = useState<any[]>([]);
   const [lastModifiedStr, setLastModifiedStr] = useState<string>('');
 
-  // 簽核/結案欄位 State
   const [completedDateInput, setCompletedDateInput] = useState('');
   const [staffNameInput, setStaffNameInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
 
-  // 防抖計時器
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleOpenDetailModal = (vehicle: any, order: any) => {
@@ -59,7 +56,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     setModalItems([]);
   };
 
-  // 觸發自動保存 (Auto-save without changing Status)
   const triggerAutoSave = (updatedItems: any[]) => {
     if (!selectedOrder?.id) return;
     setIsAutoSaving(true);
@@ -129,14 +125,14 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         }),
       });
 
-     if (res.ok) {
-  alert('工單已順利標示為結案 (Completed)！');
-  handleCloseDetailModal();
-  props.handleSearch();
-} else {
-  const errData = await res.json().catch(() => null);
-  alert(`結案失敗: ${errData?.error || errData?.message || '請檢查網路連線或資料庫設定'}`);
-}
+      if (res.ok) {
+        alert('工單已順利標示為結案 (Completed)！');
+        handleCloseDetailModal();
+        props.handleSearch();
+      } else {
+        const errData = await res.json().catch(() => null);
+        alert(`結案失敗: ${errData?.error || errData?.message || '請檢查資料庫設定'}`);
+      }
     } catch (err) {
       console.error('結案操作錯誤:', err);
       alert('網路連線失敗');
@@ -147,7 +143,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
   return (
     <div className="space-y-6">
-      {/* 搜尋列與按鈕 (列印時隱藏) */}
+      {/* 搜尋列與按鈕 */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl print:hidden">
         <form onSubmit={props.handleSearch} className="flex-1 flex gap-2">
           <input
@@ -210,7 +206,9 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   </div>
                   <div className="text-xs text-slate-300 flex flex-wrap gap-4">
                     <span>VIN: <strong>{vehicle.vin || '無'}</strong></span>
-                    <span>車輛位置: <strong className="text-amber-300">{vehicle.location || '未設定'}</strong></span>
+                    <span>車房位置: <strong className="text-amber-300">{vehicle.garage_location || vehicle.location || '未設定'}</strong></span>
+                    <span>車輛位置: <strong className="text-sky-300">{vehicle.vehicle_location || '未設定'}</strong></span>
+                    <span>取車/回廠日期: <strong className="text-purple-300">{vehicle.pickup_return_date || '未設定'}</strong></span>
                     <span>Claim Form 日期: <strong className="text-emerald-300">{vehicle.claim_form_date || woClaimDate(orders) || '未設定'}</strong></span>
                   </div>
                 </div>
@@ -226,7 +224,9 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                         const isCompleted = (wo.status || '').toLowerCase() === 'completed';
                         const items = wo.work_order_items || wo.items || [];
                         const claimDateStr = wo.claim_form_date || vehicle.claim_form_date || '未設定';
-                        const locationStr = wo.location || vehicle.location || '未設定';
+                        const garageLocStr = wo.garage_location || wo.location || vehicle.garage_location || vehicle.location || '未設定';
+                        const vehicleLocStr = wo.vehicle_location || vehicle.vehicle_location || '未設定';
+                        const pickupReturnStr = wo.pickup_return_date || vehicle.pickup_return_date || '未設定';
 
                         return (
                           <div
@@ -243,10 +243,10 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                               </div>
                               <p className="text-xs text-gray-600 line-clamp-1">{wo.description || '無描述'}</p>
                               <div className="text-[11px] text-gray-500 flex flex-wrap gap-4 pt-1">
-                                <span>車輛位置: <strong className="text-gray-800">{locationStr}</strong></span>
+                                <span>車房位置: <strong className="text-gray-800">{garageLocStr}</strong></span>
+                                <span>車輛位置: <strong className="text-gray-800">{vehicleLocStr}</strong></span>
+                                <span>取車/回廠日期: <strong className="text-gray-800">{pickupReturnStr}</strong></span>
                                 <span>Claim Form 日期: <strong className="text-gray-800">{claimDateStr}</strong></span>
-                                <span>開單日期: {wo.created_at ? new Date(wo.created_at).toLocaleDateString() : '未設定'}</span>
-                                <span>項目: {items.length} 項</span>
                               </div>
                             </div>
                             <span className="text-xs font-bold text-blue-600 group-hover:underline self-end md:self-center">
@@ -269,14 +269,14 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
           <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
             
-            {/* 公司正式 Header */}
+            {/* 公司抬頭 */}
             <div className="text-center border-b-2 border-slate-900 pb-2 print:pb-2">
               <h1 className="text-2xl print:text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
               <p className="text-xs print:text-sm text-slate-700 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
               <p className="text-sm print:text-base font-extrabold text-blue-950 mt-1.5 bg-slate-100 print:bg-slate-200 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
             </div>
 
-            {/* Header 控制區 (含即時儲存提示與修改時間) */}
+            {/* Header 控制區 */}
             <div className="flex justify-between items-center border-b pb-2 print:hidden">
               <div className="flex items-center gap-3">
                 <span className="font-bold text-blue-900 text-lg">📋 {selectedOrder.order_number || 'WO-未知'}</span>
@@ -307,7 +307,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             </div>
 
-            {/* 1. 車輛與合約資訊欄 */}
+            {/* 1. 車輛與合約資訊欄 (新增車房位置、車輛位置與取車/回廠日期) */}
             <div className="border-2 border-slate-400 rounded-xl print:rounded-lg p-3.5 print:p-3 bg-slate-50/50 print:bg-white space-y-1.5">
               <h4 className="text-xs print:text-sm font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1">🚘 車輛與合約基本資訊</h4>
               <div className="grid grid-cols-2 print:grid-cols-3 gap-2.5 text-xs print:text-sm">
@@ -315,7 +315,9 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                 <div><span className="text-gray-600">車牌號碼：</span><strong className="text-blue-900 font-black">{selectedVehicle?.plate_number || selectedOrder.plate_number || '未設定'}</strong></div>
                 <div><span className="text-gray-600">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
                 <div><span className="text-gray-600">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
-                <div><span className="text-gray-600">車輛位置：</span><strong className="text-slate-900">{selectedOrder.location || selectedVehicle?.location || '未設定'}</strong></div>
+                <div><span className="text-gray-600">車房位置：</span><strong className="text-slate-900">{selectedOrder.garage_location || selectedOrder.location || selectedVehicle?.garage_location || selectedVehicle?.location || '未設定'}</strong></div>
+                <div><span className="text-gray-600">車輛位置：</span><strong className="text-slate-900">{selectedOrder.vehicle_location || selectedVehicle?.vehicle_location || '未設定'}</strong></div>
+                <div><span className="text-gray-600">取車/回廠日期：</span><strong className="text-slate-900">{selectedOrder.pickup_return_date || selectedVehicle?.pickup_return_date || '未設定'}</strong></div>
                 <div><span className="text-gray-600">Claim Form 日期：</span><strong className="text-slate-900">{selectedOrder.claim_form_date || selectedVehicle?.claim_form_date || '未設定'}</strong></div>
               </div>
             </div>
@@ -411,13 +413,15 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             )}
 
-            {/* 列印專屬簽名欄 */}
-            <div className="hidden print:grid grid-cols-2 gap-6 pt-5 text-xs print:text-sm font-bold border-t-2 border-slate-500">
+            {/* 列印專屬區塊：含完工日期、主管簽署、交車日期與交車司機 */}
+            <div className="hidden print:grid grid-cols-2 gap-x-6 gap-y-3 pt-4 text-xs print:text-sm font-bold border-t-2 border-slate-500">
               <div>完工日期：____________________</div>
               <div>維修主管簽署：____________________</div>
+              <div>交車日期：____________________</div>
+              <div>交車司機：____________________</div>
             </div>
 
-            {/* Footer 操作按鈕 (列印時隱藏) */}
+            {/* Footer 操作按鈕 */}
             <div className="flex justify-between items-center border-t pt-3 print:hidden">
               <button
                 type="button"
@@ -441,7 +445,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 列印專用 CSS 樣式：隱藏輸入框的 placeholder */}
+      {/* 列印專用 CSS 樣式 */}
       <style jsx global>{`
         @media print {
           @page {
@@ -456,7 +460,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           .print\\:hidden {
             display: none !important;
           }
-          /* 列印時將 input 的 placeholder 完全隱藏 */
           input::placeholder,
           .note-input::placeholder {
             color: transparent !important;

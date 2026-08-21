@@ -79,7 +79,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">車輛位置</label>
+          <label className="block text-xs font-bold text-gray-700 mb-1">車房位置</label>
           <input
             type="text"
             value={props.location}
