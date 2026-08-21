@@ -28,100 +28,153 @@ interface CreateWorkOrderProps {
   isSubmitting: boolean;
 }
 
-// 常用汽車維修英文對照字典 (用於自動本地快速翻譯)
-const REPAIR_DICTIONARY: { [key: string]: { name: string; type: string } } = {
-  brake: { name: '更換煞車皮/煞車系統 (Brake System)', type: '更換零件' },
-  pad: { name: '更換煞車皮 (Brake Pads Replacement)', type: '更換零件' },
-  oil: { name: '更換機油 (Engine Oil Replacement)', type: '進廠維修' },
-  filter: { name: '更換機油/空氣濾芯 (Filter Replacement)', type: '更換零件' },
-  tyre: { name: '更換/檢查輪胎 (Tyre Service)', type: '更換零件' },
-  tire: { name: '更換/檢查輪胎 (Tire Service)', type: '更換零件' },
-  battery: { name: '更換/測試汽車電池 (Battery Replacement)', type: '更換零件' },
-  engine: { name: '檢查/維修引擎 (Engine Service)', type: '進廠維修' },
-  light: { name: '更換車燈/燈泡 (Light Replacement)', type: '更換零件' },
-  coolant: { name: '檢查水箱/冷卻液 (Coolant Leak Check)', type: '進廠維修' },
-  leak: { name: '檢查漏油/漏水問題 (Leakage Check)', type: '進廠維修' },
-  noise: { name: '檢查異音問題 (Noise Inspection)', type: '進廠維修' },
-  recall: { name: 'Recall 召回維修項目 (Recall Service)', type: 'Recall項目' },
+// 常用汽車維修專有名詞英文對照詞庫
+const REPAIR_DICT: { [key: string]: { zh: string; type: string } } = {
+  brake: { zh: '煞車系統/更換煞車皮', type: '更換零件' },
+  pad: { zh: '煞車皮/煞車片', type: '更換零件' },
+  oil: { zh: '更換機油', type: '進廠維修' },
+  filter: { zh: '更換機油/空氣濾芯', type: '更換零件' },
+  engine: { zh: '檢查/維修引擎', type: '進廠維修' },
+  tyre: { zh: '檢查/更換輪胎', type: '更換零件' },
+  tire: { zh: '檢查/更換輪胎', type: '更換零件' },
+  battery: { zh: '測試/更換汽車電池', type: '更換零件' },
+  coolant: { zh: '檢查水箱/冷卻液', type: '進廠維修' },
+  light: { zh: '更換車燈/燈泡', type: '更換零件' },
+  recall: { zh: 'Recall 召回維修項目', type: 'Recall項目' },
+  charge: { zh: '收費維修項目', type: '收費項目' },
+  leak: { zh: '檢查漏油/漏水問題', type: '進廠維修' },
 };
 
 export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   const [isScanning, setIsScanning] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState('');
 
-  // 前端直接處理圖片 (避免後端 fetch 失敗)
+  // 1. 動態載入瀏覽器端 Tesseract.js OCR 庫
+  const loadTesseract = async () => {
+    if ((window as any).Tesseract) return (window as any).Tesseract;
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      script.onload = () => resolve((window as any).Tesseract);
+      script.onerror = () => reject(new Error('無法載入 OCR 組件'));
+      document.head.appendChild(script);
+    });
+  };
+
+  // 2. 免費英翻中（使用 MyMemory Translate API，香港直連）
+  const translateToZh = async (text: string) => {
+    try {
+      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|zh-TW`);
+      if (res.ok) {
+        const data = await res.json();
+        const translated = data?.responseData?.translatedText;
+        if (translated && !translated.includes('MYMEMORY')) {
+          return translated;
+        }
+      }
+    } catch (e) {
+      console.warn('線上翻譯失敗，啟用內建字典:', e);
+    }
+    return null;
+  };
+
+  // 3. 核心相片辨識與翻譯邏輯
   const processImageFile = useCallback(async (file: File) => {
     if (!file || !file.type.startsWith('image/')) return;
 
     setIsScanning(true);
-    try {
-      // 1. 先試向本地後端 API 請求
-      const formData = new FormData();
-      formData.append('file', file);
+    setOcrProgress('正在初始化照片 OCR 辨識引擎...');
 
-      const res = await fetch('/api/ocr-translate', {
-        method: 'POST',
-        body: formData,
+    try {
+      const Tesseract = await loadTesseract();
+      setOcrProgress('正在讀取相片文字中 (OCR Scanning)...');
+
+      // 執行照片 OCR 辨識
+      const result = await Tesseract.recognize(file, 'eng', {
+        logger: (m: any) => {
+          if (m.status === 'recognizing text') {
+            setOcrProgress(`照片辨識進度: ${Math.round((m.progress || 0) * 100)}%`);
+          }
+        },
       });
 
-      const data = await res.json().catch(() => null);
+      const rawText = result?.data?.text || '';
+      setOcrProgress('辨識完成，正在自動翻譯中文字...');
 
-      if (res.ok && data?.items && data.items.length > 0) {
-        importItemsToForm(data.items);
-      } else {
-        // 2. 如果後端伺服器網絡失敗，自動降級啟用前端圖片檔名/文字萃取與本地字典自動翻譯
-        console.warn('後端連線失敗，啟動前端本地詞庫自動辨識與翻譯...');
-        fallbackClientTranslate(file);
+      // 將文字逐行清理與過濾
+      const lines = rawText
+        .split('\n')
+        .map((l: string) => l.trim())
+        .filter((l: string) => l.length > 3 && !/^\d+$/.test(l));
+
+      if (lines.length === 0) {
+        alert('無法從照片中辨識出清晰文字，請確保相片字跡清晰，或使用相機重新拍攝！');
+        return;
       }
-    } catch (err) {
-      console.error('OCR 辨識出錯，啟用前端應急防禦機制:', err);
-      fallbackClientTranslate(file);
+
+      const parsedItems: any[] = [];
+
+      for (const line of lines.slice(0, 10)) { // 最多自動擷取前 10 行
+        let matchedType = '進廠維修';
+        let chineseName = '';
+
+        // 先比對專有名詞字典
+        const lowerLine = line.toLowerCase();
+        Object.keys(REPAIR_DICT).forEach((kw) => {
+          if (lowerLine.includes(kw)) {
+            matchedType = REPAIR_DICT[kw].type;
+            if (!chineseName) chineseName = REPAIR_DICT[kw].zh;
+          }
+        });
+
+        // 呼叫線上英翻中
+        const onlineZh = await translateToZh(line);
+
+        let finalName = '';
+        if (chineseName && onlineZh) {
+          finalName = `${onlineZh} (${chineseName})`;
+        } else if (onlineZh) {
+          finalName = `${onlineZh} (${line})`;
+        } else if (chineseName) {
+          finalName = `${chineseName} (${line})`;
+        } else {
+          finalName = line;
+        }
+
+        parsedItems.push({
+          type: matchedType,
+          item_name: finalName,
+        });
+      }
+
+      if (parsedItems.length > 0) {
+        if (confirm(`成功從照片讀取並翻譯了 ${parsedItems.length} 個項目，是否自動匯入工單？`)) {
+          if (props.items.length === 1 && !props.items[0].item_name) {
+            parsedItems.forEach((item, idx) => {
+              if (idx === 0) {
+                props.handleItemChange(0, 'type', item.type);
+                props.handleItemChange(0, 'item_name', item.item_name);
+              } else {
+                props.items.push(item);
+              }
+            });
+          } else {
+            parsedItems.forEach((item) => props.items.push(item));
+          }
+          alert('相片維修項目已成功自動翻譯並匯入！');
+        }
+      }
+    } catch (err: any) {
+      console.error('OCR 辨識失敗:', err);
+      alert(`照片讀取失敗: ${err.message || '請確認網路與圖片清晰度'}`);
     } finally {
       setIsScanning(false);
+      setOcrProgress('');
     }
   }, [props]);
 
-  // 前端本地降級處理
-  const fallbackClientTranslate = (file: File) => {
-    const filename = file.name.toLowerCase();
-    const detectedItems: any[] = [];
-
-    // 依關鍵字進行本地英翻中匹配
-    Object.keys(REPAIR_DICTIONARY).forEach((key) => {
-      if (filename.includes(key)) {
-        detectedItems.push(REPAIR_DICTIONARY[key]);
-      }
-    });
-
-    if (detectedItems.length === 0) {
-      detectedItems.push({
-        type: '進廠維修',
-        item_name: `檢視相片維修項目 (${file.name || '貼上之維修單'})`,
-      });
-    }
-
-    importItemsToForm(detectedItems);
-  };
-
-  // 將解析出來的項目匯入表單
-  const importItemsToForm = (newItems: any[]) => {
-    if (confirm(`成功處理並翻譯了 ${newItems.length} 項維修項目，是否自動填入表格中？`)) {
-      if (props.items.length === 1 && !props.items[0].item_name) {
-        newItems.forEach((item: any, idx: number) => {
-          if (idx === 0) {
-            props.handleItemChange(0, 'type', item.type || '進廠維修');
-            props.handleItemChange(0, 'item_name', item.item_name || '');
-          } else {
-            props.items.push(item);
-          }
-        });
-      } else {
-        newItems.forEach((item: any) => props.items.push(item));
-      }
-      alert('維修項目已自動匯入工單清單！');
-    }
-  };
-
-  // 監聽 Ctrl+V 鍵盤貼上圖片事件
+  // 4. 監聽 Ctrl+V 剪貼簿貼上事件
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const clipboardItems = e.clipboardData?.items;
@@ -226,14 +279,14 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         />
       </div>
 
-      {/* 維修項目區塊 (支援 Ctrl+V 貼上圖片) */}
+      {/* 維修項目區塊 (支援照片 OCR 與自動英譯中) */}
       <div className="space-y-3 border-t pt-4">
         <div className="flex flex-wrap justify-between items-center gap-2">
           <h3 className="text-sm font-bold text-gray-800">維修與零件項目</h3>
           
           <div className="flex gap-2">
             <label className="text-xs bg-blue-50 text-blue-800 border border-blue-300 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100 cursor-pointer flex items-center gap-1 shadow-2xs">
-              {isScanning ? '⏳ 正在讀取與處理相片中...' : '📷 拍照 / 按 Ctrl+V 貼上維修單圖片'}
+              {isScanning ? `⏳ ${ocrProgress}` : '📷 拍照 / Ctrl+V 貼上維修單照片 (自動翻譯中文字)'}
               <input
                 type="file"
                 accept="image/*"
@@ -255,7 +308,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         </div>
 
         <div className="text-[11px] text-slate-500 bg-slate-100 p-2 rounded-lg border border-dashed border-slate-300 flex items-center justify-between">
-          <span>💡 提示：您可以截圖紙本維修單後，直接在這個頁面按下 <kbd className="px-1.5 py-0.5 bg-white border rounded shadow-2xs font-mono font-bold text-slate-700">Ctrl + V</kbd>，系統將自動提取並匯入維修項目！</span>
+          <span>💡 提示：您可以截圖紙本維修單後，直接在頁面上按下 <kbd className="px-1.5 py-0.5 bg-white border rounded shadow-2xs font-mono font-bold text-slate-700">Ctrl + V</kbd>，系統將會在瀏覽器本地掃描照片文字並自動翻譯成中文！</span>
         </div>
 
         {props.items.map((item, idx) => (
