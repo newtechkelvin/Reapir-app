@@ -9,17 +9,14 @@ import ManageVehicles from './components/ManageVehicles';
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'summary' | 'create' | 'search' | 'vehicles'>('summary');
 
-  // 車輛與工單 State
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 搜尋 State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
-  // 開單 State
   const [plateNumber, setPlateNumber] = useState('');
   const [vin, setVin] = useState('');
   const [project, setProject] = useState('');
@@ -33,8 +30,12 @@ export default function Home() {
   const [pasteText, setPasteText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 編輯車輛 Modal State
   const [editingVehicle, setEditingVehicle] = useState<any | null>(null);
+
+  // 舊紀錄 CSV 批次匯入 Modal State
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchCsvText, setBatchCsvText] = useState('');
+  const [isBatchImporting, setIsBatchImporting] = useState(false);
 
   useEffect(() => {
     fetchAllVehicles();
@@ -173,6 +174,97 @@ export default function Home() {
     setShowPasteModal(false);
   };
 
+  // 下載 CSV 匯入標準範本
+  const downloadCsvTemplate = () => {
+    const csvHeader = 'plate_number,vin,project,brand,model,claim_form_date,completed_date,garage_location,description,items\n';
+    const csvSample1 = 'AM1234,VIN123456,專案A,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,引擎異音與煞車檢修,更換機油;更換前煞車皮\n';
+    const csvSample2 = 'AM5678,VIN789012,專案B,Isuku,N-Series,2025-02-01,2025-02-03,機電 - 屯門,冷氣不冷,檢查冷媒 leak;更換冷氣濾芯\n';
+    
+    const blob = new Blob(['\uFEFF' + csvHeader + csvSample1 + csvSample2], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'Warranty_Form_Import_Template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 處理讀取上傳的 CSV 檔案
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      if (text) {
+        setBatchCsvText(text);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // 執行批次匯入
+  const handleExecuteBatchImport = async () => {
+    if (!batchCsvText.trim()) {
+      alert('請先貼上 CSV 內容或選取 CSV 檔案');
+      return;
+    }
+
+    try {
+      setIsBatchImporting(true);
+      const lines = batchCsvText.split(/\r\n|\n/).filter((l) => l.trim() !== '');
+      if (lines.length <= 1) {
+        alert('CSV 內容不可為空或只有標題列');
+        return;
+      }
+
+      const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+      const records: any[] = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(',').map((cell) => cell.trim().replace(/^"|"$/g, ''));
+        if (row.length === 0 || !row[0]) continue;
+
+        const record: any = {};
+        headers.forEach((h, idx) => {
+          record[h] = row[idx] || '';
+        });
+
+        records.push(record);
+      }
+
+      if (records.length === 0) {
+        alert('沒有解析出有效的資料列');
+        return;
+      }
+
+      const res = await fetch('/api/work-orders/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert(`成功匯入 ${data.count} 筆舊有 Warranty Form 紀錄！`);
+        setBatchCsvText('');
+        setShowBatchModal(false);
+        await fetchAllVehicles();
+        setActiveTab('vehicles');
+      } else {
+        alert(`匯入失敗: ${data.error || '請檢查 CSV 格式'}`);
+      }
+    } catch (err: any) {
+      console.error('匯入出錯:', err);
+      alert('處理匯入檔案失敗');
+    } finally {
+      setIsBatchImporting(false);
+    }
+  };
+
   const getMaintenanceStatus = (dateStr: string) => {
     if (!dateStr) return { label: '未設定', color: 'bg-gray-100 text-gray-700' };
     return { label: '正常', color: 'bg-emerald-100 text-emerald-800' };
@@ -232,40 +324,45 @@ export default function Home() {
             >
               🚘 車輛主表管理
             </button>
+            <button
+              onClick={() => setShowBatchModal(true)}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all cursor-pointer"
+            >
+              📂 批次匯入舊紀錄
+            </button>
           </nav>
         </header>
 
-        {/* 頁面內容分頁切换 */}
         {activeTab === 'summary' && <WorkOrdersSummary />}
 
         {activeTab === 'create' && (
           <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200">
             <CreateWorkOrder
-  handleCreateOrder={handleCreateOrder}
-  plateNumber={plateNumber}
-  setPlateNumber={setPlateNumber}
-  vin={vin}
-  setVin={setVin}
-  project={project}
-  setProject={setProject}
-  brand={brand}
-  setBrand={setBrand}
-  model={model}
-  setModel={setModel}
-  location={location}
-  setLocation={setLocation}
-  claimFormDate={claimFormDate}
-  setClaimFormDate={setClaimFormDate}
-  description={description}
-  setDescription={setDescription}
-  items={items}
-  setItems={setItems}
-  handleItemChange={handleItemChange}
-  removeItem={removeItem}
-  addItem={addItem}
-  setShowPasteModal={setShowPasteModal}
-  isSubmitting={isSubmitting}
-/>
+              handleCreateOrder={handleCreateOrder}
+              plateNumber={plateNumber}
+              setPlateNumber={setPlateNumber}
+              vin={vin}
+              setVin={setVin}
+              project={project}
+              setProject={setProject}
+              brand={brand}
+              setBrand={setBrand}
+              model={model}
+              setModel={setModel}
+              location={location}
+              setLocation={setLocation}
+              claimFormDate={claimFormDate}
+              setClaimFormDate={setClaimFormDate}
+              description={description}
+              setDescription={setDescription}
+              items={items}
+              setItems={setItems}
+              handleItemChange={handleItemChange}
+              removeItem={removeItem}
+              addItem={addItem}
+              setShowPasteModal={setShowPasteModal}
+              isSubmitting={isSubmitting}
+            />
           </div>
         )}
 
@@ -283,7 +380,6 @@ export default function Home() {
           />
         )}
 
-        {/* 傳入正確 Props 的 ManageVehicles 模組 */}
         {activeTab === 'vehicles' && (
           <ManageVehicles
             vehicles={vehicles}
@@ -294,7 +390,80 @@ export default function Home() {
         )}
       </div>
 
-      {/* 快速貼上 Excel 彈窗 */}
+      {/* 舊紀錄 CSV 批次匯入 Modal */}
+      {showBatchModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="text-xl font-bold text-slate-800">📂 批次匯入舊有 Warranty Form 紀錄</h3>
+              <button
+                type="button"
+                onClick={() => setShowBatchModal(false)}
+                className="text-gray-400 hover:text-gray-700 text-2xl font-bold px-2 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border">
+              <p className="font-bold text-slate-800">說明與操作步驟：</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>下載匯入 CSV 範本，用 Excel 開啟並填入舊有的保固紀錄。</li>
+                <li>欄位說明：<code className="bg-white px-1 border rounded">plate_number</code> (車牌號碼，必填)、<code className="bg-white px-1 border rounded">claim_form_date</code> (格式 YYYY-MM-DD)、<code className="bg-white px-1 border rounded">items</code> (多個項目請用分號 ; 分隔)。</li>
+                <li>選擇 CSV 檔案，或直接複製內容貼至下方文字框點擊「開始匯入」。</li>
+              </ol>
+              <button
+                type="button"
+                onClick={downloadCsvTemplate}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 cursor-pointer shadow-2xs"
+              >
+                ⬇️ 下載 CSV 匯入範本
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">方式 A：選擇 CSV 檔案上傳</label>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleFileUpload}
+                className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">方式 B：直接貼上 CSV 或 Excel 標籤字串</label>
+              <textarea
+                rows={8}
+                value={batchCsvText}
+                onChange={(e) => setBatchCsvText(e.target.value)}
+                placeholder="plate_number,vin,project,brand,model,claim_form_date,completed_date,garage_location,description,items&#nAM1234,VIN1234,專案A,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,煞車檢修,更換煞車皮;更換煞車油"
+                className="w-full p-2.5 border rounded-xl text-xs font-mono bg-white text-black"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setShowBatchModal(false)}
+                className="px-4 py-2 border rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={isBatchImporting}
+                onClick={handleExecuteBatchImport}
+                className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isBatchImporting ? '⏳ 正在批次匯入中...' : '🚀 開始批次匯入'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 快速貼上 Excel 項目彈窗 */}
       {showPasteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl">
