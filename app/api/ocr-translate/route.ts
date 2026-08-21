@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
 
     if (!file) {
-      return NextResponse.json({ error: '請選擇或拍攝紙本維修單相片' }, { status: 400 });
+      return NextResponse.json({ error: '請選擇或貼上紙本維修單相片' }, { status: 400 });
     }
 
     // 將圖片轉換為 Base64 格式
@@ -28,13 +28,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 呼叫 Hugging Face 開放視覺模型 (Qwen2-VL-7B-Instruct)
+    // 設定 15 秒連線 Timeout，防止 fetch failed
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     const response = await fetch('https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${hfToken}`,
         'Content-Type': 'application/json',
       },
+      signal: controller.signal,
       body: JSON.stringify({
         messages: [
           {
@@ -65,12 +69,18 @@ export async function POST(request: NextRequest) {
         max_tokens: 800,
         temperature: 0.1,
       }),
-    });
+    }).finally(() => clearTimeout(timeoutId));
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      console.error('HF API 回傳失敗:', response.status, errText);
+      return NextResponse.json({ error: `AI 辨識服務回傳錯誤 (${response.status})，請稍後再試` }, { status: response.status });
+    }
 
     const aiData = await response.json();
     const textResult = aiData.choices?.[0]?.message?.content || '';
 
-    // 解析 JSON 陣列 (採用向下相容正則表達式，避免 TS1501 錯誤)
+    // 解析 JSON 陣列
     const jsonMatch = textResult.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       const parsedItems = JSON.parse(jsonMatch[0]);
@@ -80,6 +90,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '無法解析相片內容，請確定拍攝清晰再試一次' }, { status: 500 });
   } catch (err: any) {
     console.error('Hugging Face OCR 辨識失敗:', err);
-    return NextResponse.json({ error: err.message || '相片辨識失敗' }, { status: 500 });
+    if (err.name === 'AbortError') {
+      return NextResponse.json({ error: '連線超時，請檢查網路連線或降低相片解析度後再試' }, { status: 504 });
+    }
+    return NextResponse.json({ error: `連線 failure: ${err.message || '請檢查後端網路與 Token 設定'}` }, { status: 500 });
   }
 }
