@@ -50,7 +50,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [ocrProgress, setOcrProgress] = useState('');
 
-  // 1. 動態載入瀏覽器端 Tesseract.js OCR 庫
+  // 1. 動態載入 Tesseract.js
   const loadTesseract = async () => {
     if ((window as any).Tesseract) return (window as any).Tesseract;
 
@@ -63,7 +63,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     });
   };
 
-  // 2. 免費英翻中
+  // 2. 線上英翻中
   const translateToZh = async (text: string) => {
     try {
       const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|zh-TW`);
@@ -75,12 +75,12 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         }
       }
     } catch (e) {
-      console.warn('線上翻譯失敗，啟用內建字典:', e);
+      console.warn('線上翻譯失敗:', e);
     }
     return null;
   };
 
-  // 3. 核心相片辨識與翻譯邏輯
+  // 3. 照片 OCR 辨識與貼上
   const processImageFile = useCallback(async (file: File) => {
     if (!file || !file.type.startsWith('image/')) return;
 
@@ -89,7 +89,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
 
     try {
       const Tesseract = await loadTesseract();
-      setOcrProgress('正在讀取相片文字中 (OCR Scanning)...');
+      setOcrProgress('正在讀取相片文字 (OCR Scanning)...');
 
       const result = await Tesseract.recognize(file, 'eng', {
         logger: (m: any) => {
@@ -100,7 +100,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       });
 
       const rawText = result?.data?.text || '';
-      setOcrProgress('辨識完成，正在自動翻譯中文字...');
+      setOcrProgress('辨識完成，正在翻譯與拆解項目...');
 
       const lines = rawText
         .split('\n')
@@ -108,7 +108,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         .filter((l: string) => l.length > 3 && !/^\d+$/.test(l));
 
       if (lines.length === 0) {
-        alert('無法從照片中辨識出清晰文字，請確保相片字跡清晰，或使用相機重新拍攝！');
+        alert('無法從照片中辨識出清晰文字，請確保相片字跡清晰再試一次！');
         return;
       }
 
@@ -146,42 +146,39 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       }
 
       if (parsedItems.length > 0) {
-        if (confirm(`成功從照片讀取並翻譯了 ${parsedItems.length} 個項目，是否自動匯入工單？`)) {
-          // 修復：正確更新 React 陣列 State，確保多個欄位同時新增並同步到畫面上
-          let updatedList: any[] = [];
+        if (confirm(`成功辨識並翻譯了 ${parsedItems.length} 個項目，是否自動填入表格中？`)) {
+          // 關鍵修復：一口氣構建完整新陣列並替換，解決資料沒帶入問題
+          let newAllItems: any[] = [];
+          
           if (props.items.length === 1 && !props.items[0].item_name) {
-            updatedList = [...parsedItems];
+            newAllItems = [...parsedItems];
           } else {
-            updatedList = [...props.items, ...parsedItems];
+            newAllItems = [...props.items, ...parsedItems];
           }
 
-          // 逐一新增到主選單中
-          updatedList.forEach((item, idx) => {
-            if (idx < props.items.length) {
+          if (props.setItems) {
+            props.setItems(newAllItems);
+          } else {
+            // 備用機制
+            newAllItems.forEach((item, idx) => {
               props.handleItemChange(idx, 'type', item.type);
               props.handleItemChange(idx, 'item_name', item.item_name);
-            } else {
-              props.addItem();
-              setTimeout(() => {
-                props.handleItemChange(idx, 'type', item.type);
-                props.handleItemChange(idx, 'item_name', item.item_name);
-              }, 50);
-            }
-          });
+            });
+          }
 
-          alert('相片維修項目已全數自動翻譯並新增至表單！');
+          alert('相片維修項目已全數同步匯入表單！');
         }
       }
     } catch (err: any) {
       console.error('OCR 辨識失敗:', err);
-      alert(`照片讀取失敗: ${err.message || '請確認網路與圖片清晰度'}`);
+      alert(`照片讀取失敗: ${err.message || '請確認圖片清晰度'}`);
     } finally {
       setIsScanning(false);
       setOcrProgress('');
     }
   }, [props]);
 
-  // 4. 監聽 Ctrl+V 貼上事件
+  // 4. 監聽 Ctrl+V 事件
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const clipboardItems = e.clipboardData?.items;
@@ -315,7 +312,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         </div>
 
         <div className="text-[11px] text-slate-500 bg-slate-100 p-2 rounded-lg border border-dashed border-slate-300 flex items-center justify-between">
-          <span>💡 提示：您可以截圖紙本維修單後，直接在頁面上按下 <kbd className="px-1.5 py-0.5 bg-white border rounded shadow-2xs font-mono font-bold text-slate-700">Ctrl + V</kbd>，系統將會自動讀取相片文字並同步新增多個中文維修項目欄位！</span>
+          <span>💡 提示：您可以截圖紙本維修單後，直接在頁面上按下 <kbd className="px-1.5 py-0.5 bg-white border rounded shadow-2xs font-mono font-bold text-slate-700">Ctrl + V</kbd>，系統將會同步新增欄位並填入中文內容！</span>
         </div>
 
         {props.items.map((item, idx) => (
@@ -334,7 +331,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             </select>
             <input
               type="text"
-              value={item.item_name}
+              value={item.item_name || ''}
               onChange={(e) => props.handleItemChange(idx, 'item_name', e.target.value)}
               placeholder="項目名稱"
               className="flex-1 p-2 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
