@@ -18,10 +18,11 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
   
-  // 項目勾選狀態紀錄
+  // 項目勾選與備註狀態紀錄
   const [checkedItems, setCheckedItems] = useState<{ [key: number]: boolean }>({});
+  const [itemNotes, setItemNotes] = useState<{ [key: number]: string }>({});
 
-  // 簽核/結案欄位 State (完成日期預設為空白)
+  // 簽核/結案欄位 State
   const [completedDateInput, setCompletedDateInput] = useState('');
   const [staffNameInput, setStaffNameInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,7 +33,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     setCompletedDateInput('');
     setStaffNameInput('');
 
-    // 初始化勾選狀態：已 Completed 的預設全部勾選，Open 的預設未勾選
     const items = order.work_order_items || order.items || [];
     const isCompleted = order.status?.toLowerCase() === 'completed';
     const initialChecked: { [key: number]: boolean } = {};
@@ -40,12 +40,14 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
       initialChecked[idx] = isCompleted;
     });
     setCheckedItems(initialChecked);
+    setItemNotes({});
   };
 
   const handleCloseDetailModal = () => {
     setSelectedOrder(null);
     setSelectedVehicle(null);
     setCheckedItems({});
+    setItemNotes({});
   };
 
   const handleToggleCheck = (index: number) => {
@@ -53,6 +55,17 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
       ...prev,
       [index]: !prev[index],
     }));
+  };
+
+  const handleNoteChange = (index: number, val: string) => {
+    setItemNotes((prev) => ({
+      ...prev,
+      [index]: val,
+    }));
+  };
+
+  const handlePrintModal = () => {
+    window.print();
   };
 
   const handleMarkAsCompleted = async () => {
@@ -93,7 +106,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
   return (
     <div className="space-y-6">
-      {/* 搜尋列與按鈕 */}
+      {/* 搜尋列與按鈕 (列印時隱藏) */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl print:hidden">
         <form onSubmit={props.handleSearch} className="flex-1 flex gap-2">
           <input
@@ -125,20 +138,20 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
             onClick={props.handlePrint}
             className="px-3.5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer"
           >
-            🖨️ 列印頁面
+            🖨️ 列印此頁面
           </button>
         </div>
       </div>
 
       {/* 車輛與工單清單 */}
       {props.isSearching ? (
-        <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在搜尋車輛與工單資料...</div>
+        <div className="text-center py-12 text-gray-500 font-semibold animate-pulse print:hidden">⏳ 正在搜尋車輛與工單資料...</div>
       ) : props.searchVehicles.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-dashed text-gray-500">
+        <div className="text-center py-12 bg-white rounded-xl border border-dashed text-gray-500 print:hidden">
           <p className="text-base font-bold">無對應的車輛與工單紀錄</p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-6 print:hidden">
           {props.searchVehicles.map((vehicle, vIdx) => {
             const orders = vehicle.workOrders || vehicle.work_orders || [];
 
@@ -210,74 +223,84 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 工單詳細明細 Modal */}
+      {/* 工單詳細明細 Modal (兼具畫面展示與完美紙本列印) */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex justify-between items-start border-b pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-2xl font-extrabold text-blue-900">📋 {selectedOrder.order_number || 'WO-未知'}</h3>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${selectedOrder.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                    {selectedOrder.status || 'Open'}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  車牌: <strong>{selectedVehicle?.plate_number}</strong> | 專案: {selectedVehicle?.project || '無'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleCloseDetailModal}
-                className="text-gray-400 hover:text-gray-700 text-2xl font-bold px-2 cursor-pointer"
-              >
-                ✕
-              </button>
+        <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
+          <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-6 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
+            
+            {/* 公司正式 Header */}
+            <div className="text-center border-b-2 border-slate-800 pb-3">
+              <h1 className="text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
+              <p className="text-xs text-slate-600 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
+              <p className="text-sm font-extrabold text-blue-900 mt-2 bg-slate-100 py-1 rounded">車輛維修工單明細表 (Work Order Sheet)</p>
             </div>
 
-            {/* 車輛位置與 Claim Form 日期資訊區 */}
-            <div className="bg-slate-50 border rounded-xl p-3 grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <span className="text-gray-500 block">車輛位置</span>
-                <strong className="text-slate-800 text-sm">{selectedOrder.location || selectedVehicle?.location || '未設定'}</strong>
+            {/* Header 控制區 (列印時隱藏) */}
+            <div className="flex justify-between items-center border-b pb-2 print:hidden">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-blue-900 text-lg">📋 {selectedOrder.order_number || 'WO-未知'}</span>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${selectedOrder.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                  狀態: {selectedOrder.status || 'Open'}
+                </span>
               </div>
-              <div>
-                <span className="text-gray-500 block">Claim Form 日期</span>
-                <strong className="text-slate-800 text-sm">{selectedOrder.claim_form_date || selectedVehicle?.claim_form_date || '未設定'}</strong>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintModal}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  🖨️ 列印此工單
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseDetailModal}
+                  className="text-gray-400 hover:text-gray-700 text-2xl font-bold px-2 cursor-pointer"
+                >
+                  ✕
+                </button>
               </div>
             </div>
 
-            {/* 工單敘述 */}
+            {/* 1. 車輛與合約資訊欄 */}
+            <div className="border border-slate-300 rounded-xl p-4 bg-slate-50/50 print:bg-white space-y-2">
+              <h4 className="text-xs font-extrabold text-slate-600 uppercase tracking-wider border-b pb-1">🚘 車輛與合約基本資訊</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                <div><span className="text-gray-500 block">車牌號碼：</span><strong className="text-sm text-blue-900 font-black">{selectedVehicle?.plate_number || selectedOrder.plate_number || '未設定'}</strong></div>
+                <div><span className="text-gray-500 block">VIN 碼：</span><strong className="text-slate-800">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
+                <div><span className="text-gray-500 block">專案名稱：</span><strong className="text-slate-800">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
+                <div><span className="text-gray-500 block">車輛位置：</span><strong className="text-slate-800">{selectedOrder.location || selectedVehicle?.location || '未設定'}</strong></div>
+                <div><span className="text-gray-500 block">Claim Form 日期：</span><strong className="text-slate-800">{selectedOrder.claim_form_date || selectedVehicle?.claim_form_date || '未設定'}</strong></div>
+                <div><span className="text-gray-500 block">開單日期：</span><strong className="text-slate-800">{selectedOrder.created_at ? new Date(selectedOrder.created_at).toLocaleDateString() : '未設定'}</strong></div>
+              </div>
+            </div>
+
+            {/* 2. 工單狀況敘述 */}
             <div className="space-y-1">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">📝 狀況與描述</h4>
-              <p className="text-sm text-gray-800 bg-gray-50 p-3 rounded-lg border">{selectedOrder.description || '無詳細描述'}</p>
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">📝 狀況與故障描述</h4>
+              <p className="text-xs text-gray-800 bg-gray-50 print:bg-white p-3 rounded-lg border leading-relaxed">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 維修項目清單 (含勾選框) */}
+            {/* 3. 維修項目清單 (包含備註空白欄位) */}
             <div className="space-y-2">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🛠️ 維修與零件項目明細 (點擊即可勾選進度)</h4>
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
               {(selectedOrder.work_order_items || selectedOrder.items || []).length > 0 ? (
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border rounded-lg overflow-hidden border-slate-300">
                   <table className="w-full text-xs text-left">
-                    <thead className="bg-gray-100 text-gray-700 font-bold border-b">
+                    <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
                       <tr>
-                        <th className="p-2.5 w-12 text-center">狀態</th>
+                        <th className="p-2.5 w-12 text-center print:hidden">完成</th>
                         <th className="p-2.5 w-24">類別</th>
-                        <th className="p-2.5">項目名稱</th>
+                        <th className="p-2.5 w-1/2">項目名稱</th>
+                        <th className="p-2.5">備註欄位 (Notes)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y">
+                    <tbody className="divide-y divide-slate-200">
                       {(selectedOrder.work_order_items || selectedOrder.items || []).map((item: any, i: number) => {
                         const isChecked = !!checkedItems[i];
 
                         return (
-                          <tr
-                            key={i}
-                            onClick={() => handleToggleCheck(i)}
-                            className={`cursor-pointer transition-colors ${isChecked ? 'bg-emerald-50/60' : 'hover:bg-gray-50'}`}
-                          >
-                            <td className="p-2.5 text-center">
+                          <tr key={i} className={isChecked ? 'bg-emerald-50/50' : ''}>
+                            <td className="p-2.5 text-center print:hidden">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
@@ -286,12 +309,21 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                               />
                             </td>
                             <td className="p-2.5 font-bold">
-                              <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px]">
-                                {item.type || '維修項目'}
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-300 text-[10px]">
+                                {item.type || '進廠維修'}
                               </span>
                             </td>
-                            <td className={`p-2.5 text-gray-800 ${isChecked ? 'line-through text-gray-400 font-medium' : ''}`}>
+                            <td className={`p-2.5 text-slate-800 font-medium ${isChecked ? 'line-through text-gray-400' : ''}`}>
                               {item.item_name}
+                            </td>
+                            <td className="p-1">
+                              <input
+                                type="text"
+                                value={itemNotes[i] || ''}
+                                onChange={(e) => handleNoteChange(i, e.target.value)}
+                                placeholder="手寫或輸入備註..."
+                                className="w-full p-1.5 border border-dashed border-gray-300 rounded text-xs bg-transparent print:border-none focus:ring-1 focus:ring-blue-500"
+                              />
                             </td>
                           </tr>
                         );
@@ -304,37 +336,43 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               )}
             </div>
 
-            {/* 簽核與完成日期 (僅對 Open 工單顯示) */}
+            {/* 4. 簽核與結案欄位 (僅對 Open 工單顯示) */}
             {selectedOrder.status?.toLowerCase() !== 'completed' && (
-              <div className="border-t pt-4 space-y-4 bg-slate-50 p-4 rounded-xl">
+              <div className="border-t pt-4 space-y-4 bg-slate-50 print:bg-white p-4 rounded-xl border-slate-200">
                 <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">✍️ 工單完工簽核與結案設定</h4>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">完成日期 *</label>
                     <input
                       type="date"
                       value={completedDateInput}
                       onChange={(e) => setCompletedDateInput(e.target.value)}
-                      className="w-full p-2 border rounded-lg text-sm text-black bg-white focus:ring-2 focus:ring-blue-500"
+                      className="w-full p-2 border rounded-lg text-xs text-black bg-white focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">負責員工姓名</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">簽核員工姓名</label>
                     <input
                       type="text"
                       value={staffNameInput}
                       onChange={(e) => setStaffNameInput(e.target.value)}
                       placeholder=""
-                      className="w-full p-2 border rounded-lg text-sm text-black bg-white focus:ring-2 focus:ring-blue-500"
+                      className="w-full p-2 border rounded-lg text-xs text-black bg-white focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Footer 操作按鈕 */}
-            <div className="flex justify-between items-center border-t pt-4">
+            {/* 列印簽名欄 (僅在紙本列印時呈現) */}
+            <div className="hidden print:grid grid-cols-2 gap-8 pt-8 text-xs border-t border-slate-400">
+              <div>維修主管簽署：____________________</div>
+              <div>客戶 / 技師簽署：____________________</div>
+            </div>
+
+            {/* Footer 操作按鈕 (列印時隱藏) */}
+            <div className="flex justify-between items-center border-t pt-4 print:hidden">
               <button
                 type="button"
                 onClick={handleCloseDetailModal}
@@ -360,7 +398,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   );
 }
 
-// 輔助函式：取得最新工單的 Claim Date
 function woClaimDate(orders: any[]) {
   if (!orders || orders.length === 0) return null;
   for (const o of orders) {
