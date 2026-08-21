@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 interface CreateWorkOrderProps {
   handleCreateOrder: (e: React.FormEvent) => void;
@@ -31,10 +31,9 @@ interface CreateWorkOrderProps {
 export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   const [isScanning, setIsScanning] = useState(false);
 
-  // 處理拍照或選擇相片
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // 統一處理圖片檔案發送給 AI 辨識與翻譯
+  const processImageFile = useCallback(async (file: File) => {
+    if (!file || !file.type.startsWith('image/')) return;
 
     setIsScanning(true);
     try {
@@ -49,14 +48,12 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       const data = await res.json();
 
       if (res.ok && data.items && data.items.length > 0) {
-        // 自動覆蓋或新增辨識出來的中文項目
         const newItems = data.items.map((i: any) => ({
           type: i.type || '進廠維修',
           item_name: i.item_name || '',
         }));
 
         if (confirm(`成功辨識並翻譯了 ${newItems.length} 項維修項目，是否自動填入表格中？`)) {
-          // 若原本只有一個空白項目，直接替換
           if (props.items.length === 1 && !props.items[0].item_name) {
             newItems.forEach((item: any, idx: number) => {
               if (idx === 0) {
@@ -67,7 +64,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
               }
             });
           } else {
-            // 追加至既有項目下方
             newItems.forEach((item: any) => props.items.push(item));
           }
           alert('維修項目已自動翻譯並匯入！');
@@ -77,10 +73,43 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       }
     } catch (err) {
       console.error('上傳照片失敗:', err);
-      alert('上傳相片處理失敗');
+      alert('圖片處理失敗');
     } finally {
       setIsScanning(false);
-      e.target.value = ''; // 清空檔案選擇器
+    }
+  }, [props]);
+
+  // 監聽鍵盤 Ctrl+V / Cmd+V 貼上事件
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const clipboardItems = e.clipboardData?.items;
+      if (!clipboardItems) return;
+
+      for (let i = 0; i < clipboardItems.length; i++) {
+        const item = clipboardItems[i];
+        if (item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          if (blob) {
+            e.preventDefault();
+            processImageFile(blob);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [processImageFile]);
+
+  // 選擇檔案事件
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+      e.target.value = '';
     }
   };
 
@@ -156,15 +185,15 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         />
       </div>
 
-      {/* 維修項目區塊 (支援 AI 照片辨識自動翻譯匯入) */}
+      {/* 維修項目區塊 (支援 Ctrl+V 貼上圖片辨識) */}
       <div className="space-y-3 border-t pt-4">
         <div className="flex flex-wrap justify-between items-center gap-2">
           <h3 className="text-sm font-bold text-gray-800">維修與零件項目</h3>
           
           <div className="flex gap-2">
-            {/* AI 拍照/辨識按鈕 */}
+            {/* 提示使用者可以 Ctrl+V 貼上 */}
             <label className="text-xs bg-blue-50 text-blue-800 border border-blue-300 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100 cursor-pointer flex items-center gap-1 shadow-2xs">
-              {isScanning ? '⏳ 正在讀取與翻譯相片中...' : '📷 拍照 / 辨識紙本維修單 (自動翻譯中文字)'}
+              {isScanning ? '⏳ 正在讀取與翻譯圖片中...' : '📷 拍照 / 按 Ctrl+V 貼上維修單圖片 (自動翻譯)'}
               <input
                 type="file"
                 accept="image/*"
@@ -183,6 +212,11 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
               快速貼上 Excel 項目
             </button>
           </div>
+        </div>
+
+        {/* 提示區域 */}
+        <div className="text-[11px] text-slate-500 bg-slate-100 p-2 rounded-lg border border-dashed border-slate-300 flex items-center justify-between">
+          <span>💡 提示：您可以截圖紙本維修單後，直接在這個頁面按下 <kbd className="px-1.5 py-0.5 bg-white border rounded shadow-2xs font-mono font-bold text-slate-700">Ctrl + V</kbd>，AI 將會自動翻譯並匯入！</span>
         </div>
 
         {props.items.map((item, idx) => (
