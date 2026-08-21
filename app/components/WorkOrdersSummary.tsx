@@ -36,7 +36,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
       vehicles.forEach((vehicle: any) => {
         const orders = vehicle.workOrders || vehicle.work_orders || [];
         
-        // 1. 合約年度起算日：固定以 delivery_date（交車日期）作為基準
+        // 1. 合約年度起算日：固定以 delivery_date（交車日期）作爲基準
         const deliveryDate = vehicle.delivery_date ? new Date(vehicle.delivery_date) : null;
         let currentYearStart = new Date(today.getFullYear(), 0, 1);
         
@@ -73,10 +73,15 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
             const isClosed = statusStr === 'completed' || statusStr === 'closed' || statusStr === '已完成';
 
             if (!isClosed) {
-              const createdDate = new Date(wo.created_at || wo.createdAt || Date.now());
-              createdDate.setHours(0, 0, 0, 0);
+              // 「本單累積停修天數」計算：優先以 Claim Form 日期起算
+              const rawClaimDate = wo.claim_form_date || vehicle.claim_form_date;
+              const startDate = rawClaimDate
+                ? new Date(rawClaimDate)
+                : new Date(wo.created_at || wo.createdAt || Date.now());
+              
+              startDate.setHours(0, 0, 0, 0);
 
-              const diffTime = today.getTime() - createdDate.getTime();
+              const diffTime = today.getTime() - startDate.getTime();
               const daysOpen = Math.floor(diffTime / (1000 * 3600 * 24)) + 1;
 
               const maxAllowedDays = 18.25;
@@ -97,6 +102,8 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
               const items = wo.work_order_items || wo.items || [];
               const actualLocation = wo.location || vehicle.location || '未設定';
               const actualClaimDate = wo.claim_form_date || vehicle.claim_form_date;
+
+              const createdDate = new Date(wo.created_at || wo.createdAt || Date.now());
 
               list.push({
                 ...wo,
