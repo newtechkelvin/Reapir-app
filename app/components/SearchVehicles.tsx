@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface SearchVehiclesProps {
   searchQuery: string;
@@ -18,14 +18,18 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
   
-  // 項目勾選與備註狀態紀錄
-  const [checkedItems, setCheckedItems] = useState<{ [key: number]: boolean }>({});
-  const [itemNotes, setItemNotes] = useState<{ [key: number]: string }>({});
+  // 項目狀態 (含 DB 中的 id, is_completed, notes)
+  const [modalItems, setModalItems] = useState<any[]>([]);
+  const [lastModifiedStr, setLastModifiedStr] = useState<string>('');
 
   // 簽核/結案欄位 State
   const [completedDateInput, setCompletedDateInput] = useState('');
   const [staffNameInput, setStaffNameInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+
+  // 防抖計時器
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleOpenDetailModal = (vehicle: any, order: any) => {
     setSelectedVehicle(vehicle);
@@ -33,35 +37,71 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     setCompletedDateInput('');
     setStaffNameInput('');
 
-    const items = order.work_order_items || order.items || [];
-    const isCompleted = order.status?.toLowerCase() === 'completed';
-    const initialChecked: { [key: number]: boolean } = {};
-    items.forEach((_: any, idx: number) => {
-      initialChecked[idx] = isCompleted;
-    });
-    setCheckedItems(initialChecked);
-    setItemNotes({});
+    const rawItems = order.work_order_items || order.items || [];
+    const formattedItems = rawItems.map((item: any) => ({
+      id: item.id,
+      type: item.type || '進廠維修',
+      item_name: item.item_name || '',
+      is_completed: item.is_completed || false,
+      notes: item.notes || '',
+    }));
+
+    setModalItems(formattedItems);
+
+    const modTime = order.updated_at || order.created_at;
+    setLastModifiedStr(modTime ? new Date(modTime).toLocaleString() : '未有更新紀錄');
   };
 
   const handleCloseDetailModal = () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSelectedOrder(null);
     setSelectedVehicle(null);
-    setCheckedItems({});
-    setItemNotes({});
+    setModalItems([]);
+  };
+
+  // 觸發自動保存 (Auto-save without changing Status)
+  const triggerAutoSave = (updatedItems: any[]) => {
+    if (!selectedOrder?.id) return;
+    setIsAutoSaving(true);
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/work-orders/${selectedOrder.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: updatedItems,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const newTime = new Date().toLocaleString();
+          setLastModifiedStr(newTime);
+          props.handleSearch();
+        }
+      } catch (err) {
+        console.error('自動保存失敗:', err);
+      } finally {
+        setIsAutoSaving(false);
+      }
+    }, 800);
   };
 
   const handleToggleCheck = (index: number) => {
-    setCheckedItems((prev) => ({
-      ...prev,
-      [index]: !prev[index],
-    }));
+    const updated = [...modalItems];
+    updated[index].is_completed = !updated[index].is_completed;
+    setModalItems(updated);
+    triggerAutoSave(updated);
   };
 
   const handleNoteChange = (index: number, val: string) => {
-    setItemNotes((prev) => ({
-      ...prev,
-      [index]: val,
-    }));
+    const updated = [...modalItems];
+    updated[index].notes = val;
+    setModalItems(updated);
+    triggerAutoSave(updated);
   };
 
   const handlePrintModal = () => {
@@ -86,6 +126,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           status: 'Completed',
           completed_date: completedDateInput,
           staff_name: staffNameInput,
+          items: modalItems,
         }),
       });
 
@@ -235,13 +276,18 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-sm print:text-base font-extrabold text-blue-950 mt-1.5 bg-slate-100 print:bg-slate-200 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
             </div>
 
-            {/* Header 控制區 (列印時隱藏) */}
+            {/* Header 控制區 (含即時儲存提示與修改時間) */}
             <div className="flex justify-between items-center border-b pb-2 print:hidden">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <span className="font-bold text-blue-900 text-lg">📋 {selectedOrder.order_number || 'WO-未知'}</span>
                 <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${selectedOrder.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                   狀態: {selectedOrder.status || 'Open'}
                 </span>
+                {isAutoSaving ? (
+                  <span className="text-xs text-blue-600 font-bold animate-pulse">💾 正在保存更新...</span>
+                ) : (
+                  <span className="text-xs text-gray-500">最後更新時間: <strong>{lastModifiedStr}</strong></span>
+                )}
               </div>
               <div className="flex gap-2">
                 <button
@@ -280,23 +326,23 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-xs print:text-sm text-gray-900 bg-gray-50 print:bg-white p-2.5 rounded-lg border border-slate-300 leading-snug">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 */}
+            {/* 3. 維修項目清單 (支援防抖即時自動儲存) */}
             <div className="space-y-1">
-              <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
-              {(selectedOrder.work_order_items || selectedOrder.items || []).length > 0 ? (
+              <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細 (修改會自動儲存)</h4>
+              {modalItems.length > 0 ? (
                 <div className="border-2 rounded-lg overflow-hidden border-slate-400">
                   <table className="w-full text-xs print:text-sm text-left">
                     <thead className="bg-slate-200 text-slate-900 font-bold border-b-2 border-slate-400">
                       <tr>
-                        <th className="p-2 w-10 text-center print:hidden">完成</th>
+                        <th className="p-2 w-12 text-center print:hidden">完成</th>
                         <th className="p-2 print:p-2 w-28">類別</th>
                         <th className="p-2 print:p-2 w-1/2">項目名稱</th>
-                        <th className="p-2 print:p-2">備註欄位 (Notes)</th>
+                        <th className="p-2 print:p-2">進度備註 (Notes)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-300">
-                      {(selectedOrder.work_order_items || selectedOrder.items || []).map((item: any, i: number) => {
-                        const isChecked = !!checkedItems[i];
+                      {modalItems.map((item: any, i: number) => {
+                        const isChecked = !!item.is_completed;
 
                         return (
                           <tr key={i} className={isChecked ? 'bg-emerald-50/50' : ''}>
@@ -319,9 +365,10 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                             <td className="p-2 print:p-1.5">
                               <input
                                 type="text"
-                                value={itemNotes[i] || ''}
+                                value={item.notes || ''}
                                 onChange={(e) => handleNoteChange(i, e.target.value)}
-                                className="w-full p-1 border-b border-slate-400 print:border-b-2 print:border-slate-800 rounded-none text-xs print:text-sm bg-transparent focus:outline-none"
+                                placeholder="輸入每日工程進度..."
+                                className="w-full p-1 border-b border-slate-400 print:border-b-2 print:border-slate-800 rounded-none text-xs print:text-sm bg-transparent focus:outline-none focus:border-blue-600"
                               />
                             </td>
                           </tr>
@@ -338,7 +385,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
             {/* 4. 簽核與結案欄位 (螢幕顯示) */}
             {selectedOrder.status?.toLowerCase() !== 'completed' && (
               <div className="border-t pt-2 space-y-2 bg-slate-50 print:bg-white p-3 print:p-0 rounded-xl border-slate-200 print:hidden">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">✍️ 工單完工簽核與結案設定</h4>
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">✍️ 工單完工簽核與結案設定 (提交後正式結案)</h4>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -364,7 +411,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             )}
 
-            {/* 列印專屬簽名欄 (僅保留完工日期與維修主管簽署) */}
+            {/* 列印專屬簽名欄 */}
             <div className="hidden print:grid grid-cols-2 gap-6 pt-5 text-xs print:text-sm font-bold border-t-2 border-slate-500">
               <div>完工日期：____________________</div>
               <div>維修主管簽署：____________________</div>
