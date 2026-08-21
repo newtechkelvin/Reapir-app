@@ -128,20 +128,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. 建立新工單 (寫入 location 與 claim_form_date)
+    // 2. 建立新工單
     const order_number = `WO-${Date.now().toString().slice(-6)}`;
+    const orderInsertPayload: any = {
+      vehicle_id: vehicle.id,
+      order_number,
+      description,
+      location,
+      claim_form_date,
+      status: 'Open',
+      created_at: new Date().toISOString()
+    };
+
+    if (vehicle.plate_number) {
+      orderInsertPayload.plate_number = vehicle.plate_number;
+    }
+
     const { data: order, error: oErr } = await supabase
       .from('work_orders')
-      .insert([{
-        vehicle_id: vehicle.id,
-        plate_number: vehicle.plate_number,
-        order_number,
-        description,
-        location,
-        claim_form_date,
-        status: 'Open',
-        created_at: new Date().toISOString()
-      }])
+      .insert([orderInsertPayload])
       .select()
       .single();
 
