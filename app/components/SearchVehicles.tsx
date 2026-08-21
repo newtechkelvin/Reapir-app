@@ -223,7 +223,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 工單詳細明細 Modal (兼具畫面展示與完美紙本列印) */}
+      {/* 工單詳細明細 Modal (兼具畫面展示與紙本列印) */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
           <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-6 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
@@ -232,7 +232,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
             <div className="text-center border-b-2 border-slate-800 pb-3">
               <h1 className="text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
               <p className="text-xs text-slate-600 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
-              <p className="text-sm font-extrabold text-blue-900 mt-2 bg-slate-100 py-1 rounded">車輛維修工單明細表 (Work Order Sheet)</p>
+              <p className="text-sm font-extrabold text-blue-900 mt-2 bg-slate-100 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
             </div>
 
             {/* Header 控制區 (列印時隱藏) */}
@@ -280,7 +280,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-xs text-gray-800 bg-gray-50 print:bg-white p-3 rounded-lg border leading-relaxed">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 (包含備註空白欄位) */}
+            {/* 3. 維修項目清單 (備註無 placeholder、列印自動帶底線) */}
             <div className="space-y-2">
               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
               {(selectedOrder.work_order_items || selectedOrder.items || []).length > 0 ? (
@@ -316,13 +316,12 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                             <td className={`p-2.5 text-slate-800 font-medium ${isChecked ? 'line-through text-gray-400' : ''}`}>
                               {item.item_name}
                             </td>
-                            <td className="p-1">
+                            <td className="p-1.5">
                               <input
                                 type="text"
                                 value={itemNotes[i] || ''}
                                 onChange={(e) => handleNoteChange(i, e.target.value)}
-                                placeholder="手寫或輸入備註..."
-                                className="w-full p-1.5 border border-dashed border-gray-300 rounded text-xs bg-transparent print:border-none focus:ring-1 focus:ring-blue-500"
+                                className="w-full p-1 border-b border-slate-400 print:border-b-2 print:border-slate-800 rounded-none text-xs bg-transparent focus:outline-none focus:border-blue-600"
                               />
                             </td>
                           </tr>
