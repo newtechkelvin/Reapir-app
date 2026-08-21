@@ -123,7 +123,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           <button
             type="button"
             onClick={() => props.setShowPasteModal(true)}
-            className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100"
+            className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 cursor-pointer"
           >
             快速貼上 Excel 項目
           </button>
@@ -132,25 +132,27 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         {props.items.map((item, idx) => (
           <div key={idx} className="flex gap-2 items-center">
             <select
-              value={item.type}
+              value={item.type || '進廠維修'}
               onChange={(e) => props.handleItemChange(idx, 'type', e.target.value)}
-              className="p-2 border rounded-lg text-sm text-black bg-white"
+              className="p-2 border rounded-lg text-sm text-black bg-white focus:ring-2 focus:ring-blue-500 font-semibold"
             >
-              <option value="Labor">工時 (Labor)</option>
-              <option value="Part">零件 (Part)</option>
+              <option value="進廠維修">進廠維修</option>
+              <option value="更換零件">更換零件</option>
+              <option value="現場處理">現場處理</option>
+              <option value="外判處理">外判處理</option>
             </select>
             <input
               type="text"
               value={item.item_name}
               onChange={(e) => props.handleItemChange(idx, 'item_name', e.target.value)}
-              placeholder="項目名稱 (例如：更換機油或煞車片)"
+              placeholder="項目名稱 (例如：定期保養檢測或更換煞車片)"
               className="flex-1 p-2 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
             />
             {props.items.length > 1 && (
               <button
                 type="button"
                 onClick={() => props.removeItem(idx)}
-                className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100"
+                className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 cursor-pointer"
               >
                 刪除
               </button>
@@ -161,7 +163,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         <button
           type="button"
           onClick={props.addItem}
-          className="w-full py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-50"
+          className="w-full py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-50 cursor-pointer"
         >
           + 新增維修項目
         </button>
@@ -171,7 +173,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         <button
           type="submit"
           disabled={props.isSubmitting}
-          className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 disabled:opacity-50"
+          className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
         >
           {props.isSubmitting ? '建立中...' : '建立工單'}
         </button>

@@ -19,7 +19,7 @@ export default function Home() {
   const [deliveryDate, setDeliveryDate] = useState('');
   const [warrantyExpiryDate, setWarrantyExpiryDate] = useState('');
   const [description, setDescription] = useState('');
-  const [items, setItems] = useState<any[]>([{ type: 'Labor', item_name: '' }]);
+  const [items, setItems] = useState<any[]>([{ type: '進廠維修', item_name: '' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modal 貼上
@@ -117,7 +117,7 @@ export default function Home() {
         setDeliveryDate('');
         setWarrantyExpiryDate('');
         setDescription('');
-        setItems([{ type: 'Labor', item_name: '' }]);
+        setItems([{ type: '進廠維修', item_name: '' }]);
 
         await fetchAllVehicles();
         setActiveTab('summary');
@@ -140,7 +140,7 @@ export default function Home() {
   };
 
   const addItem = () => {
-    setItems([...items, { type: 'Labor', item_name: '' }]);
+    setItems([...items, { type: '進廠維修', item_name: '' }]);
   };
 
   const removeItem = (index: number) => {
@@ -158,23 +158,25 @@ export default function Home() {
     const newItems: any[] = [];
 
     lines.forEach((line) => {
-      let type = 'Labor';
+      let type = '進廠維修';
       let name = line;
 
       if (line.includes('\t')) {
         const parts = line.split('\t');
         if (parts.length >= 2) {
-          const first = parts[0].toLowerCase();
-          if (first.includes('part') || first.includes('零件')) {
-            type = 'Part';
+          const first = parts[0].trim();
+          if (['進廠維修', '更換零件', '現場處理', '外判處理'].includes(first)) {
+            type = first;
           }
           name = parts.slice(1).join(' ').trim();
         }
       } else {
-        if (line.toLowerCase().startsWith('part:') || line.startsWith('零件:')) {
-          type = 'Part';
-          name = line.replace(/^(part:|零件:)/i, '').trim();
-        }
+        ['進廠維修', '更換零件', '現場處理', '外判處理'].forEach((t) => {
+          if (line.startsWith(`${t}:`)) {
+            type = t;
+            name = line.replace(`${t}:`, '').trim();
+          }
+        });
       }
 
       if (name) {
@@ -243,7 +245,7 @@ export default function Home() {
       <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6 md:p-8 space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4 print:hidden">
           <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-blue-900">🚗 車輛維修與工單管理系統</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-blue-900">車輛維修與工單管理系統</h1>
             <p className="text-sm text-gray-500 mt-1">即時工單監控、車輛合約可用率 (Availability) 與保固期風險管理</p>
           </div>
         </div>
@@ -339,27 +341,27 @@ export default function Home() {
             <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 space-y-4">
               <h3 className="text-lg font-bold text-gray-800">快捷貼上 Excel 資料</h3>
               <p className="text-xs text-gray-500">
-                請直接複製 Excel 多列內容並貼於下方（每行一項，自動識別零件與工時）：
+                請複製 Excel 欄位並貼於下方（系統自動辨識：進廠維修、更換零件、現場處理、外判處理）：
               </p>
               <textarea
                 rows={6}
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
-                placeholder={'例如：\n機油更換\nPart:\t油濾清器\n剎車片檢查'}
+                placeholder={'例如：\n更換零件:\t油濾清器\n外判處理:\t底盤鈑金'}
                 className="w-full p-3 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
               />
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowPasteModal(false)}
-                  className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-100"
+                  className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-100 cursor-pointer"
                 >
                   取消
                 </button>
                 <button
                   type="button"
                   onClick={handleProcessPastedText}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 cursor-pointer"
                 >
                   匯入至表單
                 </button>
