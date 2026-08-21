@@ -75,11 +75,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { plate_number, vin, project, brand, model, location, claim_form_date, description, items, delivery_date, warranty_expiry_date } = body;
+    const { plate_number, vin, project, brand, model, location, claim_form_date, description, items } = body;
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 1. 檢查或建立車輛
+    // 1. 檢查或建立/更新車輛位置資訊
     let { data: vehicle } = await supabase
       .from('vehicles')
       .select('*')
@@ -89,21 +89,28 @@ export async function POST(request: Request) {
     if (!vehicle) {
       const { data: newV, error: vErr } = await supabase
         .from('vehicles')
-        .insert([{ plate_number, vin, project, brand, model, location, claim_form_date, delivery_date, warranty_expiry_date }])
+        .insert([{ plate_number, vin, project, brand, model, location, claim_form_date }])
         .select()
         .single();
 
       if (vErr) throw vErr;
       vehicle = newV;
-    } else if (delivery_date || warranty_expiry_date) {
-      // 更新車輛保固與交車資訊
-      await supabase
-        .from('vehicles')
-        .update({ delivery_date, warranty_expiry_date })
-        .eq('id', vehicle.id);
+    } else {
+      // 填寫新工單時更新車輛的位置與 Claim Form 日期
+      const updateData: any = {};
+      if (location) updateData.location = location;
+      if (claim_form_date) updateData.claim_form_date = claim_form_date;
+      if (project) updateData.project = project;
+
+      if (Object.keys(updateData).length > 0) {
+        await supabase
+          .from('vehicles')
+          .update(updateData)
+          .eq('id', vehicle.id);
+      }
     }
 
-    // 2. 建立新工單 (狀態預設 Open)
+    // 2. 建立新工單 (寫入 location 與 claim_form_date)
     const order_number = `WO-${Date.now().toString().slice(-6)}`;
     const { data: order, error: oErr } = await supabase
       .from('work_orders')
@@ -111,6 +118,8 @@ export async function POST(request: Request) {
         vehicle_id: vehicle.id,
         order_number,
         description,
+        location,
+        claim_form_date,
         status: 'Open',
         created_at: new Date().toISOString()
       }])

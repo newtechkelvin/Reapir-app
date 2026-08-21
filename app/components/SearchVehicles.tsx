@@ -156,8 +156,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   </div>
                   <div className="text-xs text-slate-300 flex flex-wrap gap-4">
                     <span>VIN: <strong>{vehicle.vin || '無'}</strong></span>
-                    <span>品牌/車型: <strong>{vehicle.brand || ''} {vehicle.model || ''}</strong></span>
-                    <span>位置: <strong>{vehicle.location || '未設定'}</strong></span>
+                    <span>車輛位置: <strong className="text-amber-300">{vehicle.location || '未設定'}</strong></span>
+                    <span>Claim Form 日期: <strong className="text-emerald-300">{vehicle.claim_form_date || woClaimDate(orders) || '未設定'}</strong></span>
                   </div>
                 </div>
 
@@ -171,6 +171,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                       {orders.map((wo: any, oIdx: number) => {
                         const isCompleted = (wo.status || '').toLowerCase() === 'completed';
                         const items = wo.work_order_items || wo.items || [];
+                        const claimDateStr = wo.claim_form_date || vehicle.claim_form_date || '未設定';
+                        const locationStr = wo.location || vehicle.location || '未設定';
 
                         return (
                           <div
@@ -186,7 +188,9 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                                 </span>
                               </div>
                               <p className="text-xs text-gray-600 line-clamp-1">{wo.description || '無描述'}</p>
-                              <div className="text-[11px] text-gray-400 flex gap-4 pt-0.5">
+                              <div className="text-[11px] text-gray-500 flex flex-wrap gap-4 pt-1">
+                                <span>車輛位置: <strong className="text-gray-800">{locationStr}</strong></span>
+                                <span>Claim Form 日期: <strong className="text-gray-800">{claimDateStr}</strong></span>
                                 <span>開單日期: {wo.created_at ? new Date(wo.created_at).toLocaleDateString() : '未設定'}</span>
                                 <span>項目: {items.length} 項</span>
                               </div>
@@ -232,6 +236,18 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </button>
             </div>
 
+            {/* 車輛位置與 Claim Form 日期資訊區 */}
+            <div className="bg-slate-50 border rounded-xl p-3 grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <span className="text-gray-500 block">車輛位置</span>
+                <strong className="text-slate-800 text-sm">{selectedOrder.location || selectedVehicle?.location || '未設定'}</strong>
+              </div>
+              <div>
+                <span className="text-gray-500 block">Claim Form 日期</span>
+                <strong className="text-slate-800 text-sm">{selectedOrder.claim_form_date || selectedVehicle?.claim_form_date || '未設定'}</strong>
+              </div>
+            </div>
+
             {/* 工單敘述 */}
             <div className="space-y-1">
               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">📝 狀況與描述</h4>
@@ -270,8 +286,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                               />
                             </td>
                             <td className="p-2.5 font-bold">
-                              <span className={`px-2 py-0.5 rounded text-[10px] ${item.type === 'Part' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
-                                {item.type === 'Part' ? '零件' : '工時'}
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px]">
+                                {item.type || '維修項目'}
                               </span>
                             </td>
                             <td className={`p-2.5 text-gray-800 ${isChecked ? 'line-through text-gray-400 font-medium' : ''}`}>
@@ -342,4 +358,13 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
       )}
     </div>
   );
+}
+
+// 輔助函式：取得最新工單的 Claim Date
+function woClaimDate(orders: any[]) {
+  if (!orders || orders.length === 0) return null;
+  for (const o of orders) {
+    if (o.claim_form_date) return o.claim_form_date;
+  }
+  return null;
 }

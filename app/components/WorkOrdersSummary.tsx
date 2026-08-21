@@ -95,15 +95,17 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
               }
 
               const items = wo.work_order_items || wo.items || [];
+              const actualLocation = wo.location || vehicle.location || '未設定';
+              const actualClaimDate = wo.claim_form_date || vehicle.claim_form_date;
 
               list.push({
                 ...wo,
                 vehiclePlate: vehicle.plate_number || wo.plate_number || '未設定',
                 vehicleVin: vehicle.vin || wo.vin || '未設定',
                 vehicleProject: vehicle.project || wo.project || '未設定',
-                vehicleLocation: vehicle.location || wo.location || '未設定',
+                vehicleLocation: actualLocation,
                 deliveryDateStr: deliveryDate && !isNaN(deliveryDate.getTime()) ? deliveryDate.toLocaleDateString() : '未設定',
-                claimFormDateStr: vehicle.claim_form_date ? new Date(vehicle.claim_form_date).toLocaleDateString() : '未設定',
+                claimFormDateStr: actualClaimDate ? new Date(actualClaimDate).toLocaleDateString() : '未設定',
                 createdDateStr: !isNaN(createdDate.getTime()) ? createdDate.toLocaleDateString() : '未設定',
                 daysOpen: daysOpen < 1 ? 1 : daysOpen,
                 totalAnnualRepairDays,
@@ -169,7 +171,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
     <div className="space-y-6">
       <div className="flex flex-wrap justify-between items-center bg-slate-800 text-white p-4 rounded-xl shadow-sm gap-2">
         <div>
-          <h2 className="text-xl font-bold">📊 工單即時總覽與可用率 (Availability Summary)</h2>
+          <h2 className="text-xl font-bold">工單即時總覽與可用率 (Availability Summary)</h2>
           <p className="text-xs text-slate-300 mt-1">目前全廠進行中 (Open) 工單共有 <span className="font-bold text-amber-400 text-sm">{openOrders.length}</span> 張（點擊卡片可查看詳細資料）</p>
         </div>
         <button
@@ -185,7 +187,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在向資料庫讀取所有進行中 (Open) 的工單與可用率...</div>
       ) : openOrders.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-500 space-y-2">
-          <p className="text-lg font-bold">🎉 目前資料庫中沒有任何狀態為 Open 的工單！</p>
+          <p className="text-lg font-bold">目前資料庫中沒有任何狀態為 Open 的工單！</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
@@ -234,7 +236,7 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
                   </p>
 
                   <div className="text-xs text-gray-500 flex flex-wrap gap-4 pt-1">
-                    <span>交車日期: <strong>{order.deliveryDateStr}</strong></span>
+                    <span>車輛位置: <strong>{order.vehicleLocation}</strong></span>
                     <span>Claim Form 日期: <strong>{order.claimFormDateStr}</strong></span>
                     <span>本年合約累積停修: <strong className="text-red-600">{order.totalAnnualRepairDays} 天</strong> / 18.25 天</span>
                     <span>推延保固到期日: <strong>{order.newWarrantyExpiryStr}</strong></span>
@@ -285,14 +287,14 @@ export default function WorkOrdersSummary({ onSelectWorkOrder }: WorkOrdersSumma
 
             {/* 車輛與可用率卡片 */}
             <div className="bg-slate-50 border rounded-xl p-4 space-y-3">
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">🚘 車輛與合約可用率資訊</h4>
+              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">車輛與合約可用率資訊</h4>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                 <div><span className="text-gray-500 text-xs block">車牌號碼</span><strong>{selectedOrder.vehiclePlate}</strong></div>
                 <div><span className="text-gray-500 text-xs block">VIN 碼</span><strong>{selectedOrder.vehicleVin}</strong></div>
                 <div><span className="text-gray-500 text-xs block">專案名稱</span><strong>{selectedOrder.vehicleProject}</strong></div>
-                <div><span className="text-gray-500 text-xs block">車輛位置</span><strong>{selectedOrder.vehicleLocation}</strong></div>
+                <div><span className="text-gray-500 text-xs block">車輛位置</span><strong className="text-blue-900">{selectedOrder.vehicleLocation}</strong></div>
+                <div><span className="text-gray-500 text-xs block">Claim Form 日期</span><strong className="text-emerald-800">{selectedOrder.claimFormDateStr}</strong></div>
                 <div><span className="text-gray-500 text-xs block">交車日期 (年度起算日)</span><strong>{selectedOrder.deliveryDateStr}</strong></div>
-                <div><span className="text-gray-500 text-xs block">Claim Form 日期</span><strong>{selectedOrder.claimFormDateStr}</strong></div>
                 <div className="col-span-2 md:col-span-1"><span className="text-gray-500 text-xs block">推延保固到期日</span><strong className="text-purple-700">{selectedOrder.newWarrantyExpiryStr}</strong></div>
               </div>
 
