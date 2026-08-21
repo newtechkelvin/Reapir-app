@@ -29,7 +29,6 @@ interface CreateWorkOrderProps {
   isSubmitting: boolean;
 }
 
-// 常用汽車維修專有名詞英文對照詞庫
 const REPAIR_DICT: { [key: string]: { zh: string; type: string } } = {
   brake: { zh: '煞車系統/更換煞車皮', type: '更換零件' },
   pad: { zh: '煞車皮/煞車片', type: '更換零件' },
@@ -50,7 +49,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [ocrProgress, setOcrProgress] = useState('');
 
-  // 1. 動態載入 Tesseract.js
   const loadTesseract = async () => {
     if ((window as any).Tesseract) return (window as any).Tesseract;
 
@@ -63,7 +61,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     });
   };
 
-  // 2. 線上英翻中
   const translateToZh = async (text: string) => {
     try {
       const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|zh-TW`);
@@ -80,7 +77,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     return null;
   };
 
-  // 3. 照片 OCR 辨識與貼上
   const processImageFile = useCallback(async (file: File) => {
     if (!file || !file.type.startsWith('image/')) return;
 
@@ -147,9 +143,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
 
       if (parsedItems.length > 0) {
         if (confirm(`成功辨識並翻譯了 ${parsedItems.length} 個項目，是否自動填入表格中？`)) {
-          // 關鍵修復：一口氣構建完整新陣列並替換，解決資料沒帶入問題
           let newAllItems: any[] = [];
-          
           if (props.items.length === 1 && !props.items[0].item_name) {
             newAllItems = [...parsedItems];
           } else {
@@ -159,7 +153,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           if (props.setItems) {
             props.setItems(newAllItems);
           } else {
-            // 備用機制
             newAllItems.forEach((item, idx) => {
               props.handleItemChange(idx, 'type', item.type);
               props.handleItemChange(idx, 'item_name', item.item_name);
@@ -178,7 +171,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     }
   }, [props]);
 
-  // 4. 監聽 Ctrl+V 事件
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const clipboardItems = e.clipboardData?.items;
@@ -260,15 +252,23 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
           />
         </div>
+
+        {/* 車房位置改為選單 */}
         <div>
           <label className="block text-xs font-bold text-gray-700 mb-1">車房位置</label>
-          <input
-            type="text"
+          <select
             value={props.location}
             onChange={(e) => props.setLocation(e.target.value)}
-            placeholder="例如：廠房 A"
-            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-          />
+            className="w-full p-2.5 border rounded-lg text-sm text-black bg-white focus:ring-2 focus:ring-blue-500 font-semibold"
+          >
+            <option value="">-- 請選擇車房位置 --</option>
+            <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
+            <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
+            <option value="機電 - 屯門">機電 - 屯門</option>
+            <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
+            <option value="機電 - 柴灣">機電 - 柴灣</option>
+            <option value="車行">車行</option>
+          </select>
         </div>
       </div>
 
