@@ -4,6 +4,35 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+/**
+ * 安全日期解析函式：避免無效日期導致 "Invalid time value" 錯誤
+ */
+function parseSafeDate(dateVal: any): string | null {
+  if (!dateVal) return null;
+  const str = dateVal.toString().trim();
+  if (!str || str.toLowerCase() === 'n/a' || str === '無' || str === '未設定' || str === 'undefined' || str === 'null') {
+    return null;
+  }
+
+  // 嘗試解析日期
+  const d = new Date(str);
+  if (isNaN(d.getTime())) {
+    // 嘗試解析 DD/MM/YYYY 格式 (例如 15/03/2025)
+    const parts = str.split(/[/.-]/);
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        // DD/MM/YYYY -> YYYY-MM-DD
+        const formatted = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        const altD = new Date(formatted);
+        if (!isNaN(altD.getTime())) return formatted;
+      }
+    }
+    return null;
+  }
+
+  return d.toISOString().split('T')[0];
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -30,6 +59,15 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // 安全解析日期欄位
+      const rawClaimDate = rec.claim_form_date || rec.claimFormDate || rec['Claim Form 日期'] || rec['ClaimFormDate'];
+      const rawCompletedDate = rec.completed_date || rec.completedDate || rec['完工日期'];
+      const rawDeliveryDate = rec.delivery_date || rec.deliveryDate || rec['交車日期'];
+
+      const claimFormDate = parseSafeDate(rawClaimDate);
+      const completedDate = parseSafeDate(rawCompletedDate) || claimFormDate || new Date().toISOString().split('T')[0];
+      const deliveryDate = parseSafeDate(rawDeliveryDate);
+
       // 1. 檢查並建立/更新車輛主表
       let { data: vehicle } = await supabase
         .from('vehicles')
@@ -43,8 +81,6 @@ export async function POST(request: NextRequest) {
       const model = (rec.model || rec['型號'] || '').toString().trim();
       const garageLocation = (rec.garage_location || rec.location || rec['車房位置'] || '機電 - 九龍灣1/F').toString().trim();
       const vehicleLocation = (rec.vehicle_location || rec['車輛位置'] || '').toString().trim();
-      const claimFormDate = rec.claim_form_date || rec.claimFormDate || rec['Claim Form 日期'] || rec['ClaimFormDate'] || null;
-      const deliveryDate = rec.delivery_date || rec.deliveryDate || rec['交車日期'] || null;
 
       if (!vehicle) {
         const { data: newV, error: vErr } = await supabase
@@ -75,7 +111,9 @@ export async function POST(request: NextRequest) {
       // 2. 建立舊保固工單 (設為 Completed)
       const orderNumber = rec.order_number || rec.orderNumber || rec['工單編號'] || `WO-OLD-${Date.now().toString().slice(-4)}-${index + 1}`;
       const description = rec.description || rec['描述'] || rec['狀況描述'] || '舊 Warranty Form 批次匯入';
-      const completedDate = rec.completed_date || rec.completedDate || rec['完工日期'] || claimFormDate || new Date().toISOString().split('T')[0];
+
+      // 安全 ISO 時間字串轉換
+      const createdAtIso = claimFormDate ? `${claimFormDate}T08:00:00.000Z` : new Date().toISOString();
 
       const { data: order, error: oErr } = await supabase
         .from('work_orders')
@@ -89,7 +127,7 @@ export async function POST(request: NextRequest) {
           claim_form_date: claimFormDate,
           completed_date: completedDate,
           status: 'Completed',
-          created_at: claimFormDate ? new Date(claimFormDate).toISOString() : new Date().toISOString()
+          created_at: createdAtIso
         }])
         .select()
         .single();
@@ -99,10 +137,9 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 3. 自動相容拆解多行文字、換行符號 (\n, \r)、分號 (;) 與逗號 (,)
+      // 3. 自動拆解多行維修項目
       const rawItems = rec.items || rec.items_str || rec['維修項目'] || rec['維修與零件項目'] || '';
       if (order && rawItems) {
-        // 使用正規表達式自動拆解換行、分號與逗號
         const itemNames = rawItems
           .toString()
           .split(/\r\n|\n|\r|;|；|,|，/)
