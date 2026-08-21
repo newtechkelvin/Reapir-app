@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     for (let index = 0; index < records.length; index++) {
       const rec = records[index];
-      const plateNumber = (rec.plate_number || rec.plateNumber || '').toString().trim();
+      const plateNumber = (rec.plate_number || rec.plateNumber || rec['車牌號碼'] || rec['車牌'] || '').toString().trim();
 
       if (!plateNumber) {
         errors.push(`第 ${index + 1} 筆紀錄缺少車牌號碼，已略過`);
@@ -37,14 +37,14 @@ export async function POST(request: NextRequest) {
         .eq('plate_number', plateNumber)
         .maybeSingle();
 
-      const vin = (rec.vin || '').toString().trim();
-      const project = (rec.project || '').toString().trim();
-      const brand = (rec.brand || '').toString().trim();
-      const model = (rec.model || '').toString().trim();
-      const garageLocation = (rec.garage_location || rec.location || '機電 - 九龍灣1/F').toString().trim();
-      const vehicleLocation = (rec.vehicle_location || '').toString().trim();
-      const claimFormDate = rec.claim_form_date || rec.claimFormDate || null;
-      const deliveryDate = rec.delivery_date || rec.deliveryDate || null;
+      const vin = (rec.vin || rec['VIN'] || rec['車身號碼'] || '').toString().trim();
+      const project = (rec.project || rec['專案'] || rec['專案名稱'] || '').toString().trim();
+      const brand = (rec.brand || rec['品牌'] || '').toString().trim();
+      const model = (rec.model || rec['型號'] || '').toString().trim();
+      const garageLocation = (rec.garage_location || rec.location || rec['車房位置'] || '機電 - 九龍灣1/F').toString().trim();
+      const vehicleLocation = (rec.vehicle_location || rec['車輛位置'] || '').toString().trim();
+      const claimFormDate = rec.claim_form_date || rec.claimFormDate || rec['Claim Form 日期'] || rec['ClaimFormDate'] || null;
+      const deliveryDate = rec.delivery_date || rec.deliveryDate || rec['交車日期'] || null;
 
       if (!vehicle) {
         const { data: newV, error: vErr } = await supabase
@@ -73,9 +73,9 @@ export async function POST(request: NextRequest) {
       if (!vehicle) continue;
 
       // 2. 建立舊保固工單 (設為 Completed)
-      const orderNumber = rec.order_number || rec.orderNumber || `WO-OLD-${Date.now().toString().slice(-4)}-${index + 1}`;
-      const description = rec.description || '舊 Warranty Form 批次匯入';
-      const completedDate = rec.completed_date || rec.completedDate || claimFormDate || new Date().toISOString().split('T')[0];
+      const orderNumber = rec.order_number || rec.orderNumber || rec['工單編號'] || `WO-OLD-${Date.now().toString().slice(-4)}-${index + 1}`;
+      const description = rec.description || rec['描述'] || rec['狀況描述'] || '舊 Warranty Form 批次匯入';
+      const completedDate = rec.completed_date || rec.completedDate || rec['完工日期'] || claimFormDate || new Date().toISOString().split('T')[0];
 
       const { data: order, error: oErr } = await supabase
         .from('work_orders')
@@ -99,10 +99,16 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 3. 處理維修項目 (用分號 ';' 或逗號 ',' 分隔)
-      const rawItems = rec.items || rec.items_str || '';
+      // 3. 自動相容拆解多行文字、換行符號 (\n, \r)、分號 (;) 與逗號 (,)
+      const rawItems = rec.items || rec.items_str || rec['維修項目'] || rec['維修與零件項目'] || '';
       if (order && rawItems) {
-        const itemNames = rawItems.toString().split(/;|；|,|，/).map((s: string) => s.trim()).filter(Boolean);
+        // 使用正規表達式自動拆解換行、分號與逗號
+        const itemNames = rawItems
+          .toString()
+          .split(/\r\n|\n|\r|;|；|,|，/)
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 0);
+
         if (itemNames.length > 0) {
           const itemsToInsert = itemNames.map((name: string) => ({
             work_order_id: order.id,
