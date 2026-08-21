@@ -241,30 +241,31 @@ export default function Home() {
         {activeTab === 'create' && (
           <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200">
             <CreateWorkOrder
-              handleCreateOrder={handleCreateOrder}
-              plateNumber={plateNumber}
-              setPlateNumber={setPlateNumber}
-              vin={vin}
-              setVin={setVin}
-              project={project}
-              setProject={setProject}
-              brand={brand}
-              setBrand={setBrand}
-              model={model}
-              setModel={setModel}
-              location={location}
-              setLocation={setLocation}
-              claimFormDate={claimFormDate}
-              setClaimFormDate={setClaimFormDate}
-              description={description}
-              setDescription={setDescription}
-              items={items}
-              handleItemChange={handleItemChange}
-              removeItem={removeItem}
-              addItem={addItem}
-              setShowPasteModal={setShowPasteModal}
-              isSubmitting={isSubmitting}
-            />
+  handleCreateOrder={handleCreateOrder}
+  plateNumber={plateNumber}
+  setPlateNumber={setPlateNumber}
+  vin={vin}
+  setVin={setVin}
+  project={project}
+  setProject={setProject}
+  brand={brand}
+  setBrand={setBrand}
+  model={model}
+  setModel={setModel}
+  location={location}
+  setLocation={setLocation}
+  claimFormDate={claimFormDate}
+  setClaimFormDate={setClaimFormDate}
+  description={description}
+  setDescription={setDescription}
+  items={items}
+  setItems={setItems}
+  handleItemChange={handleItemChange}
+  removeItem={removeItem}
+  addItem={addItem}
+  setShowPasteModal={setShowPasteModal}
+  isSubmitting={isSubmitting}
+/>
           </div>
         )}
 

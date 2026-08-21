@@ -21,6 +21,7 @@ interface CreateWorkOrderProps {
   description: string;
   setDescription: (v: string) => void;
   items: any[];
+  setItems?: (items: any[]) => void;
   handleItemChange: (index: number, field: string, value: any) => void;
   removeItem: (index: number) => void;
   addItem: () => void;
@@ -62,7 +63,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     });
   };
 
-  // 2. 免費英翻中（使用 MyMemory Translate API，香港直連）
+  // 2. 免費英翻中
   const translateToZh = async (text: string) => {
     try {
       const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|zh-TW`);
@@ -90,7 +91,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       const Tesseract = await loadTesseract();
       setOcrProgress('正在讀取相片文字中 (OCR Scanning)...');
 
-      // 執行照片 OCR 辨識
       const result = await Tesseract.recognize(file, 'eng', {
         logger: (m: any) => {
           if (m.status === 'recognizing text') {
@@ -102,7 +102,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       const rawText = result?.data?.text || '';
       setOcrProgress('辨識完成，正在自動翻譯中文字...');
 
-      // 將文字逐行清理與過濾
       const lines = rawText
         .split('\n')
         .map((l: string) => l.trim())
@@ -115,11 +114,10 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
 
       const parsedItems: any[] = [];
 
-      for (const line of lines.slice(0, 10)) { // 最多自動擷取前 10 行
+      for (const line of lines.slice(0, 10)) {
         let matchedType = '進廠維修';
         let chineseName = '';
 
-        // 先比對專有名詞字典
         const lowerLine = line.toLowerCase();
         Object.keys(REPAIR_DICT).forEach((kw) => {
           if (lowerLine.includes(kw)) {
@@ -128,7 +126,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           }
         });
 
-        // 呼叫線上英翻中
         const onlineZh = await translateToZh(line);
 
         let finalName = '';
@@ -150,19 +147,29 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
 
       if (parsedItems.length > 0) {
         if (confirm(`成功從照片讀取並翻譯了 ${parsedItems.length} 個項目，是否自動匯入工單？`)) {
+          // 修復：正確更新 React 陣列 State，確保多個欄位同時新增並同步到畫面上
+          let updatedList: any[] = [];
           if (props.items.length === 1 && !props.items[0].item_name) {
-            parsedItems.forEach((item, idx) => {
-              if (idx === 0) {
-                props.handleItemChange(0, 'type', item.type);
-                props.handleItemChange(0, 'item_name', item.item_name);
-              } else {
-                props.items.push(item);
-              }
-            });
+            updatedList = [...parsedItems];
           } else {
-            parsedItems.forEach((item) => props.items.push(item));
+            updatedList = [...props.items, ...parsedItems];
           }
-          alert('相片維修項目已成功自動翻譯並匯入！');
+
+          // 逐一新增到主選單中
+          updatedList.forEach((item, idx) => {
+            if (idx < props.items.length) {
+              props.handleItemChange(idx, 'type', item.type);
+              props.handleItemChange(idx, 'item_name', item.item_name);
+            } else {
+              props.addItem();
+              setTimeout(() => {
+                props.handleItemChange(idx, 'type', item.type);
+                props.handleItemChange(idx, 'item_name', item.item_name);
+              }, 50);
+            }
+          });
+
+          alert('相片維修項目已全數自動翻譯並新增至表單！');
         }
       }
     } catch (err: any) {
@@ -174,7 +181,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     }
   }, [props]);
 
-  // 4. 監聽 Ctrl+V 剪貼簿貼上事件
+  // 4. 監聽 Ctrl+V 貼上事件
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const clipboardItems = e.clipboardData?.items;
@@ -279,7 +286,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         />
       </div>
 
-      {/* 維修項目區塊 (支援照片 OCR 與自動英譯中) */}
+      {/* 維修項目區塊 */}
       <div className="space-y-3 border-t pt-4">
         <div className="flex flex-wrap justify-between items-center gap-2">
           <h3 className="text-sm font-bold text-gray-800">維修與零件項目</h3>
@@ -308,7 +315,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         </div>
 
         <div className="text-[11px] text-slate-500 bg-slate-100 p-2 rounded-lg border border-dashed border-slate-300 flex items-center justify-between">
-          <span>💡 提示：您可以截圖紙本維修單後，直接在頁面上按下 <kbd className="px-1.5 py-0.5 bg-white border rounded shadow-2xs font-mono font-bold text-slate-700">Ctrl + V</kbd>，系統將會在瀏覽器本地掃描照片文字並自動翻譯成中文！</span>
+          <span>💡 提示：您可以截圖紙本維修單後，直接在頁面上按下 <kbd className="px-1.5 py-0.5 bg-white border rounded shadow-2xs font-mono font-bold text-slate-700">Ctrl + V</kbd>，系統將會自動讀取相片文字並同步新增多個中文維修項目欄位！</span>
         </div>
 
         {props.items.map((item, idx) => (
