@@ -9,208 +9,305 @@ interface ManageVehiclesProps {
   onEditVehicle?: (vehicle: any) => void;
 }
 
-export default function ManageVehicles({ vehicles, isLoading, onRefresh, onEditVehicle }: ManageVehiclesProps) {
+export default function ManageVehicles(props: ManageVehiclesProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
+  
+  // 編輯 Modal State
+  const [editingVehicle, setEditingVehicle] = useState<any | null>(null);
+  const [editPlateNumber, setEditPlateNumber] = useState('');
+  const [editVin, setEditVin] = useState('');
+  const [editBrand, setEditBrand] = useState('');
+  const [editModel, setEditModel] = useState('');
+  const [editProject, setEditProject] = useState('');
+  const [editGarageLocation, setEditGarageLocation] = useState('');
+  const [editWarrantyType, setEditWarrantyType] = useState('Government');
+  const [isSaving, setIsSaving] = useState(false);
 
-  // 篩選車輛
-  const filteredVehicles = vehicles.filter((v) => {
-    const q = searchTerm.toLowerCase().trim();
-    if (!q) return true;
+  // 打開編輯視窗
+  const handleOpenEditModal = (vehicle: any) => {
+    setEditingVehicle(vehicle);
+    setEditPlateNumber(vehicle.plate_number || '');
+    setEditVin(vehicle.vin || '');
+    setEditBrand(vehicle.brand || '');
+    setEditModel(vehicle.model || '');
+    setEditProject(vehicle.project || '');
+    setEditGarageLocation(vehicle.garage_location || vehicle.location || '');
+    setEditWarrantyType(vehicle.warranty_type || (vehicle.project?.includes('散車') ? 'General' : 'Government'));
+  };
+
+  // 關閉編輯視窗
+  const handleCloseEditModal = () => {
+    setEditingVehicle(null);
+  };
+
+  // 儲存車輛修改
+  const handleSaveVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVehicle?.id) return;
+
+    try {
+      setIsSaving(true);
+      const res = await fetch(`/api/vehicles/${editingVehicle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plate_number: editPlateNumber,
+          vin: editVin,
+          brand: editBrand,
+          model: editModel,
+          project: editProject,
+          garage_location: editGarageLocation,
+          warranty_type: editWarrantyType,
+        }),
+      });
+
+      if (res.ok) {
+        alert('車輛資訊已成功更新！');
+        handleCloseEditModal();
+        props.onRefresh();
+      } else {
+        const errData = await res.json().catch(() => null);
+        alert(`更新失敗: ${errData?.error || errData?.message || '請檢查網路連線'}`);
+      }
+    } catch (err) {
+      console.error('更新車輛資訊失敗:', err);
+      alert('更新失敗，請稍後再試');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 搜尋過濾
+  const filteredVehicles = props.vehicles.filter((v) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
     return (
-      (v.plate_number && v.plate_number.toLowerCase().includes(q)) ||
-      (v.vin && v.vin.toLowerCase().includes(q)) ||
-      (v.project && v.project.toLowerCase().includes(q)) ||
-      (v.brand && v.brand.toLowerCase().includes(q)) ||
-      (v.model && v.model.toLowerCase().includes(q))
+      v.plate_number?.toLowerCase().includes(term) ||
+      v.vin?.toLowerCase().includes(term) ||
+      v.brand?.toLowerCase().includes(term) ||
+      v.model?.toLowerCase().includes(term) ||
+      v.project?.toLowerCase().includes(term)
     );
   });
 
   return (
-    <div className="space-y-6">
-      {/* 頂部搜尋與重新整理 */}
-      <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl">
+    <div className="space-y-6 text-black">
+      {/* 標頭與搜尋列 */}
+      <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
         <div className="flex-1 flex gap-2">
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="搜尋車牌、VIN、專案或品牌..."
-            className="flex-1 p-2.5 border rounded-xl text-sm text-black focus:ring-2 focus:ring-blue-500 bg-white"
+            placeholder="在車輛主表中搜尋車牌、VIN、品牌、型號或專案..."
+            className="flex-1 p-2.5 border rounded-xl text-sm bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
           />
         </div>
+
         <button
           type="button"
-          onClick={onRefresh}
-          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer"
+          onClick={props.onRefresh}
+          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
         >
-          🔄 重新整理
+          🔄 重新整理車輛主表
         </button>
       </div>
 
-      {isLoading ? (
+      {/* 車輛主表卡片清單 */}
+      {props.isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在載入車輛主表資料...</div>
       ) : filteredVehicles.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-dashed text-gray-500">
-          <p className="text-base font-bold">沒有符合條件的車輛紀錄</p>
+          <p className="text-base font-bold">無對應的車輛主表資料</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredVehicles.map((vehicle, idx) => {
+            const isSanChe = vehicle.warranty_type === 'General' || vehicle.project?.includes('散車');
             const orders = vehicle.workOrders || vehicle.work_orders || [];
-            const stats = calculateVehicleWarrantyStats(vehicle, orders);
 
             return (
               <div
                 key={vehicle.id || idx}
-                className="bg-white border border-slate-200 rounded-xl shadow-xs p-5 hover:shadow-md transition-all space-y-4"
+                className="bg-white border rounded-2xl p-5 shadow-xs hover:shadow-md transition-all border-slate-200 flex flex-col justify-between gap-4"
               >
-                {/* 1. 卡片頂部資訊 */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-3">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-2xl font-black text-blue-900">🚘 {vehicle.plate_number}</span>
-                    {vehicle.project && (
-                      <span className="bg-purple-50 text-purple-700 border border-purple-200 text-xs px-2.5 py-1 rounded-lg font-bold">
-                        專案: {vehicle.project}
-                      </span>
-                    )}
-                    <span className="bg-slate-100 text-slate-700 border border-slate-300 text-xs px-2.5 py-1 rounded-lg font-bold">
-                      {vehicle.brand || '品牌未定'} {vehicle.model || ''}
-                    </span>
-                  </div>
-
-                  {onEditVehicle && (
-                    <button
-                      type="button"
-                      onClick={() => onEditVehicle(vehicle)}
-                      className="text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer self-end md:self-auto"
+                <div className="space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-xl font-black text-blue-900 block">🚘 {vehicle.plate_number}</span>
+                      <span className="text-xs text-gray-500">VIN: {vehicle.vin || '未填寫'}</span>
+                    </div>
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
+                        isSanChe
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : 'bg-blue-50 text-blue-800 border-blue-200'
+                      }`}
                     >
-                      ✏️ 編輯車輛資訊
-                    </button>
-                  )}
-                </div>
-
-                {/* 2. 保固年限與停修統計資訊區 (關鍵指標) */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 border border-slate-200 p-3.5 rounded-xl">
-                  {/* 第幾保固年度 */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs text-center md:text-left">
-                    <span className="text-xs font-bold text-slate-500 block">當前保固年度</span>
-                    <strong className="text-lg font-black text-blue-900 mt-0.5 block">
-                      {stats.warrantyYearStr}
-                    </strong>
-                    <span className="text-[10px] text-gray-400 block mt-0.5">
-                      起算日: {stats.yearStartStr}
+                      {isSanChe ? '🚗 散車保固' : '🏛️ 政府合約'}
                     </span>
                   </div>
 
-                  {/* 本年合約累積停修 */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs text-center md:text-left">
-                    <span className="text-xs font-bold text-slate-500 block">本年合約累積停修天數</span>
-                    <strong className={`text-lg font-black mt-0.5 block ${stats.annualDays >= 18.25 ? 'text-red-600' : 'text-slate-800'}`}>
-                      {stats.annualDays} 天 <span className="text-xs text-gray-400 font-normal">/ 18.25 天</span>
-                    </strong>
-                    <span className="text-[10px] text-gray-400 block mt-0.5">
-                      {stats.annualDays >= 18.25 ? '⚠️ 已觸發保固延長' : `剩餘額度: ${(18.25 - stats.annualDays).toFixed(1)} 天`}
-                    </span>
-                  </div>
-
-                  {/* 本年度已開工單數目 */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs text-center md:text-left">
-                    <span className="text-xs font-bold text-slate-500 block">本年度已開工單數目</span>
-                    <strong className="text-lg font-black text-amber-600 mt-0.5 block">
-                      {stats.annualOrderCount} 張 <span className="text-xs text-slate-500 font-normal">({stats.openOrderCount} Open)</span>
-                    </strong>
-                    <span className="text-[10px] text-gray-400 block mt-0.5">
-                      歷史總工單: {orders.length} 張
-                    </span>
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-700">
+                    <div>品牌：<strong className="text-slate-900">{vehicle.brand || '未設定'}</strong></div>
+                    <div>型號：<strong className="text-slate-900">{vehicle.model || '未設定'}</strong></div>
+                    <div className="col-span-2">專案：<strong className="text-slate-900">{vehicle.project || '未設定'}</strong></div>
+                    <div className="col-span-2">
+                      {isSanChe ? '車輛位置：' : '車房位置：'}
+                      <strong className="text-slate-900">{vehicle.garage_location || vehicle.location || '未設定'}</strong>
+                    </div>
+                    <div className="col-span-2">歷史工單總數：<strong className="text-blue-900 font-bold">{orders.length} 張</strong></div>
                   </div>
                 </div>
 
-                {/* 3. 車輛基本詳細資料 */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-slate-700 pt-1">
-                  <div><span className="text-gray-400 block">VIN 碼</span><strong>{vehicle.vin || '無'}</strong></div>
-                  <div><span className="text-gray-400 block">車房位置</span><strong>{vehicle.garage_location || vehicle.location || '未設定'}</strong></div>
-                  <div><span className="text-gray-400 block">車輛位置</span><strong>{vehicle.vehicle_location || '未設定'}</strong></div>
-                  <div><span className="text-gray-400 block">交車日期 (Delivery)</span><strong>{vehicle.delivery_date || '未設定'}</strong></div>
-                  <div><span className="text-gray-400 block">保固到期日</span><strong>{vehicle.warranty_expiry_date || '未設定'}</strong></div>
-                  <div><span className="text-gray-400 block">取車/回廠日期</span><strong>{vehicle.pickup_return_date || '未設定'}</strong></div>
-                  <div><span className="text-gray-400 block">Claim Form 日期</span><strong>{vehicle.claim_form_date || '未設定'}</strong></div>
-                  <div><span className="text-gray-400 block">建立時間</span><strong>{vehicle.created_at ? new Date(vehicle.created_at).toLocaleDateString() : '未設定'}</strong></div>
+                <div className="pt-2 border-t flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditModal(vehicle)}
+                    className="flex-1 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
+                  >
+                    ✏️ 編輯車輛資訊
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* 編輯車輛資訊 Modal 彈窗 */}
+      {editingVehicle && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 text-black">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-lg font-black text-slate-900">✏️ 編輯車輛主表資訊 ({editingVehicle.plate_number})</h3>
+              <button
+                type="button"
+                onClick={handleCloseEditModal}
+                className="text-gray-400 hover:text-gray-700 text-2xl font-bold px-2 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVehicle} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">保固 / 車輛類別 *</label>
+                <select
+                  value={editWarrantyType}
+                  onChange={(e) => setEditWarrantyType(e.target.value)}
+                  className="w-full p-2.5 border rounded-xl bg-white font-bold text-black focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Government">🏛️ 政府合約專案</option>
+                  <option value="General">🚗 散車保固</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">車牌號碼 *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPlateNumber}
+                    onChange={(e) => setEditPlateNumber(e.target.value)}
+                    className="w-full p-2.5 border rounded-xl font-bold text-black focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">VIN 碼</label>
+                  <input
+                    type="text"
+                    value={editVin}
+                    onChange={(e) => setEditVin(e.target.value)}
+                    className="w-full p-2.5 border rounded-xl text-black focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">車輛品牌 (Brand)</label>
+                  <input
+                    type="text"
+                    value={editBrand}
+                    onChange={(e) => setEditBrand(e.target.value)}
+                    placeholder="例如：Toyota / Isuzu"
+                    className="w-full p-2.5 border rounded-xl text-black focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">車輛型號 (Model)</label>
+                  <input
+                    type="text"
+                    value={editModel}
+                    onChange={(e) => setEditModel(e.target.value)}
+                    placeholder="例如：Coaster / N-Series"
+                    className="w-full p-2.5 border rounded-xl text-black focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">專案名稱 / 備註</label>
+                <input
+                  type="text"
+                  value={editProject}
+                  onChange={(e) => setEditProject(e.target.value)}
+                  className="w-full p-2.5 border rounded-xl text-black focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  {editWarrantyType === 'General' ? '車輛位置' : '車房位置'}
+                </label>
+                {editWarrantyType === 'General' ? (
+                  <input
+                    type="text"
+                    value={editGarageLocation}
+                    onChange={(e) => setEditGarageLocation(e.target.value)}
+                    placeholder="院舍 / 客人自行送廠"
+                    className="w-full p-2.5 border rounded-xl font-bold text-black focus:ring-2 focus:ring-blue-500"
+                  />
+                ) : (
+                  <select
+                    value={editGarageLocation}
+                    onChange={(e) => setEditGarageLocation(e.target.value)}
+                    className="w-full p-2.5 border rounded-xl bg-white font-bold text-black focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- 請選擇車房位置 --</option>
+                    <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
+                    <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
+                    <option value="機電 - 屯門">機電 - 屯門</option>
+                    <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
+                    <option value="機電 - 柴灣">機電 - 柴灣</option>
+                    <option value="車行">車行</option>
+                  </select>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={handleCloseEditModal}
+                  className="px-4 py-2 border rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {isSaving ? '保存中...' : '💾 儲存修改'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-/**
- * 輔助計算車輛當前保固年度、本年累積停修天數與本年度工單數量
- */
-function calculateVehicleWarrantyStats(vehicle: any, orders: any[]) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const deliveryDateRaw = vehicle.delivery_date ? new Date(vehicle.delivery_date) : null;
-
-  if (!deliveryDateRaw || isNaN(deliveryDateRaw.getTime())) {
-    return {
-      warrantyYearStr: '未設定交車日',
-      yearStartStr: '未設定',
-      annualDays: 0,
-      annualOrderCount: 0,
-      openOrderCount: 0,
-    };
-  }
-
-  deliveryDateRaw.setHours(0, 0, 0, 0);
-
-  // 1. 計算第幾個保固年度
-  let yearNum = today.getFullYear() - deliveryDateRaw.getFullYear();
-  let currentYearStart = new Date(deliveryDateRaw);
-  currentYearStart.setFullYear(deliveryDateRaw.getFullYear() + yearNum);
-
-  if (currentYearStart > today) {
-    yearNum -= 1;
-    currentYearStart = new Date(deliveryDateRaw);
-    currentYearStart.setFullYear(deliveryDateRaw.getFullYear() + yearNum);
-  }
-
-  const warrantyYearIndex = Math.max(1, yearNum + 1);
-
-  // 2. 統計當前保固年度內的工單停修天數與數量
-  let annualDays = 0;
-  let annualOrderCount = 0;
-  let openOrderCount = 0;
-
-  if (Array.isArray(orders)) {
-    orders.forEach((wo: any) => {
-      const rawClaimDate = wo.claim_form_date || vehicle.claim_form_date;
-      const woStart = rawClaimDate
-        ? new Date(rawClaimDate)
-        : new Date(wo.created_at || wo.createdAt || Date.now());
-
-      const woEnd = wo.completed_date ? new Date(wo.completed_date) : today;
-      const statusStr = (wo.status || 'open').toString().trim().toLowerCase();
-      const isOpen = statusStr !== 'completed' && statusStr !== 'closed' && statusStr !== '已完成';
-
-      if (woEnd >= currentYearStart) {
-        annualOrderCount += 1;
-        if (isOpen) openOrderCount += 1;
-
-        const effectiveStart = woStart < currentYearStart ? currentYearStart : woStart;
-        const diff = Math.ceil((woEnd.getTime() - effectiveStart.getTime()) / (1000 * 3600 * 24));
-        annualDays += diff > 0 ? diff : 0;
-      }
-    });
-  }
-
-  return {
-    warrantyYearStr: `第 ${warrantyYearIndex} 年`,
-    yearStartStr: currentYearStart.toLocaleDateString(),
-    annualDays,
-    annualOrderCount,
-    openOrderCount,
-  };
 }
