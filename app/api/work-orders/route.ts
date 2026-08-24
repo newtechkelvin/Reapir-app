@@ -20,7 +20,10 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (query) {
-      vehicleQuery = vehicleQuery.or(`plate_number.ilike.%${query}%,vin.ilike.%${query}%,project.ilike.%${query}%,brand.ilike.%${query}%,model.ilike.%${query}%`);
+      // 支援用車牌、VIN、專案、品牌、型號，以及工單號碼（透過關聯語法）進行模糊搜尋
+      vehicleQuery = vehicleQuery.or(
+        `plate_number.ilike.%${query}%,vin.ilike.%${query}%,project.ilike.%${query}%,brand.ilike.%${query}%,model.ilike.%${query}%,work_orders.order_number.ilike.%${query}%`
+      );
     }
 
     const { data: vehiclesData, error: vErr } = await vehicleQuery;
@@ -73,7 +76,6 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (!vehicle) {
-      // 情況 A: 若無此車牌，自動新增車輛資料（含 brand, model）
       const insertPayload: Record<string, any> = {
         plate_number: plate_number.trim(),
         vin: vin || '',
@@ -92,7 +94,6 @@ export async function POST(request: NextRequest) {
         .select()
         .single();
 
-      // 防護相容：若資料庫尚未新增 warranty_type 欄位
       if (vErr && vErr.message?.includes('warranty_type')) {
         delete insertPayload.warranty_type;
         const retryRes = await supabase
@@ -109,7 +110,6 @@ export async function POST(request: NextRequest) {
       }
       vehicle = newV;
     } else {
-      // 情況 B: 車輛已存在，更新品牌、型號與保固類別
       const updateData: Record<string, any> = {
         warranty_type: targetWarrantyType
       };
