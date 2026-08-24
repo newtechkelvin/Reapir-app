@@ -29,6 +29,8 @@ interface CreateWorkOrderProps {
   isSubmitting: boolean;
   warrantyType?: string;
   setWarrantyType?: (v: string) => void;
+  pickupReturnDate?: string;
+  setPickupReturnDate?: (v: string) => void;
 }
 
 const REPAIR_DICT: { [key: string]: { zh: string; type: string } } = {
@@ -221,7 +223,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       const trimmed = line.trim();
       if (!trimmed) return;
 
-      // 日期解析輔助函式
       const parseDateStr = (str: string) => {
         const match = str.match(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/);
         if (match) {
@@ -231,7 +232,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         return '';
       };
 
-      // 關鍵字比對
       if (/^車牌[：:]/i.test(trimmed)) {
         props.setPlateNumber(trimmed.replace(/^車牌[：:]/i, '').trim());
       } else if (/^品牌[：:]/i.test(trimmed)) {
@@ -247,6 +247,9 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       } else if (/^通知日期[：:]/i.test(trimmed) || /^維修通知日期[：:]/i.test(trimmed)) {
         const d = parseDateStr(trimmed);
         if (d) props.setClaimFormDate(d);
+      } else if (/^(取車日期|到廠日期|取車\/到廠日期)[：:]/i.test(trimmed)) {
+        const d = parseDateStr(trimmed);
+        if (d && props.setPickupReturnDate) props.setPickupReturnDate(d);
       } else if (/^狀況描述[：:]/i.test(trimmed) || /^描述[：:]/i.test(trimmed) || /^故障描述[：:]/i.test(trimmed)) {
         props.setDescription(trimmed.replace(/^(狀況描述|描述|故障描述)[：:]/i, '').trim());
       } else if (/^維修項目[：:]/i.test(trimmed) || /^維修明細[：:]/i.test(trimmed)) {
@@ -389,6 +392,19 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
           />
         </div>
+
+        {/* 散車專屬：取車/到廠日期 */}
+        {isSanChe && props.setPickupReturnDate && (
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">取車/到廠日期</label>
+            <input
+              type="date"
+              value={props.pickupReturnDate || ''}
+              onChange={(e) => props.setPickupReturnDate && props.setPickupReturnDate(e.target.value)}
+              className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
 
         {/* 動態車房/車輛位置輸入欄 */}
         <div>
@@ -534,14 +550,14 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             </div>
 
             <p className="text-xs text-gray-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-              💡 請直接貼上通訊軟體上的報修文字，系統將自動提取車牌、品牌、型號、專案、位置、通知日期與維修項目！
+              💡 請直接貼上通訊軟體上的報修文字，系統將自動提取車牌、品牌、型號、專案、位置、通知日期、取車日期與維修項目！
             </p>
 
             <textarea
               rows={8}
               value={smartPasteText}
               onChange={(e) => setSmartPasteText(e.target.value)}
-              placeholder={`【散車報修通知】\n車牌：AM1234\n品牌：Toyota\n型號：Coaster\nVIN：VIN987654321\n專案：聖公會老人院\n取車位置：沙田亞公角街15號\n通知日期：2026-08-25\n狀況描述：冷氣不冷，且煞車有異音\n維修項目：\n- 檢查冷媒 leak\n- 更換前煞車皮`}
+              placeholder={`【散車報修通知】\n車牌：AM1234\n品牌：Toyota\n型號：Coaster\nVIN：VIN987654321\n專案：聖公會老人院\n取車位置：沙田亞公角街15號\n通知日期：2026-08-25\n取車日期：2026-08-26\n狀況描述：冷氣不冷，且煞車有異音\n維修項目：\n- 檢查冷媒 leak\n- 更換前煞車皮`}
               className="w-full p-3 border rounded-xl text-xs font-mono bg-slate-50 text-black border-slate-300 focus:ring-2 focus:ring-blue-500"
             />
 
