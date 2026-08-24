@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import WorkOrdersSummary from './components/WorkOrdersSummary';
+import GeneralWarrantySummary from './components/GeneralWarrantySummary';
 import CreateWorkOrder from './components/CreateWorkOrder';
 import SearchVehicles from './components/SearchVehicles';
 import ManageVehicles from './components/ManageVehicles';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'summary' | 'create' | 'search' | 'vehicles'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'general_summary' | 'create' | 'search' | 'vehicles'>('summary');
 
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -177,8 +178,8 @@ export default function Home() {
   // 下載 CSV 匯入標準範本
   const downloadCsvTemplate = () => {
     const csvHeader = 'plate_number,vin,project,brand,model,claim_form_date,completed_date,garage_location,description,items\n';
-    const csvSample1 = 'AM1234,VIN123456,專案A,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,引擎異音與煞車檢修,更換機油;更換前煞車皮\n';
-    const csvSample2 = 'AM5678,VIN789012,專案B,Isuku,N-Series,2025-02-01,2025-02-03,機電 - 屯門,冷氣不冷,檢查冷媒 leak;更換冷氣濾芯\n';
+    const csvSample1 = 'AM1234,VIN123456,政府合約,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,引擎異音與煞車檢修,更換機油;更換前煞車皮\n';
+    const csvSample2 = 'AM5678,VIN789012,散車項目,Isuzu,N-Series,2025-02-01,2025-02-03,機電 - 屯門,冷氣不冷,檢查冷媒 leak;更換冷氣濾芯\n';
     
     const blob = new Blob(['\uFEFF' + csvHeader + csvSample1 + csvSample2], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -291,15 +292,23 @@ export default function Home() {
           <nav className="flex flex-wrap gap-2">
             <button
               onClick={() => setActiveTab('summary')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'summary' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              📊 工單即時 Summary
+              🏛️ 政府合約 Summary
+            </button>
+            <button
+              onClick={() => setActiveTab('general_summary')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'general_summary' ? 'bg-amber-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              🚗 散車保固 Summary
             </button>
             <button
               onClick={() => setActiveTab('create')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'create' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -310,7 +319,7 @@ export default function Home() {
                 setActiveTab('search');
                 if (!hasSearched) handleSearch();
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'search' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -318,7 +327,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setActiveTab('vehicles')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'vehicles' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -326,7 +335,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setShowBatchModal(true)}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all cursor-pointer"
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all cursor-pointer"
             >
               📂 批次匯入舊紀錄
             </button>
@@ -334,6 +343,7 @@ export default function Home() {
         </header>
 
         {activeTab === 'summary' && <WorkOrdersSummary />}
+        {activeTab === 'general_summary' && <GeneralWarrantySummary />}
 
         {activeTab === 'create' && (
           <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200">
@@ -393,7 +403,7 @@ export default function Home() {
       {/* 舊紀錄 CSV 批次匯入 Modal */}
       {showBatchModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-black">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="text-xl font-bold text-slate-800">📂 批次匯入舊有 Warranty Form 紀錄</h3>
               <button
@@ -409,7 +419,7 @@ export default function Home() {
               <p className="font-bold text-slate-800">說明與操作步驟：</p>
               <ol className="list-decimal list-inside space-y-1">
                 <li>下載匯入 CSV 範本，用 Excel 開啟並填入舊有的保固紀錄。</li>
-                <li>欄位說明：<code className="bg-white px-1 border rounded">plate_number</code> (車牌號碼，必填)、<code className="bg-white px-1 border rounded">claim_form_date</code> (格式 YYYY-MM-DD)、<code className="bg-white px-1 border rounded">items</code> (多個項目請用分號 ; 分隔)。</li>
+                <li>欄位說明：<code className="bg-white px-1 border rounded">plate_number</code> (車牌號碼，必填)、<code className="bg-white px-1 border rounded">claim_form_date</code> (格式 YYYY-MM-DD)、<code className="bg-white px-1 border rounded">items</code> (多個項目可直接換行或用分號 ; 分隔)。</li>
                 <li>選擇 CSV 檔案，或直接複製內容貼至下方文字框點擊「開始匯入」。</li>
               </ol>
               <button
@@ -432,12 +442,12 @@ export default function Home() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">方式 B：直接貼上 CSV 或 Excel 標籤字串</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">方式 B：直接貼上 CSV 或 Excel 文字</label>
               <textarea
                 rows={8}
                 value={batchCsvText}
                 onChange={(e) => setBatchCsvText(e.target.value)}
-                placeholder="plate_number,vin,project,brand,model,claim_form_date,completed_date,garage_location,description,items&#nAM1234,VIN1234,專案A,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,煞車檢修,更換煞車皮;更換煞車油"
+                placeholder="plate_number,vin,project,brand,model,claim_form_date,completed_date,garage_location,description,items&#nAM1234,VIN1234,政府合約,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,煞車檢修,更換煞車皮;更換煞車油"
                 className="w-full p-2.5 border rounded-xl text-xs font-mono bg-white text-black"
               />
             </div>
@@ -466,7 +476,7 @@ export default function Home() {
       {/* 快速貼上 Excel 項目彈窗 */}
       {showPasteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl text-black">
             <h3 className="text-lg font-bold text-slate-800">快速貼上 Excel 項目</h3>
             <p className="text-xs text-gray-500">格式：每行一個項目，或包含 [類別 Tab 項目名稱]</p>
             <textarea
@@ -474,7 +484,7 @@ export default function Home() {
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
               placeholder="進廠維修&#9;更換煞車皮&#n更換零件&#9;機油濾芯"
-              className="w-full p-2.5 border rounded-xl text-xs font-mono"
+              className="w-full p-2.5 border rounded-xl text-xs font-mono bg-white text-black"
             />
             <div className="flex justify-end gap-2">
               <button
