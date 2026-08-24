@@ -4,6 +4,48 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+// GET: 讀取所有車輛與其關聯之工單 (確保關聯包含 work_orders)
+export async function GET(request: NextRequest) {
+  try {
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: 'Supabase 環境變數未設定' }, { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get('q')?.trim() || '';
+
+    // 1. 先抓取車輛主表與其所有關聯工單 (明確關聯 work_orders)
+    let vehicleQuery = supabase
+      .from('vehicles')
+      .select('*, work_orders(*, work_order_items(*))')
+      .order('created_at', { ascending: false });
+
+    if (query) {
+      vehicleQuery = vehicleQuery.or(`plate_number.ilike.%${query}%,vin.ilike.%${query}%,project.ilike.%${query}%,brand.ilike.%${query}%`);
+    }
+
+    const { data: vehiclesData, error: vErr } = await vehicleQuery;
+
+    if (vErr) {
+      console.error('讀取車輛資料失敗:', vErr);
+      return NextResponse.json({ error: vErr.message }, { status: 500 });
+    }
+
+    // 2. 為了相容 front-end，統一將 work_orders 賦值至 workOrders 屬性
+    const formattedVehicles = (vehiclesData || []).map((v: any) => ({
+      ...v,
+      workOrders: v.work_orders || [],
+    }));
+
+    return NextResponse.json({ vehicles: formattedVehicles });
+  } catch (err: any) {
+    console.error('API GET 錯誤:', err);
+    return NextResponse.json({ error: err.message || '伺服器內部錯誤' }, { status: 500 });
+  }
+}
+
+// POST: 開立新工單
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -55,14 +97,13 @@ export async function POST(request: NextRequest) {
       }
       vehicle = newV;
     } else {
-      // 若車輛已存在，更新保固類別
       await supabase
         .from('vehicles')
         .update({ warranty_type: targetWarrantyType })
         .eq('id', vehicle.id);
     }
 
-    // 2. 建立新工單
+    // 2. 建立新工單 (狀態預設為 Open)
     const orderNumber = `WO-${Date.now().toString().slice(-6)}`;
     const { data: order, error: oErr } = await supabase
       .from('work_orders')
