@@ -26,8 +26,9 @@ export default function Home() {
   const [model, setModel] = useState('');
   const [location, setLocation] = useState('');
   const [claimFormDate, setClaimFormDate] = useState('');
+  const [pickupReturnDate, setPickupReturnDate] = useState('');
   const [description, setDescription] = useState('');
-  const [warrantyType, setWarrantyType] = useState<string>('Government'); // 預設 Government
+  const [warrantyType, setWarrantyType] = useState<string>('Government');
   const [items, setItems] = useState<any[]>([{ type: '進廠維修', item_name: '' }]);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
@@ -114,6 +115,7 @@ export default function Home() {
           model,
           location,
           claim_form_date: claimFormDate,
+          pickup_return_date: pickupReturnDate,
           description,
           items: validItems,
           warranty_type: warrantyType
@@ -131,6 +133,7 @@ export default function Home() {
         setModel('');
         setLocation('');
         setClaimFormDate('');
+        setPickupReturnDate('');
         setDescription('');
         setItems([{ type: '進廠維修', item_name: '' }]);
 
@@ -367,6 +370,8 @@ export default function Home() {
               setLocation={setLocation}
               claimFormDate={claimFormDate}
               setClaimFormDate={setClaimFormDate}
+              pickupReturnDate={pickupReturnDate}
+              setPickupReturnDate={setPickupReturnDate}
               description={description}
               setDescription={setDescription}
               items={items}
