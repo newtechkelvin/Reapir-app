@@ -11,7 +11,6 @@ interface ManageVehiclesProps {
 
 export default function ManageVehicles(props: ManageVehiclesProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
   
   // 編輯 Modal State
   const [editingVehicle, setEditingVehicle] = useState<any | null>(null);
@@ -154,7 +153,7 @@ export default function ManageVehicles(props: ManageVehiclesProps) {
                     <div>型號：<strong className="text-slate-900">{vehicle.model || '未設定'}</strong></div>
                     <div className="col-span-2">專案：<strong className="text-slate-900">{vehicle.project || '未設定'}</strong></div>
                     <div className="col-span-2">
-                      {isSanChe ? '車輛位置：' : '車房位置：'}
+                      車房位置：
                       <strong className="text-slate-900">{vehicle.garage_location || vehicle.location || '未設定'}</strong>
                     </div>
                     <div className="col-span-2">歷史工單總數：<strong className="text-blue-900 font-bold">{orders.length} 張</strong></div>
@@ -260,32 +259,20 @@ export default function ManageVehicles(props: ManageVehiclesProps) {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">
-                  {editWarrantyType === 'General' ? '車輛位置' : '車房位置'}
-                </label>
-                {editWarrantyType === 'General' ? (
-                  <input
-                    type="text"
-                    value={editGarageLocation}
-                    onChange={(e) => setEditGarageLocation(e.target.value)}
-                    placeholder="院舍 / 客人自行送廠"
-                    className="w-full p-2.5 border rounded-xl font-bold text-black focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <select
-                    value={editGarageLocation}
-                    onChange={(e) => setEditGarageLocation(e.target.value)}
-                    className="w-full p-2.5 border rounded-xl bg-white font-bold text-black focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">-- 請選擇車房位置 --</option>
-                    <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
-                    <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
-                    <option value="機電 - 屯門">機電 - 屯門</option>
-                    <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
-                    <option value="機電 - 柴灣">機電 - 柴灣</option>
-                    <option value="車行">車行</option>
-                  </select>
-                )}
+                <label className="block font-bold text-gray-700 mb-1">車房位置</label>
+                <select
+                  value={editGarageLocation}
+                  onChange={(e) => setEditGarageLocation(e.target.value)}
+                  className="w-full p-2.5 border rounded-xl bg-white font-bold text-black focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- 請選擇車房位置 --</option>
+                  <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
+                  <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
+                  <option value="機電 - 屯門">機電 - 屯門</option>
+                  <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
+                  <option value="機電 - 柴灣">機電 - 柴灣</option>
+                  <option value="車行">車行</option>
+                </select>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
