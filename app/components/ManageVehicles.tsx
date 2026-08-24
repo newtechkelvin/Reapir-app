@@ -19,7 +19,6 @@ export default function ManageVehicles(props: ManageVehiclesProps) {
   const [editBrand, setEditBrand] = useState('');
   const [editModel, setEditModel] = useState('');
   const [editProject, setEditProject] = useState('');
-  const [editGarageLocation, setEditGarageLocation] = useState('');
   const [editWarrantyType, setEditWarrantyType] = useState('Government');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -31,7 +30,6 @@ export default function ManageVehicles(props: ManageVehiclesProps) {
     setEditBrand(vehicle.brand || '');
     setEditModel(vehicle.model || '');
     setEditProject(vehicle.project || '');
-    setEditGarageLocation(vehicle.garage_location || vehicle.location || '');
     setEditWarrantyType(vehicle.warranty_type || (vehicle.project?.includes('散車') ? 'General' : 'Government'));
   };
 
@@ -56,7 +54,6 @@ export default function ManageVehicles(props: ManageVehiclesProps) {
           brand: editBrand,
           model: editModel,
           project: editProject,
-          garage_location: editGarageLocation,
           warranty_type: editWarrantyType,
         }),
       });
@@ -152,10 +149,6 @@ export default function ManageVehicles(props: ManageVehiclesProps) {
                     <div>品牌：<strong className="text-slate-900">{vehicle.brand || '未設定'}</strong></div>
                     <div>型號：<strong className="text-slate-900">{vehicle.model || '未設定'}</strong></div>
                     <div className="col-span-2">專案：<strong className="text-slate-900">{vehicle.project || '未設定'}</strong></div>
-                    <div className="col-span-2">
-                      車房位置：
-                      <strong className="text-slate-900">{vehicle.garage_location || vehicle.location || '未設定'}</strong>
-                    </div>
                     <div className="col-span-2">歷史工單總數：<strong className="text-blue-900 font-bold">{orders.length} 張</strong></div>
                   </div>
                 </div>
@@ -256,23 +249,6 @@ export default function ManageVehicles(props: ManageVehiclesProps) {
                   onChange={(e) => setEditProject(e.target.value)}
                   className="w-full p-2.5 border rounded-xl text-black focus:ring-2 focus:ring-blue-500"
                 />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">車房位置</label>
-                <select
-                  value={editGarageLocation}
-                  onChange={(e) => setEditGarageLocation(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl bg-white font-bold text-black focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- 請選擇車房位置 --</option>
-                  <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
-                  <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
-                  <option value="機電 - 屯門">機電 - 屯門</option>
-                  <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
-                  <option value="機電 - 柴灣">機電 - 柴灣</option>
-                  <option value="車行">車行</option>
-                </select>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
