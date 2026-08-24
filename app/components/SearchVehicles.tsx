@@ -184,8 +184,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
             type="text"
             value={props.searchQuery}
             onChange={(e) => props.setSearchQuery(e.target.value)}
-            placeholder="搜尋車牌、VIN、專案或品牌..."
-            className="flex-1 p-2.5 border rounded-xl text-sm text-black focus:ring-2 focus:ring-blue-500 bg-white"
+            placeholder="搜尋工單編號 (如 WO-123456)、車牌、VIN、專案或品牌..."
+            className="flex-1 p-2.5 border rounded-xl text-sm text-black focus:ring-2 focus:ring-blue-500 bg-white font-semibold"
           />
           <button
             type="submit"
