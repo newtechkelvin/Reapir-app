@@ -17,7 +17,6 @@ export async function GET(request: NextRequest) {
     let vehiclesData: any[] = [];
 
     if (!query) {
-      // 情況 1：無關鍵字，讀取所有車輛及其關聯工單
       const { data, error } = await supabase
         .from('vehicles')
         .select('*, work_orders(*, work_order_items(*))')
@@ -26,7 +25,6 @@ export async function GET(request: NextRequest) {
       if (error) throw error;
       vehiclesData = data || [];
     } else {
-      // 情況 2：有關鍵字，先從 vehicles 搜尋車牌、VIN、專案、品牌、型號
       const { data: vData, error: vErr } = await supabase
         .from('vehicles')
         .select('*, work_orders(*, work_order_items(*))')
@@ -35,7 +33,6 @@ export async function GET(request: NextRequest) {
 
       if (vErr) console.warn('車輛關聯搜尋警告:', vErr.message);
 
-      // 情況 3：同時從 work_orders 搜尋工單編號 (order_number) 或車牌
       const { data: woData, error: woErr } = await supabase
         .from('work_orders')
         .select('vehicle_id')
@@ -43,7 +40,6 @@ export async function GET(request: NextRequest) {
 
       if (woErr) console.warn('工單號碼搜尋警告:', woErr.message);
 
-      // 收集符合條件的 vehicle_id
       const vehicleIdsFromWo = (woData || []).map((w: any) => w.vehicle_id).filter(Boolean);
 
       if (vehicleIdsFromWo.length > 0) {
@@ -53,7 +49,6 @@ export async function GET(request: NextRequest) {
           .in('id', vehicleIdsFromWo);
 
         if (!vmErr && vMatched) {
-          // 合併兩種搜尋結果並去除重複項
           const combinedMap = new Map();
           (vData || []).forEach((v: any) => combinedMap.set(v.id, v));
           (vMatched || []).forEach((v: any) => combinedMap.set(v.id, v));
@@ -89,6 +84,7 @@ export async function POST(request: NextRequest) {
       model,
       location,
       claim_form_date,
+      pickup_return_date,
       description,
       items,
       warranty_type
@@ -117,6 +113,7 @@ export async function POST(request: NextRequest) {
         garage_location: location || '機電 - 九龍灣1/F',
         vehicle_location: targetWarrantyType === 'General' ? (location || '') : '',
         claim_form_date: claim_form_date || null,
+        pickup_return_date: pickup_return_date || null,
         warranty_type: targetWarrantyType
       };
 
@@ -173,6 +170,7 @@ export async function POST(request: NextRequest) {
       garage_location: targetWarrantyType === 'General' ? '' : (location || vehicle.garage_location || '機電 - 九龍灣1/F'),
       vehicle_location: targetWarrantyType === 'General' ? (location || '') : '',
       claim_form_date: claim_form_date || null,
+      pickup_return_date: pickup_return_date || null,
       status: 'Open',
       warranty_type: targetWarrantyType
     };
