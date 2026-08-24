@@ -356,6 +356,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <div className="grid grid-cols-2 print:grid-cols-3 gap-2.5 text-xs print:text-sm">
                 <div><span className="text-gray-600 block">工單編號：</span><strong className="text-blue-900 font-black">{selectedOrder.order_number || 'WO-未知'}</strong></div>
                 <div><span className="text-gray-600 block">車牌號碼：</span><strong className="text-blue-900 font-black">{selectedVehicle?.plate_number || selectedOrder.plate_number || '未設定'}</strong></div>
+                <div><span className="text-gray-600 block">車輛品牌：</span><strong className="text-slate-900">{selectedVehicle?.brand || selectedOrder.brand || '未設定'}</strong></div>
+                <div><span className="text-gray-600 block">車輛型號：</span><strong className="text-slate-900">{selectedVehicle?.model || selectedOrder.model || '未設定'}</strong></div>
                 <div><span className="text-gray-600 block">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
                 <div><span className="text-gray-600 block">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
 
