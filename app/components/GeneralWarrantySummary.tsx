@@ -40,7 +40,6 @@ export default function GeneralWarrantySummary() {
             const isOpen = statusStr !== 'completed' && statusStr !== 'closed' && statusStr !== '已完成';
             const oWType = (wo.warranty_type || '').toString().trim().toLowerCase();
 
-            // 工單本身若是 Government，則摒除
             if (oWType === 'government') return;
 
             if (isOpen) {
@@ -88,10 +87,10 @@ export default function GeneralWarrantySummary() {
       <div className="flex flex-wrap justify-between items-center bg-slate-900 text-white p-5 rounded-2xl shadow-sm gap-3">
         <div>
           <h2 className="text-xl font-extrabold tracking-tight flex items-center gap-2">
-            🚗 散車保固 Summary (1-2年保固)
+            🚗 散車保固 Summary
           </h2>
           <p className="text-xs text-slate-300 mt-1">
-            目前進行中的散車工單共有 <span className="font-extrabold text-amber-400 text-base">{openOrders.length}</span> 張（散車類別無政府條約可用率限制）
+            目前進行中的散車工單共有 <span className="font-extrabold text-amber-400 text-base">{openOrders.length}</span> 張
           </p>
         </div>
         <button
