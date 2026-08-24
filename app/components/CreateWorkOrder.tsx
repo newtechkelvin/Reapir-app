@@ -31,78 +31,268 @@ interface CreateWorkOrderProps {
   setWarrantyType?: (v: string) => void;
 }
 
+const REPAIR_DICT: { [key: string]: { zh: string; type: string } } = {
+  brake: { zh: '煞車系統/更換煞車皮', type: '更換零件' },
+  pad: { zh: '煞車皮/煞車片', type: '更換零件' },
+  oil: { zh: '更換機油', type: '進廠維修' },
+  filter: { zh: '更換機油/空氣濾芯', type: '更換零件' },
+  engine: { zh: '檢查/維修引擎', type: '進廠維修' },
+  tyre: { zh: '檢查/更換輪胎', type: '更換零件' },
+  tire: { zh: '檢查/更換輪胎', type: '更換零件' },
+  battery: { zh: '測試/更換汽車電池', type: '更換零件' },
+  coolant: { zh: '檢查水箱/冷卻液', type: '進廠維修' },
+  light: { zh: '更換車燈/燈泡', type: '更換零件' },
+  recall: { zh: 'Recall 召回維修項目', type: 'Recall項目' },
+  charge: { zh: '收費維修項目', type: '收費項目' },
+  leak: { zh: '檢查漏油/漏水問題', type: '進廠維修' },
+};
+
 export default function CreateWorkOrder(props: CreateWorkOrderProps) {
-  const [showAutoParseModal, setShowAutoParseModal] = useState(false);
-  const [rawParseText, setRawParseText] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState('');
 
-  const isSanChe = props.warrantyType === 'General' || props.warrantyType === '散車';
+  // 散車訊息一鍵解析 Modal State
+  const [showSmartPasteModal, setShowSmartPasteModal] = useState(false);
+  const [smartPasteText, setSmartPasteText] = useState('');
 
-  // 核心功能：自動解析訊息內文並填入表單
-  const handleAutoParse = () => {
-    if (!rawParseText.trim()) return;
+  const loadTesseract = async () => {
+    if ((window as any).Tesseract) return (window as any).Tesseract;
 
-    const text = rawParseText;
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      script.onload = () => resolve((window as any).Tesseract);
+      script.onerror = () => reject(new Error('無法載入 OCR 組件'));
+      document.head.appendChild(script);
+    });
+  };
 
-    // 1. 正則表達式匹配各欄位
-    const plateMatch = text.match(/(?:車牌號碼|車牌|Plate)\s*[:：]\s*([A-Za-z0-9-]+)/i);
-    const brandMatch = text.match(/(?:車輛品牌|品牌|Brand)\s*[:：]\s*(.+)/i);
-    const modelMatch = text.match(/(?:車輛型號|型號|Model)\s*[:：]\s*(.+)/i);
-    const vinMatch = text.match(/(?:VIN碼|VIN|車身號碼)\s*[:：]\s*([A-Za-z0-9-]+)/i);
-    const projectMatch = text.match(/(?:專案名稱|專案|客戶)\s*[:：]\s*(.+)/i);
-    const locationMatch = text.match(/(?:取車位置|車輛位置|車房位置|地點|位置)\s*[:：]\s*(.+)/i);
-    const noticeDateMatch = text.match(/(?:維修通知日期|通知日期|Claim Form 日期|日期)\s*[:：]\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/i);
-    const descMatch = text.match(/(?:狀況描述|故障描述|描述|原因)\s*[:：]\s*(.+)/i);
-
-    if (plateMatch?.[1]) props.setPlateNumber(plateMatch[1].trim());
-    if (brandMatch?.[1]) props.setBrand(brandMatch[1].trim());
-    if (modelMatch?.[1]) props.setModel(modelMatch[1].trim());
-    if (vinMatch?.[1]) props.setVin(vinMatch[1].trim());
-    if (projectMatch?.[1]) props.setProject(projectMatch[1].trim());
-    if (locationMatch?.[1]) props.setLocation(locationMatch[1].trim());
-    if (descMatch?.[1]) props.setDescription(descMatch[1].trim());
-
-    if (noticeDateMatch?.[1]) {
-      const formattedDate = noticeDateMatch[1].replace(/\//g, '-');
-      props.setClaimFormDate(formattedDate);
+  const translateToZh = async (text: string) => {
+    try {
+      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|zh-TW`);
+      if (res.ok) {
+        const data = await res.json();
+        const translated = data?.responseData?.translatedText;
+        if (translated && !translated.includes('MYMEMORY')) {
+          return translated;
+        }
+      }
+    } catch (e) {
+      console.warn('線上翻譯失敗:', e);
     }
+    return null;
+  };
 
-    // 2. 擷取維修項目列表 (匹配「維修項目：」底下的列表)
-    const itemsSection = text.split(/(?:維修項目|維修內容)\s*[:：]/i)[1];
-    if (itemsSection) {
-      const itemLines = itemsSection
+  const processImageFile = useCallback(async (file: File) => {
+    if (!file || !file.type.startsWith('image/')) return;
+
+    setIsScanning(true);
+    setOcrProgress('正在初始化照片 OCR 辨識引擎...');
+
+    try {
+      const Tesseract = await loadTesseract();
+      setOcrProgress('正在讀取相片文字 (OCR Scanning)...');
+
+      const result = await Tesseract.recognize(file, 'eng', {
+        logger: (m: any) => {
+          if (m.status === 'recognizing text') {
+            setOcrProgress(`照片辨識進度: ${Math.round((m.progress || 0) * 100)}%`);
+          }
+        },
+      });
+
+      const rawText = result?.data?.text || '';
+      setOcrProgress('辨識完成，正在翻譯與拆解項目...');
+
+      const lines = rawText
         .split('\n')
-        .map((l) => l.replace(/^[-*•\d.\s]+/, '').trim())
-        .filter((l) => l.length > 0);
+        .map((l: string) => l.trim())
+        .filter((l: string) => l.length > 3 && !/^\d+$/.test(l));
 
-      if (itemLines.length > 0 && props.setItems) {
-        props.setItems(itemLines.map((itemName) => ({ type: '進廠維修', item_name: itemName })));
+      if (lines.length === 0) {
+        alert('無法從照片中辨識出清晰文字，請確保相片字跡清晰再試一次！');
+        return;
+      }
+
+      const parsedItems: any[] = [];
+
+      for (const line of lines.slice(0, 10)) {
+        let matchedType = '進廠維修';
+        let chineseName = '';
+
+        const lowerLine = line.toLowerCase();
+        Object.keys(REPAIR_DICT).forEach((kw) => {
+          if (lowerLine.includes(kw)) {
+            matchedType = REPAIR_DICT[kw].type;
+            if (!chineseName) chineseName = REPAIR_DICT[kw].zh;
+          }
+        });
+
+        const onlineZh = await translateToZh(line);
+
+        let finalName = '';
+        if (chineseName && onlineZh) {
+          finalName = `${onlineZh} (${chineseName})`;
+        } else if (onlineZh) {
+          finalName = `${onlineZh} (${line})`;
+        } else if (chineseName) {
+          finalName = `${chineseName} (${line})`;
+        } else {
+          finalName = line;
+        }
+
+        parsedItems.push({
+          type: matchedType,
+          item_name: finalName,
+        });
+      }
+
+      if (parsedItems.length > 0) {
+        if (confirm(`成功辨識並翻譯了 ${parsedItems.length} 個項目，是否自動填入表格中？`)) {
+          let newAllItems: any[] = [];
+          if (props.items.length === 1 && !props.items[0].item_name) {
+            newAllItems = [...parsedItems];
+          } else {
+            newAllItems = [...props.items, ...parsedItems];
+          }
+
+          if (props.setItems) {
+            props.setItems(newAllItems);
+          } else {
+            newAllItems.forEach((item, idx) => {
+              props.handleItemChange(idx, 'type', item.type);
+              props.handleItemChange(idx, 'item_name', item.item_name);
+            });
+          }
+
+          alert('相片維修項目已全數同步匯入表單！');
+        }
+      }
+    } catch (err: any) {
+      console.error('OCR 辨識失敗:', err);
+      alert(`照片讀取失敗: ${err.message || '請確認圖片清晰度'}`);
+    } finally {
+      setIsScanning(false);
+      setOcrProgress('');
+    }
+  }, [props]);
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const clipboardItems = e.clipboardData?.items;
+      if (!clipboardItems) return;
+
+      for (let i = 0; i < clipboardItems.length; i++) {
+        const item = clipboardItems[i];
+        if (item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          if (blob) {
+            e.preventDefault();
+            processImageFile(blob);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [processImageFile]);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+      e.target.value = '';
+    }
+  };
+
+  // 核心：智慧解析散車文字訊息
+  const handleParseSmartPaste = () => {
+    if (!smartPasteText.trim()) return;
+
+    const lines = smartPasteText.split(/\r\n|\n/);
+    let isParsingItems = false;
+    const extractedItems: any[] = [];
+
+    lines.forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      // 日期解析輔助函式
+      const parseDateStr = (str: string) => {
+        const match = str.match(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/);
+        if (match) {
+          const parts = match[0].split(/[-/.]/);
+          return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        }
+        return '';
+      };
+
+      // 關鍵字比對
+      if (/^車牌[：:]/i.test(trimmed)) {
+        props.setPlateNumber(trimmed.replace(/^車牌[：:]/i, '').trim());
+      } else if (/^品牌[：:]/i.test(trimmed)) {
+        props.setBrand(trimmed.replace(/^品牌[：:]/i, '').trim());
+      } else if (/^型號[：:]/i.test(trimmed)) {
+        props.setModel(trimmed.replace(/^型號[：:]/i, '').trim());
+      } else if (/^VIN[：:]/i.test(trimmed) || /^車身號碼[：:]/i.test(trimmed)) {
+        props.setVin(trimmed.replace(/^(VIN|車身號碼)[：:]/i, '').trim());
+      } else if (/^專案[：:]/i.test(trimmed) || /^專案名稱[：:]/i.test(trimmed)) {
+        props.setProject(trimmed.replace(/^(專案|專案名稱)[：:]/i, '').trim());
+      } else if (/^取車位置[：:]/i.test(trimmed) || /^位置[：:]/i.test(trimmed)) {
+        props.setLocation(trimmed.replace(/^(取車位置|位置)[：:]/i, '').trim());
+      } else if (/^通知日期[：:]/i.test(trimmed) || /^維修通知日期[：:]/i.test(trimmed)) {
+        const d = parseDateStr(trimmed);
+        if (d) props.setClaimFormDate(d);
+      } else if (/^狀況描述[：:]/i.test(trimmed) || /^描述[：:]/i.test(trimmed) || /^故障描述[：:]/i.test(trimmed)) {
+        props.setDescription(trimmed.replace(/^(狀況描述|描述|故障描述)[：:]/i, '').trim());
+      } else if (/^維修項目[：:]/i.test(trimmed) || /^維修明細[：:]/i.test(trimmed)) {
+        isParsingItems = true;
+      } else if (isParsingItems || /^[-*•\d.]/.test(trimmed)) {
+        const itemName = trimmed.replace(/^[-*•\d.]\s*/, '').trim();
+        if (itemName) {
+          extractedItems.push({ type: '進廠維修', item_name: itemName });
+        }
+      }
+    });
+
+    if (extractedItems.length > 0) {
+      if (props.setItems) {
+        props.setItems(extractedItems);
       }
     }
 
-    alert('訊息內容已成功拆解並填入表單欄位！');
-    setShowAutoParseModal(false);
-    setRawParseText('');
+    setSmartPasteText('');
+    setShowSmartPasteModal(false);
+    alert('散車通訊訊息已成功解析並自動填入表單！');
   };
+
+  const isSanChe = props.warrantyType === 'General' || props.warrantyType === '散車';
 
   return (
     <form onSubmit={props.handleCreateOrder} className="space-y-6 text-black">
-      <div className="border-b pb-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+      <div className="border-b pb-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
           <h2 className="text-xl font-bold text-gray-800">開立維修工單</h2>
           <p className="text-xs text-gray-500 mt-0.5">選擇「散車保固」的工單將會歸類至獨立的散車 Summary 頁面</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* 一鍵貼上訊息自動填表按鈕 */}
-          <button
-            type="button"
-            onClick={() => setShowAutoParseModal(true)}
-            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
-          >
-            📋 一鍵貼上訊息填表
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 散車專屬：一鍵貼上通訊軟體訊息按鈕 */}
+          {isSanChe && (
+            <button
+              type="button"
+              onClick={() => setShowSmartPasteModal(true)}
+              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
+            >
+              📋 一鍵貼上報修訊息文字 (自動填單)
+            </button>
+          )}
 
-          {/* 保固類別切換器 */}
+          {/* 保固與車輛類別選擇器 */}
           {props.setWarrantyType && (
             <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-300">
               <span className="text-xs font-bold text-slate-700 pl-2">保固類別:</span>
@@ -133,7 +323,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         </div>
       </div>
 
-      {/* 輸入欄位維持原樣 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-bold text-gray-700 mb-1">車牌號碼 *</label>
@@ -188,6 +377,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           />
         </div>
 
+        {/* 動態日期標籤 */}
         <div>
           <label className="block text-xs font-bold text-gray-700 mb-1">
             {isSanChe ? '維修通知日期' : 'Claim Form 日期 (工單停修起算)'}
@@ -200,6 +390,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           />
         </div>
 
+        {/* 動態車房/車輛位置輸入欄 */}
         <div>
           <label className="block text-xs font-bold text-gray-700 mb-1">
             {isSanChe ? '取車位置' : '車房位置'}
@@ -241,17 +432,36 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         />
       </div>
 
-      {/* 維修項目列表區塊維持原樣 */}
+      {/* 維修項目區塊 */}
       <div className="space-y-3 border-t pt-4">
         <div className="flex flex-wrap justify-between items-center gap-2">
           <h3 className="text-sm font-bold text-gray-800">維修與零件項目</h3>
-          <button
-            type="button"
-            onClick={() => props.setShowPasteModal(true)}
-            className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 cursor-pointer"
-          >
-            快速貼上 Excel 項目
-          </button>
+          
+          <div className="flex gap-2">
+            <label className="text-xs bg-blue-50 text-blue-800 border border-blue-300 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100 cursor-pointer flex items-center gap-1 shadow-2xs">
+              {isScanning ? `⏳ ${ocrProgress}` : '📷 拍照 / Ctrl+V 貼上維修單照片 (自動翻譯中文字)'}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageUpload}
+                disabled={isScanning}
+                className="hidden"
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={() => props.setShowPasteModal(true)}
+              className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 cursor-pointer"
+            >
+              快速貼上 Excel 項目
+            </button>
+          </div>
+        </div>
+
+        <div className="text-[11px] text-slate-500 bg-slate-100 p-2 rounded-lg border border-dashed border-slate-300 flex items-center justify-between">
+          <span>💡 提示：您可以截圖紙本維修單後，直接在頁面上按下 <kbd className="px-1.5 py-0.5 bg-white border rounded shadow-2xs font-mono font-bold text-slate-700">Ctrl + V</kbd>，系統將會同步新增欄位並填入中文內容！</span>
         </div>
 
         {props.items.map((item, idx) => (
@@ -308,47 +518,47 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         </button>
       </div>
 
-      {/* 自動拆解貼上視窗 Modal */}
-      {showAutoParseModal && (
+      {/* 散車智慧貼上 Modal 彈窗 */}
+      {showSmartPasteModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl text-black">
             <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="text-lg font-bold text-slate-800">📋 一鍵貼上通訊軟體訊息自動填表</h3>
+              <h3 className="text-lg font-bold text-slate-900">📋 一鍵貼上散車報修訊息 (自動解析填單)</h3>
               <button
                 type="button"
-                onClick={() => setShowAutoParseModal(false)}
+                onClick={() => setShowSmartPasteModal(false)}
                 className="text-gray-400 hover:text-gray-700 text-2xl font-bold px-2 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-gray-600">
-              請直接將同事發來的 WhatsApp / Email 通知整段貼在下方，系統會自動拆解車牌、品牌、型號、取車位置及維修項目：
+            <p className="text-xs text-gray-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+              💡 請直接貼上通訊軟體上的報修文字，系統將自動提取車牌、品牌、型號、專案、位置、通知日期與維修項目！
             </p>
 
             <textarea
               rows={8}
-              value={rawParseText}
-              onChange={(e) => setRawParseText(e.target.value)}
-              placeholder={`【散車維修通知】\n車牌號碼：AM1234\n車輛品牌：Toyota\n車輛型號：Coaster\n取車位置：九龍灣院舍 A座大門\n維修通知日期：2026-08-24\n狀況描述：冷氣不冷\n維修項目：\n- 檢查冷媒\n- 更換冷氣濾芯`}
-              className="w-full p-2.5 border rounded-xl text-xs font-mono bg-slate-50 text-black focus:bg-white"
+              value={smartPasteText}
+              onChange={(e) => setSmartPasteText(e.target.value)}
+              placeholder={`【散車報修通知】\n車牌：AM1234\n品牌：Toyota\n型號：Coaster\nVIN：VIN987654321\n專案：聖公會老人院\n取車位置：沙田亞公角街15號\n通知日期：2026-08-25\n狀況描述：冷氣不冷，且煞車有異音\n維修項目：\n- 檢查冷媒 leak\n- 更換前煞車皮`}
+              className="w-full p-3 border rounded-xl text-xs font-mono bg-slate-50 text-black border-slate-300 focus:ring-2 focus:ring-blue-500"
             />
 
             <div className="flex justify-end gap-2 pt-2 border-t">
               <button
                 type="button"
-                onClick={() => setShowAutoParseModal(false)}
+                onClick={() => setShowSmartPasteModal(false)}
                 className="px-4 py-2 border rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
               >
                 取消
               </button>
               <button
                 type="button"
-                onClick={handleAutoParse}
-                className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+                onClick={handleParseSmartPaste}
+                className="px-5 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 cursor-pointer shadow-md"
               >
-                ⚡ 開始拆解並自動帶入表單
+                🚀 解析並自動填入表單
               </button>
             </div>
           </div>
