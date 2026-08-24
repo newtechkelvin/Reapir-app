@@ -169,6 +169,12 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     }
   };
 
+  const isSanCheOrder = (wo: any, vehicle: any) => {
+    const wType = (wo?.warranty_type || vehicle?.warranty_type || '').toString().toLowerCase();
+    const project = (vehicle?.project || wo?.project || '').toString().toLowerCase();
+    return wType === 'general' || wType === '散車' || project.includes('散車');
+  };
+
   return (
     <div className="space-y-6">
       {/* 搜尋列與按鈕 */}
@@ -234,10 +240,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   </div>
                   <div className="text-xs text-slate-300 flex flex-wrap gap-4">
                     <span>VIN: <strong>{vehicle.vin || '無'}</strong></span>
-                    <span>車房位置: <strong className="text-amber-300">{vehicle.garage_location || vehicle.location || '未設定'}</strong></span>
-                    <span>車輛位置: <strong className="text-sky-300">{vehicle.vehicle_location || '未設定'}</strong></span>
-                    <span>取車/回廠日期: <strong className="text-purple-300">{vehicle.pickup_return_date || '未設定'}</strong></span>
-                    <span>Claim Form 日期: <strong className="text-emerald-300">{vehicle.claim_form_date || woClaimDate(orders) || '未設定'}</strong></span>
+                    <span>品牌: <strong>{vehicle.brand || '未設定'}</strong></span>
+                    <span>型號: <strong>{vehicle.model || '未設定'}</strong></span>
                   </div>
                 </div>
 
@@ -250,9 +254,10 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                     <div className="grid grid-cols-1 gap-3">
                       {orders.map((wo: any, oIdx: number) => {
                         const isCompleted = (wo.status || '').toLowerCase() === 'completed';
-                        const items = wo.work_order_items || wo.items || [];
+                        const isSanChe = isSanCheOrder(wo, vehicle);
+
                         const claimDateStr = wo.claim_form_date || vehicle.claim_form_date || '未設定';
-                        const garageLocStr = wo.garage_location || wo.location || vehicle.garage_location || vehicle.location || '未設定';
+                        const locationStr = wo.garage_location || wo.location || vehicle.garage_location || vehicle.location || '未設定';
                         const vehicleLocStr = wo.vehicle_location || vehicle.vehicle_location || '未設定';
                         const pickupReturnStr = wo.pickup_return_date || vehicle.pickup_return_date || '未設定';
 
@@ -268,13 +273,18 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                                 <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isCompleted ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}`}>
                                   {isCompleted ? 'Completed' : 'Open'}
                                 </span>
+                                {isSanChe && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                    🚗 散車工單
+                                  </span>
+                                )}
                               </div>
                               <p className="text-xs text-gray-600 line-clamp-1">{wo.description || '無描述'}</p>
                               <div className="text-[11px] text-gray-500 flex flex-wrap gap-4 pt-1">
-                                <span>車房位置: <strong className="text-gray-800">{garageLocStr}</strong></span>
+                                <span>{isSanChe ? '取車位置:' : '車房位置:'} <strong className="text-gray-800">{locationStr}</strong></span>
                                 <span>車輛位置: <strong className="text-gray-800">{vehicleLocStr}</strong></span>
                                 <span>取車/回廠日期: <strong className="text-gray-800">{pickupReturnStr}</strong></span>
-                                <span>Claim Form 日期: <strong className="text-gray-800">{claimDateStr}</strong></span>
+                                <span>{isSanChe ? '維修通知日期:' : 'Claim Form 日期:'} <strong className="text-gray-800">{claimDateStr}</strong></span>
                               </div>
                             </div>
                             <span className="text-xs font-bold text-blue-600 group-hover:underline self-end md:self-center">
@@ -311,6 +321,11 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                 <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${selectedOrder.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                   狀態: {selectedOrder.status || 'Open'}
                 </span>
+                {isSanCheOrder(selectedOrder, selectedVehicle) && (
+                  <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                    🚗 散車工單
+                  </span>
+                )}
                 {isAutoSaving ? (
                   <span className="text-xs text-blue-600 font-bold animate-pulse">💾 正在保存更新...</span>
                 ) : (
@@ -344,29 +359,48 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                 <div><span className="text-gray-600 block">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
                 <div><span className="text-gray-600 block">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
 
-                {/* 支援下拉選單：車房位置 */}
-                <div>
-                  <label className="text-gray-600 block font-semibold print:hidden">車房位置：</label>
-                  <select
-                    value={garageLocationInput}
-                    onChange={(e) => {
-                      setGarageLocationInput(e.target.value);
-                      triggerAutoSave({ garage_location: e.target.value });
-                    }}
-                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="">-- 請選擇車房位置 --</option>
-                    <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
-                    <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
-                    <option value="機電 - 屯門">機電 - 屯門</option>
-                    <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
-                    <option value="機電 - 柴灣">機電 - 柴灣</option>
-                    <option value="車行">車行</option>
-                  </select>
-                  <div className="hidden print:block"><span className="text-gray-600">車房位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
-                </div>
+                {/* 動態位置標籤與輸入類型 */}
+                {isSanCheOrder(selectedOrder, selectedVehicle) ? (
+                  /* 散車：取車位置 (手動文字輸入) */
+                  <div>
+                    <label className="text-gray-600 block font-semibold print:hidden">取車位置：</label>
+                    <input
+                      type="text"
+                      value={garageLocationInput}
+                      onChange={(e) => {
+                        setGarageLocationInput(e.target.value);
+                        triggerAutoSave({ garage_location: e.target.value });
+                      }}
+                      placeholder="院舍 / 客人自行送廠"
+                      className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                    />
+                    <div className="hidden print:block"><span className="text-gray-600">取車位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
+                  </div>
+                ) : (
+                  /* 政府車輛：車房位置 (下拉選單) */
+                  <div>
+                    <label className="text-gray-600 block font-semibold print:hidden">車房位置：</label>
+                    <select
+                      value={garageLocationInput}
+                      onChange={(e) => {
+                        setGarageLocationInput(e.target.value);
+                        triggerAutoSave({ garage_location: e.target.value });
+                      }}
+                      className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">-- 請選擇車房位置 --</option>
+                      <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
+                      <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
+                      <option value="機電 - 屯門">機電 - 屯門</option>
+                      <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
+                      <option value="機電 - 柴灣">機電 - 柴灣</option>
+                      <option value="車行">車行</option>
+                    </select>
+                    <div className="hidden print:block"><span className="text-gray-600">車房位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
+                  </div>
+                )}
 
-                {/* 支援可編修：車輛位置 */}
+                {/* 車輛位置 */}
                 <div>
                   <label className="text-gray-600 block font-semibold print:hidden">車輛位置：</label>
                   <input
@@ -382,7 +416,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   <div className="hidden print:block"><span className="text-gray-600">車輛位置：</span><strong className="text-slate-900">{vehicleLocationInput || '未設定'}</strong></div>
                 </div>
 
-                {/* 支援可編修：取車/回廠日期 */}
+                {/* 取車/回廠日期 */}
                 <div>
                   <label className="text-gray-600 block font-semibold print:hidden">取車/回廠日期：</label>
                   <input
@@ -397,9 +431,11 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   <div className="hidden print:block"><span className="text-gray-600">取車/回廠日期：</span><strong className="text-slate-900">{pickupReturnDateInput || '未設定'}</strong></div>
                 </div>
 
-                {/* 支援可編修：Claim Form 日期 */}
+                {/* 動態 Claim Form 日期 / 維修通知日期 */}
                 <div>
-                  <label className="text-gray-600 block font-semibold print:hidden">Claim Form 日期：</label>
+                  <label className="text-gray-600 block font-semibold print:hidden">
+                    {isSanCheOrder(selectedOrder, selectedVehicle) ? '維修通知日期：' : 'Claim Form 日期：'}
+                  </label>
                   <input
                     type="date"
                     value={claimFormDateInput}
@@ -409,7 +445,10 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                     }}
                     className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
                   />
-                  <div className="hidden print:block"><span className="text-gray-600">Claim Form 日期：</span><strong className="text-slate-900">{claimFormDateInput || '未設定'}</strong></div>
+                  <div className="hidden print:block">
+                    <span className="text-gray-600">{isSanCheOrder(selectedOrder, selectedVehicle) ? '維修通知日期：' : 'Claim Form 日期：'}</span>
+                    <strong className="text-slate-900">{claimFormDateInput || '未設定'}</strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -573,12 +612,4 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
       `}</style>
     </div>
   );
-}
-
-function woClaimDate(orders: any[]) {
-  if (!orders || orders.length === 0) return null;
-  for (const o of orders) {
-    if (o.claim_form_date) return o.claim_form_date;
-  }
-  return null;
 }
