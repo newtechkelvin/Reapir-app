@@ -27,6 +27,8 @@ interface CreateWorkOrderProps {
   addItem: () => void;
   setShowPasteModal: (v: boolean) => void;
   isSubmitting: boolean;
+  warrantyType?: string;
+  setWarrantyType?: (v: string) => void;
 }
 
 const REPAIR_DICT: { [key: string]: { zh: string; type: string } } = {
@@ -203,11 +205,44 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     }
   };
 
+  const isSanChe = props.warrantyType === 'General' || props.warrantyType === '散車';
+
   return (
     <form onSubmit={props.handleCreateOrder} className="space-y-6 text-black">
-      <div className="border-b pb-2">
-        <h2 className="text-xl font-bold text-gray-800">開立維修工單</h2>
-        <p className="text-xs text-gray-500 mt-1">請填寫工單與 Claim Form 日期，系統將自動以此日子計算車輛停修可用率 (Availability)</p>
+      <div className="border-b pb-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">開立維修工單</h2>
+          <p className="text-xs text-gray-500 mt-0.5">選擇「散車保固」的工單將會歸類至獨立的散車 Summary 頁面</p>
+        </div>
+
+        {/* 1. 選擇保固與車輛類別 (核心分流選擇器) */}
+        {props.setWarrantyType && (
+          <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-300">
+            <span className="text-xs font-bold text-slate-700 pl-2">保固類別:</span>
+            <button
+              type="button"
+              onClick={() => props.setWarrantyType && props.setWarrantyType('Government')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                props.warrantyType === 'Government'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              🏛️ 政府合約專案
+            </button>
+            <button
+              type="button"
+              onClick={() => props.setWarrantyType && props.setWarrantyType('General')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                isSanChe
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              🚗 散車保固
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -233,18 +268,21 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">專案名稱</label>
+          <label className="block text-xs font-bold text-gray-700 mb-1">專案名稱 / 備註</label>
           <input
             type="text"
             value={props.project}
             onChange={(e) => props.setProject(e.target.value)}
-            placeholder="例如：專案 A"
+            placeholder={isSanChe ? '散車客戶 / 項目' : '例如：專案 A'}
             className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
+        {/* 若為散車，提示 Claim Form 日期為選填 */}
         <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">Claim Form 日期 (工單停修起算)</label>
+          <label className="block text-xs font-bold text-gray-700 mb-1">
+            Claim Form 日期 {isSanChe ? '(散車可選填)' : '(合約停修起算)'}
+          </label>
           <input
             type="date"
             value={props.claimFormDate}
@@ -253,7 +291,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           />
         </div>
 
-        {/* 車房位置改為選單 */}
         <div>
           <label className="block text-xs font-bold text-gray-700 mb-1">車房位置</label>
           <select
@@ -361,9 +398,11 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         <button
           type="submit"
           disabled={props.isSubmitting}
-          className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+          className={`px-6 py-3 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 cursor-pointer transition-all ${
+            isSanChe ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
+          }`}
         >
-          {props.isSubmitting ? '建立中...' : '建立工單'}
+          {props.isSubmitting ? '建立中...' : isSanChe ? '建立散車工單' : '建立政府合約工單'}
         </button>
       </div>
     </form>

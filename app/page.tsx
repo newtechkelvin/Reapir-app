@@ -18,6 +18,7 @@ export default function Home() {
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
+  // 開單 State
   const [plateNumber, setPlateNumber] = useState('');
   const [vin, setVin] = useState('');
   const [project, setProject] = useState('');
@@ -26,6 +27,7 @@ export default function Home() {
   const [location, setLocation] = useState('');
   const [claimFormDate, setClaimFormDate] = useState('');
   const [description, setDescription] = useState('');
+  const [warrantyType, setWarrantyType] = useState<string>('Government'); // 預設 Government
   const [items, setItems] = useState<any[]>([{ type: '進廠維修', item_name: '' }]);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
@@ -107,13 +109,14 @@ export default function Home() {
         body: JSON.stringify({
           plate_number: plateNumber,
           vin,
-          project,
+          project: project || (warrantyType === 'General' ? '散車保固' : ''),
           brand,
           model,
           location,
           claim_form_date: claimFormDate,
           description,
           items: validItems,
+          warranty_type: warrantyType
         }),
       });
 
@@ -132,7 +135,11 @@ export default function Home() {
         setItems([{ type: '進廠維修', item_name: '' }]);
 
         await fetchAllVehicles();
-        setActiveTab('summary');
+        if (warrantyType === 'General') {
+          setActiveTab('general_summary');
+        } else {
+          setActiveTab('summary');
+        }
       } else {
         alert(`建立失敗: ${data?.error || data?.message || '請檢查資料輸入'}`);
       }
@@ -175,11 +182,10 @@ export default function Home() {
     setShowPasteModal(false);
   };
 
-  // 下載 CSV 匯入標準範本
   const downloadCsvTemplate = () => {
-    const csvHeader = 'plate_number,vin,project,brand,model,claim_form_date,completed_date,garage_location,description,items\n';
-    const csvSample1 = 'AM1234,VIN123456,政府合約,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,引擎異音與煞車檢修,更換機油;更換前煞車皮\n';
-    const csvSample2 = 'AM5678,VIN789012,散車項目,Isuzu,N-Series,2025-02-01,2025-02-03,機電 - 屯門,冷氣不冷,檢查冷媒 leak;更換冷氣濾芯\n';
+    const csvHeader = 'plate_number,vin,project,brand,model,claim_form_date,completed_date,garage_location,description,items,warranty_type\n';
+    const csvSample1 = 'AM1234,VIN123456,政府合約,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,引擎異音與煞車檢修,更換機油;更換前煞車皮,Government\n';
+    const csvSample2 = 'AM5678,VIN789012,散車項目,Isuzu,N-Series,2025-02-01,2025-02-03,機電 - 屯門,冷氣不冷,檢查冷媒 leak;更換冷氣濾芯,General\n';
     
     const blob = new Blob(['\uFEFF' + csvHeader + csvSample1 + csvSample2], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -191,7 +197,6 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
-  // 處理讀取上傳的 CSV 檔案
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -206,7 +211,6 @@ export default function Home() {
     reader.readAsText(file);
   };
 
-  // 執行批次匯入
   const handleExecuteBatchImport = async () => {
     if (!batchCsvText.trim()) {
       alert('請先貼上 CSV 內容或選取 CSV 檔案');
@@ -372,6 +376,8 @@ export default function Home() {
               addItem={addItem}
               setShowPasteModal={setShowPasteModal}
               isSubmitting={isSubmitting}
+              warrantyType={warrantyType}
+              setWarrantyType={setWarrantyType}
             />
           </div>
         )}
@@ -419,7 +425,7 @@ export default function Home() {
               <p className="font-bold text-slate-800">說明與操作步驟：</p>
               <ol className="list-decimal list-inside space-y-1">
                 <li>下載匯入 CSV 範本，用 Excel 開啟並填入舊有的保固紀錄。</li>
-                <li>欄位說明：<code className="bg-white px-1 border rounded">plate_number</code> (車牌號碼，必填)、<code className="bg-white px-1 border rounded">claim_form_date</code> (格式 YYYY-MM-DD)、<code className="bg-white px-1 border rounded">items</code> (多個項目可直接換行或用分號 ; 分隔)。</li>
+                <li>欄位說明：<code className="bg-white px-1 border rounded">plate_number</code> (車牌號碼，必填)、<code className="bg-white px-1 border rounded">warranty_type</code> (<code className="text-blue-700 font-bold">Government</code> 或 <code className="text-amber-700 font-bold">General</code>)。</li>
                 <li>選擇 CSV 檔案，或直接複製內容貼至下方文字框點擊「開始匯入」。</li>
               </ol>
               <button
@@ -447,7 +453,7 @@ export default function Home() {
                 rows={8}
                 value={batchCsvText}
                 onChange={(e) => setBatchCsvText(e.target.value)}
-                placeholder="plate_number,vin,project,brand,model,claim_form_date,completed_date,garage_location,description,items&#nAM1234,VIN1234,政府合約,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,煞車檢修,更換煞車皮;更換煞車油"
+                placeholder="plate_number,vin,project,brand,model,claim_form_date,completed_date,garage_location,description,items,warranty_type&#nAM1234,VIN1234,政府合約,Toyota,Coaster,2025-01-10,2025-01-12,機電 - 九龍灣1/F,煞車檢修,更換煞車皮;更換煞車油,Government"
                 className="w-full p-2.5 border rounded-xl text-xs font-mono bg-white text-black"
               />
             </div>
