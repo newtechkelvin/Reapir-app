@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+// GET: 讀取所有車輛與其關聯之工單 (確保關聯包含 work_orders)
 export async function GET(request: NextRequest) {
   try {
     if (!supabaseUrl || !supabaseKey) {
@@ -14,13 +15,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('q')?.trim() || '';
 
+    // 1. 先抓取車輛主表與其所有關聯工單 (明確關聯 work_orders)
     let vehicleQuery = supabase
       .from('vehicles')
       .select('*, work_orders(*, work_order_items(*))')
       .order('created_at', { ascending: false });
 
     if (query) {
-      vehicleQuery = vehicleQuery.or(`plate_number.ilike.%${query}%,vin.ilike.%${query}%,project.ilike.%${query}%,brand.ilike.%${query}%,model.ilike.%${query}%`);
+      vehicleQuery = vehicleQuery.or(`plate_number.ilike.%${query}%,vin.ilike.%${query}%,project.ilike.%${query}%,brand.ilike.%${query}%`);
     }
 
     const { data: vehiclesData, error: vErr } = await vehicleQuery;
@@ -30,6 +32,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: vErr.message }, { status: 500 });
     }
 
+    // 2. 為了相容 front-end，統一將 work_orders 賦值至 workOrders 屬性
     const formattedVehicles = (vehiclesData || []).map((v: any) => ({
       ...v,
       workOrders: v.work_orders || [],
@@ -42,6 +45,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// POST: 開立新工單
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -65,7 +69,7 @@ export async function POST(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const targetWarrantyType = warranty_type || (project?.includes('散車') ? 'General' : 'Government');
 
-    // 1. 檢查並更新/新增車輛主表（包含 brand 與 model）
+    // 1. 檢查並更新/建立車輛主表
     let { data: vehicle } = await supabase
       .from('vehicles')
       .select('*')
@@ -73,85 +77,48 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (!vehicle) {
-      const insertPayload: any = {
-        plate_number: plate_number.trim(),
-        vin: vin || '',
-        project: project || (targetWarrantyType === 'General' ? '散車保固' : ''),
-        brand: brand || '',
-        model: model || '',
-        vehicle_location: location || '',
-        claim_form_date: claim_form_date || null,
-        warranty_type: targetWarrantyType
-      };
-
-      let { data: newV, error: vErr } = await supabase
+      const { data: newV, error: vErr } = await supabase
         .from('vehicles')
-        .insert([insertPayload])
+        .insert([{
+          plate_number: plate_number.trim(),
+          vin: vin || '',
+          project: project || (targetWarrantyType === 'General' ? '散車保固' : ''),
+          brand: brand || '',
+          model: model || '',
+          garage_location: location || '機電 - 九龍灣1/F',
+          claim_form_date: claim_form_date || null,
+          warranty_type: targetWarrantyType
+        }])
         .select()
         .single();
-
-      // 若資料庫缺乏特定選填欄位，進行降級防禦重試
-      if (vErr && vErr.message?.includes('warranty_type')) {
-        delete insertPayload.warranty_type;
-        const retryRes = await supabase
-          .from('vehicles')
-          .insert([insertPayload])
-          .select()
-          .single();
-        newV = retryRes.data;
-        vErr = retryRes.error;
-      }
 
       if (vErr) {
         return NextResponse.json({ error: `建立車輛資料失敗: ${vErr.message}` }, { status: 500 });
       }
       vehicle = newV;
     } else {
-      // 若車輛已存在，更新品牌、型號與位置等資訊
-      const updatePayload: any = {};
-      if (brand) updatePayload.brand = brand;
-      if (model) updatePayload.model = model;
-      if (vin) updatePayload.vin = vin;
-      if (location) updatePayload.vehicle_location = location;
-      updatePayload.warranty_type = targetWarrantyType;
-
       await supabase
         .from('vehicles')
-        .update(updatePayload)
-        .eq('id', vehicle.id)
-        .then(() => {})
-        .catch(() => {});
+        .update({ warranty_type: targetWarrantyType })
+        .eq('id', vehicle.id);
     }
 
-    // 2. 建立新工單
+    // 2. 建立新工單 (狀態預設為 Open)
     const orderNumber = `WO-${Date.now().toString().slice(-6)}`;
-    const orderPayload: any = {
-      vehicle_id: vehicle.id,
-      plate_number: vehicle.plate_number,
-      order_number: orderNumber,
-      description: description || '',
-      vehicle_location: location || vehicle.vehicle_location || '',
-      claim_form_date: claim_form_date || null,
-      status: 'Open',
-      warranty_type: targetWarrantyType
-    };
-
-    let { data: order, error: oErr } = await supabase
+    const { data: order, error: oErr } = await supabase
       .from('work_orders')
-      .insert([orderPayload])
+      .insert([{
+        vehicle_id: vehicle.id,
+        plate_number: vehicle.plate_number,
+        order_number: orderNumber,
+        description: description || '',
+        garage_location: location || vehicle.garage_location || '機電 - 九龍灣1/F',
+        claim_form_date: claim_form_date || null,
+        status: 'Open',
+        warranty_type: targetWarrantyType
+      }])
       .select()
       .single();
-
-    if (oErr && oErr.message?.includes('warranty_type')) {
-      delete orderPayload.warranty_type;
-      const retryOrderRes = await supabase
-        .from('work_orders')
-        .insert([orderPayload])
-        .select()
-        .single();
-      order = retryOrderRes.data;
-      oErr = retryOrderRes.error;
-    }
 
     if (oErr) {
       return NextResponse.json({ error: `建立工單失敗: ${oErr.message}` }, { status: 500 });
