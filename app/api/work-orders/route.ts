@@ -73,8 +73,8 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (!vehicle) {
-      // 情況 A: 若資料庫無此車牌，自動新增車輛資料（含 brand, model）
-      const insertPayload: any = {
+      // 情況 A: 若無此車牌，自動新增車輛資料（含 brand, model）
+      const insertPayload: Record<string, any> = {
         plate_number: plate_number.trim(),
         vin: vin || '',
         project: project || (targetWarrantyType === 'General' ? '散車保固' : ''),
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
         .select()
         .single();
 
-      // 相容容錯機制
+      // 防護相容：若資料庫尚未新增 warranty_type 欄位
       if (vErr && vErr.message?.includes('warranty_type')) {
         delete insertPayload.warranty_type;
         const retryRes = await supabase
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       vehicle = newV;
     } else {
       // 情況 B: 車輛已存在，更新品牌、型號與保固類別
-      const updateData: any = {
+      const updateData: Record<string, any> = {
         warranty_type: targetWarrantyType
       };
       if (brand) updateData.brand = brand;
@@ -118,17 +118,23 @@ export async function POST(request: NextRequest) {
       if (vin) updateData.vin = vin;
       if (project) updateData.project = project;
 
-      await supabase
-        .from('vehicles')
-        .update(updateData)
-        .eq('id', vehicle.id)
-        .then(() => {})
-        .catch(() => {});
+      try {
+        await supabase
+          .from('vehicles')
+          .update(updateData)
+          .eq('id', vehicle.id);
+      } catch (e) {
+        console.warn('更新車輛屬性失敗 (非致命):', e);
+      }
+    }
+
+    if (!vehicle) {
+      return NextResponse.json({ error: '無法取得或建立車輛資料' }, { status: 500 });
     }
 
     // 2. 建立新工單
     const orderNumber = `WO-${Date.now().toString().slice(-6)}`;
-    const orderPayload: any = {
+    const orderPayload: Record<string, any> = {
       vehicle_id: vehicle.id,
       plate_number: vehicle.plate_number,
       order_number: orderNumber,
@@ -163,7 +169,7 @@ export async function POST(request: NextRequest) {
 
     // 3. 寫入維修項目
     if (Array.isArray(items) && items.length > 0) {
-      const itemsToInsert = items.map((i) => ({
+      const itemsToInsert = items.map((i: any) => ({
         work_order_id: order.id,
         type: i.type || '進廠維修',
         item_name: i.item_name || '',
