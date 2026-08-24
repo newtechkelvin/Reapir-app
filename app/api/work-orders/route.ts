@@ -14,26 +14,59 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('q')?.trim() || '';
 
-    let vehicleQuery = supabase
-      .from('vehicles')
-      .select('*, work_orders(*, work_order_items(*))')
-      .order('created_at', { ascending: false });
+    let vehiclesData: any[] = [];
 
-    if (query) {
-      // 支援用車牌、VIN、專案、品牌、型號，以及工單號碼（透過關聯語法）進行模糊搜尋
-      vehicleQuery = vehicleQuery.or(
-        `plate_number.ilike.%${query}%,vin.ilike.%${query}%,project.ilike.%${query}%,brand.ilike.%${query}%,model.ilike.%${query}%,work_orders.order_number.ilike.%${query}%`
-      );
+    if (!query) {
+      // 情況 1：無關鍵字，讀取所有車輛及其關聯工單
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('*, work_orders(*, work_order_items(*))')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      vehiclesData = data || [];
+    } else {
+      // 情況 2：有關鍵字，先從 vehicles 搜尋車牌、VIN、專案、品牌、型號
+      const { data: vData, error: vErr } = await supabase
+        .from('vehicles')
+        .select('*, work_orders(*, work_order_items(*))')
+        .or(`plate_number.ilike.%${query}%,vin.ilike.%${query}%,project.ilike.%${query}%,brand.ilike.%${query}%,model.ilike.%${query}%`)
+        .order('created_at', { ascending: false });
+
+      if (vErr) console.warn('車輛關聯搜尋警告:', vErr.message);
+
+      // 情況 3：同時從 work_orders 搜尋工單編號 (order_number) 或車牌
+      const { data: woData, error: woErr } = await supabase
+        .from('work_orders')
+        .select('vehicle_id')
+        .or(`order_number.ilike.%${query}%,plate_number.ilike.%${query}%`);
+
+      if (woErr) console.warn('工單號碼搜尋警告:', woErr.message);
+
+      // 收集符合條件的 vehicle_id
+      const vehicleIdsFromWo = (woData || []).map((w: any) => w.vehicle_id).filter(Boolean);
+
+      if (vehicleIdsFromWo.length > 0) {
+        const { data: vMatched, error: vmErr } = await supabase
+          .from('vehicles')
+          .select('*, work_orders(*, work_order_items(*))')
+          .in('id', vehicleIdsFromWo);
+
+        if (!vmErr && vMatched) {
+          // 合併兩種搜尋結果並去除重複項
+          const combinedMap = new Map();
+          (vData || []).forEach((v: any) => combinedMap.set(v.id, v));
+          (vMatched || []).forEach((v: any) => combinedMap.set(v.id, v));
+          vehiclesData = Array.from(combinedMap.values());
+        } else {
+          vehiclesData = vData || [];
+        }
+      } else {
+        vehiclesData = vData || [];
+      }
     }
 
-    const { data: vehiclesData, error: vErr } = await vehicleQuery;
-
-    if (vErr) {
-      console.error('讀取車輛資料失敗:', vErr);
-      return NextResponse.json({ error: vErr.message }, { status: 500 });
-    }
-
-    const formattedVehicles = (vehiclesData || []).map((v: any) => ({
+    const formattedVehicles = vehiclesData.map((v: any) => ({
       ...v,
       workOrders: v.work_orders || [],
     }));
@@ -68,7 +101,6 @@ export async function POST(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const targetWarrantyType = warranty_type || (project?.includes('散車') ? 'General' : 'Government');
 
-    // 1. 檢查車輛主表是否存在
     let { data: vehicle } = await supabase
       .from('vehicles')
       .select('*')
@@ -132,7 +164,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '無法取得或建立車輛資料' }, { status: 500 });
     }
 
-    // 2. 建立新工單
     const orderNumber = `WO-${Date.now().toString().slice(-6)}`;
     const orderPayload: Record<string, any> = {
       vehicle_id: vehicle.id,
@@ -167,7 +198,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `建立工單失敗: ${oErr.message}` }, { status: 500 });
     }
 
-    // 3. 寫入維修項目
     if (Array.isArray(items) && items.length > 0) {
       const itemsToInsert = items.map((i: any) => ({
         work_order_id: order.id,
