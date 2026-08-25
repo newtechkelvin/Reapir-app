@@ -6,269 +6,262 @@ interface ManageVehiclesProps {
   vehicles: any[];
   isLoading: boolean;
   onRefresh: () => void;
-  onEditVehicle?: (vehicle: any) => void;
+  onEditVehicle: (vehicle: any) => void;
 }
 
-export default function ManageVehicles(props: ManageVehiclesProps) {
+export default function ManageVehicles({
+  vehicles,
+  isLoading,
+  onRefresh,
+  onEditVehicle,
+}: ManageVehiclesProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // 編輯 Modal State
-  const [editingVehicle, setEditingVehicle] = useState<any | null>(null);
-  const [editPlateNumber, setEditPlateNumber] = useState('');
-  const [editVin, setEditVin] = useState('');
-  const [editBrand, setEditBrand] = useState('');
-  const [editModel, setEditModel] = useState('');
-  const [editProject, setEditProject] = useState('');
-  const [editWarrantyType, setEditWarrantyType] = useState('Government');
-  const [isSaving, setIsSaving] = useState(false);
 
-  // 打開編輯視窗
-  const handleOpenEditModal = (vehicle: any) => {
-    setEditingVehicle(vehicle);
-    setEditPlateNumber(vehicle.plate_number || '');
-    setEditVin(vehicle.vin || '');
-    setEditBrand(vehicle.brand || '');
-    setEditModel(vehicle.model || '');
-    setEditProject(vehicle.project || '');
-    setEditWarrantyType(vehicle.warranty_type || (vehicle.project?.includes('散車') ? 'General' : 'Government'));
-  };
-
-  // 關閉編輯視窗
-  const handleCloseEditModal = () => {
-    setEditingVehicle(null);
-  };
-
-  // 儲存車輛修改
-  const handleSaveVehicle = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingVehicle?.id) return;
-
-    try {
-      setIsSaving(true);
-      const res = await fetch(`/api/vehicles/${editingVehicle.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plate_number: editPlateNumber,
-          vin: editVin,
-          brand: editBrand,
-          model: editModel,
-          project: editProject,
-          warranty_type: editWarrantyType,
-        }),
-      });
-
-      if (res.ok) {
-        alert('車輛資訊已成功更新！');
-        handleCloseEditModal();
-        props.onRefresh();
-      } else {
-        const errData = await res.json().catch(() => null);
-        alert(`更新失敗: ${errData?.error || errData?.message || '請檢查網路連線'}`);
-      }
-    } catch (err) {
-      console.error('更新車輛資訊失敗:', err);
-      alert('更新失敗，請稍後再試');
-    } finally {
-      setIsSaving(false);
+  // 1. 計算保固年度 (第 1 年 ~ 第 5 年) 與起算日/到期日
+  const getWarrantyYearInfo = (vehicle: any) => {
+    const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
+    if (!deliveryDateStr) {
+      return {
+        yearText: '第 1 年',
+        startDateText: '未設定',
+        endDateText: vehicle.warranty_end_date || '未設定',
+      };
     }
+
+    const startDate = new Date(deliveryDateStr);
+    const now = new Date();
+    
+    // 計算經過年份
+    let diffYears = now.getFullYear() - startDate.getFullYear();
+    const monthDiff = now.getMonth() - startDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < startDate.getDate())) {
+      diffYears--;
+    }
+
+    const yearNum = Math.max(1, Math.min(5, diffYears + 1));
+
+    // 計算保固到期日 (預設 4 年)
+    const endDate = new Date(startDate);
+    endDate.setFullYear(endDate.getFullYear() + 4);
+
+    return {
+      yearText: `第 ${yearNum} 年`,
+      startDateText: startDate.toISOString().split('T')[0],
+      endDateText: vehicle.warranty_end_date || endDate.toISOString().split('T')[0],
+    };
   };
 
-  // 搜尋過濾
-  const filteredVehicles = props.vehicles.filter((v) => {
+  // 2. 計算本年合約累積停修天數與工單數
+  const getVehicleStats = (vehicle: any) => {
+    const orders = vehicle.workOrders || vehicle.work_orders || [];
+    let totalOpenDays = 0;
+    let openCount = 0;
+
+    const now = new Date();
+
+    orders.forEach((wo: any) => {
+      const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+      
+      if (!isCompleted) {
+        openCount++;
+        const sStr = wo.claim_form_date || wo.created_at;
+        if (sStr) {
+          const start = new Date(sStr);
+          const diffTime = Math.max(0, now.getTime() - start.getTime());
+          const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          totalOpenDays += days;
+        }
+      } else {
+        // 結案工單算已知停修日數
+        if (wo.claim_form_date && wo.completed_date) {
+          const s = new Date(wo.claim_form_date);
+          const e = new Date(wo.completed_date);
+          const diffTime = Math.max(0, e.getTime() - s.getTime());
+          totalOpenDays += Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+      }
+    });
+
+    const isExceeded = totalOpenDays > 18.25;
+    const remainingDays = Math.max(0, parseFloat((18.25 - totalOpenDays).toFixed(1)));
+
+    return {
+      totalOpenDays,
+      isExceeded,
+      remainingDays,
+      orderCount: orders.length,
+      openCount,
+    };
+  };
+
+  const filteredVehicles = vehicles.filter((v) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     return (
       v.plate_number?.toLowerCase().includes(term) ||
       v.vin?.toLowerCase().includes(term) ||
+      v.project?.toLowerCase().includes(term) ||
       v.brand?.toLowerCase().includes(term) ||
-      v.model?.toLowerCase().includes(term) ||
-      v.project?.toLowerCase().includes(term)
+      v.model?.toLowerCase().includes(term)
     );
   });
 
   return (
     <div className="space-y-6 text-black">
-      {/* 標頭與搜尋列 */}
-      <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
-        <div className="flex-1 flex gap-2">
+      {/* 頂部搜尋與重新整理列 */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+        <div className="flex-1 w-full">
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="在車輛主表中搜尋車牌、VIN、品牌、型號或專案..."
-            className="flex-1 p-2.5 border rounded-xl text-sm bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+            placeholder="搜尋車牌、VIN、專案或品牌..."
+            className="w-full p-2.5 border rounded-xl text-sm font-semibold bg-white text-black focus:ring-2 focus:ring-blue-500 border-slate-300"
           />
         </div>
-
         <button
           type="button"
-          onClick={props.onRefresh}
-          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+          onClick={onRefresh}
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
         >
-          🔄 重新整理車輛主表
+          🔄 重新整理
         </button>
       </div>
 
-      {/* 車輛主表卡片清單 */}
-      {props.isLoading ? (
+      {/* 車輛卡片列表 */}
+      {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在載入車輛主表資料...</div>
       ) : filteredVehicles.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-dashed text-gray-500">
-          <p className="text-base font-bold">無對應的車輛主表資料</p>
+        <div className="text-center py-12 bg-white rounded-2xl border border-dashed text-gray-500">
+          <p className="text-base font-bold">沒有對應的車輛主表資料</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="space-y-5">
           {filteredVehicles.map((vehicle, idx) => {
-            const isSanChe = vehicle.warranty_type === 'General' || vehicle.project?.includes('散車');
-            const orders = vehicle.workOrders || vehicle.work_orders || [];
+            const wInfo = getWarrantyYearInfo(vehicle);
+            const stats = getVehicleStats(vehicle);
+
+            const brandModelStr = [vehicle.brand, vehicle.model].filter(Boolean).join(' ');
 
             return (
               <div
                 key={vehicle.id || idx}
-                className="bg-white border rounded-2xl p-5 shadow-xs hover:shadow-md transition-all border-slate-200 flex flex-col justify-between gap-4"
+                className="bg-white border rounded-2xl p-6 shadow-2xs border-slate-200 space-y-5 hover:shadow-sm transition-all"
               >
-                <div className="space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-xl font-black text-blue-900 block">🚘 {vehicle.plate_number}</span>
-                      <span className="text-xs text-gray-500">VIN: {vehicle.vin || '未填寫'}</span>
-                    </div>
-                    <span
-                      className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
-                        isSanChe
-                          ? 'bg-amber-50 text-amber-800 border-amber-200'
-                          : 'bg-blue-50 text-blue-800 border-blue-200'
-                      }`}
-                    >
-                      {isSanChe ? '🚗 散車保固' : '🏛️ 政府合約'}
+                {/* 1. 車牌與專案標頭 */}
+                <div className="flex flex-wrap justify-between items-center gap-3 border-b pb-4 border-slate-200">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-2xl font-black text-blue-900 flex items-center gap-2">
+                      🚘 {vehicle.plate_number}
                     </span>
+                    {vehicle.project && (
+                      <span className="bg-purple-100 text-purple-900 border border-purple-200 text-xs px-3 py-1 rounded-full font-bold">
+                        專案: {vehicle.project}
+                      </span>
+                    )}
+                    {brandModelStr && (
+                      <span className="bg-slate-100 text-slate-700 border border-slate-200 text-xs px-3 py-1 rounded-full font-semibold">
+                        {brandModelStr}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-700">
-                    <div>品牌：<strong className="text-slate-900">{vehicle.brand || '未設定'}</strong></div>
-                    <div>型號：<strong className="text-slate-900">{vehicle.model || '未設定'}</strong></div>
-                    <div className="col-span-2">專案：<strong className="text-slate-900">{vehicle.project || '未設定'}</strong></div>
-                    <div className="col-span-2">歷史工單總數：<strong className="text-blue-900 font-bold">{orders.length} 張</strong></div>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t flex gap-2">
                   <button
                     type="button"
-                    onClick={() => handleOpenEditModal(vehicle)}
-                    className="flex-1 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
+                    onClick={() => onEditVehicle(vehicle)}
+                    className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1"
                   >
                     ✏️ 編輯車輛資訊
                   </button>
                 </div>
+
+                {/* 2. 三大核心數據統計卡片 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* 卡片 A: 當前保固年度 */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-1">
+                    <span className="text-xs text-gray-500 font-bold block">當前保固年度</span>
+                    <strong className="text-2xl font-black text-blue-900 block">{wInfo.yearText}</strong>
+                    <span className="text-[11px] text-gray-400 block pt-1">起算日: {wInfo.startDateText}</span>
+                  </div>
+
+                  {/* 卡片 B: 本年合約累積停修天數 */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-1">
+                    <span className="text-xs text-gray-500 font-bold block">本年合約累積停修天數</span>
+                    <div className="flex items-baseline gap-1">
+                      <strong className={`text-2xl font-black ${stats.totalOpenDays > 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                        {stats.totalOpenDays} 天
+                      </strong>
+                      <span className="text-xs text-gray-400 font-bold">/ 18.25 天</span>
+                    </div>
+                    {stats.isExceeded ? (
+                      <span className="text-[11px] font-bold text-red-600 flex items-center gap-1 pt-1">
+                        ⚠️ 已觸發保固延長
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-gray-400 block pt-1">
+                        剩餘額度: {stats.remainingDays} 天
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 卡片 C: 本年度已開工單數目 */}
+                  <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-1">
+                    <span className="text-xs text-gray-500 font-bold block">本年度已開工單數目</span>
+                    <div className="flex items-baseline gap-1">
+                      <strong className="text-2xl font-black text-amber-600">{stats.orderCount} 張</strong>
+                      <span className="text-xs text-gray-500 font-semibold">({stats.openCount} Open)</span>
+                    </div>
+                    <span className="text-[11px] text-gray-400 block pt-1">歷史總工單: {stats.orderCount} 張</span>
+                  </div>
+                </div>
+
+                {/* 3. 車輛詳細資訊 8 欄位網格 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-y-3 gap-x-6 text-xs border-t pt-4 border-slate-100">
+                  <div>
+                    <span className="text-gray-400 block font-medium">VIN 碼</span>
+                    <strong className="text-slate-800 font-mono font-bold block mt-0.5">{vehicle.vin || '未設定'}</strong>
+                  </div>
+
+                  <div>
+                    <span className="text-gray-400 block font-medium">車房位置</span>
+                    <strong className="text-slate-800 font-bold block mt-0.5">{vehicle.garage_location || vehicle.location || '未設定'}</strong>
+                  </div>
+
+                  <div>
+                    <span className="text-gray-400 block font-medium">車輛位置</span>
+                    <strong className="text-slate-800 font-bold block mt-0.5">{vehicle.vehicle_location || '未設定'}</strong>
+                  </div>
+
+                  <div>
+                    <span className="text-gray-400 block font-medium">交車日期 (Delivery)</span>
+                    <strong className="text-slate-800 font-bold block mt-0.5">{vehicle.delivery_date || '未設定'}</strong>
+                  </div>
+
+                  <div>
+                    <span className="text-gray-400 block font-medium">保固到期日</span>
+                    <strong className="text-slate-800 font-bold block mt-0.5">{wInfo.endDateText}</strong>
+                  </div>
+
+                  <div>
+                    <span className="text-gray-400 block font-medium">取車/回廠日期</span>
+                    <strong className="text-slate-800 font-bold block mt-0.5">{vehicle.pickup_return_date || '未設定'}</strong>
+                  </div>
+
+                  <div>
+                    <span className="text-gray-400 block font-medium">Claim Form 日期</span>
+                    <strong className="text-slate-800 font-bold block mt-0.5">{vehicle.claim_form_date || '未設定'}</strong>
+                  </div>
+
+                  <div>
+                    <span className="text-gray-400 block font-medium">建立時間</span>
+                    <strong className="text-slate-800 font-bold block mt-0.5">
+                      {vehicle.created_at ? new Date(vehicle.created_at).toISOString().split('T')[0] : '未設定'}
+                    </strong>
+                  </div>
+                </div>
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* 編輯車輛資訊 Modal 彈窗 */}
-      {editingVehicle && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 text-black">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-lg font-black text-slate-900">✏️ 編輯車輛主表資訊 ({editingVehicle.plate_number})</h3>
-              <button
-                type="button"
-                onClick={handleCloseEditModal}
-                className="text-gray-400 hover:text-gray-700 text-2xl font-bold px-2 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveVehicle} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">保固 / 車輛類別 *</label>
-                <select
-                  value={editWarrantyType}
-                  onChange={(e) => setEditWarrantyType(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl bg-white font-bold text-black focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="Government">🏛️ 政府合約專案</option>
-                  <option value="General">🚗 散車保固</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">車牌號碼 *</label>
-                  <input
-                    type="text"
-                    required
-                    value={editPlateNumber}
-                    onChange={(e) => setEditPlateNumber(e.target.value)}
-                    className="w-full p-2.5 border rounded-xl font-bold text-black focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">VIN 碼</label>
-                  <input
-                    type="text"
-                    value={editVin}
-                    onChange={(e) => setEditVin(e.target.value)}
-                    className="w-full p-2.5 border rounded-xl text-black focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">車輛品牌 (Brand)</label>
-                  <input
-                    type="text"
-                    value={editBrand}
-                    onChange={(e) => setEditBrand(e.target.value)}
-                    placeholder="例如：Toyota / Isuzu"
-                    className="w-full p-2.5 border rounded-xl text-black focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">車輛型號 (Model)</label>
-                  <input
-                    type="text"
-                    value={editModel}
-                    onChange={(e) => setEditModel(e.target.value)}
-                    placeholder="例如：Coaster / N-Series"
-                    className="w-full p-2.5 border rounded-xl text-black focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">專案名稱 / 備註</label>
-                <input
-                  type="text"
-                  value={editProject}
-                  onChange={(e) => setEditProject(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl text-black focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={handleCloseEditModal}
-                  className="px-4 py-2 border rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  {isSaving ? '保存中...' : '💾 儲存修改'}
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
       )}
     </div>
