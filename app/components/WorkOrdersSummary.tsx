@@ -17,7 +17,6 @@ export default function WorkOrdersSummary() {
       const res = await fetch('/api/work-orders');
       if (res.ok) {
         const data = await res.json();
-        // 僅篩選政府合約車輛
         const govVehicles = (data.vehicles || []).filter((v: any) => {
           const wType = (v.warranty_type || '').toLowerCase();
           const project = (v.project || '').toLowerCase();
@@ -33,33 +32,57 @@ export default function WorkOrdersSummary() {
   };
 
   // 計算累積 Open 停修日數
-  const calculateTotalOpenDays = (orders: any[]) => {
-    let totalDays = 0;
+  const calculateOpenDaysForOrder = (wo: any) => {
+    const startDateStr = wo.claim_form_date || wo.created_at;
+    if (!startDateStr) return 0;
+    const start = new Date(startDateStr);
     const now = new Date();
-
-    orders.forEach((wo) => {
-      // 僅計算 Open / 進廠維修中的工單
-      if ((wo.status || 'Open').toLowerCase() === 'open') {
-        const startDateStr = wo.claim_form_date || wo.created_at;
-        if (startDateStr) {
-          const start = new Date(startDateStr);
-          const diffTime = Math.max(0, now.getTime() - start.getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          totalDays += diffDays;
-        }
-      }
-    });
-
-    return totalDays;
+    const diffTime = Math.max(0, now.getTime() - start.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // 計算 Availability (%) [基準：18.25天為可扣除扣分上限]
+  const calculateTotalOpenDaysForVehicle = (orders: any[]) => {
+    let total = 0;
+    orders.forEach((wo) => {
+      if ((wo.status || 'Open').toLowerCase() === 'open') {
+        total += calculateOpenDaysForOrder(wo);
+      }
+    });
+    return total;
+  };
+
   const calculateAvailability = (totalOpenDays: number) => {
     const targetDays = 18.25;
     if (totalOpenDays <= 0) return 100;
-    const avail = Math.max(0, 100 - (totalOpenDays / targetDays) * 5); // 扣分指標計算
+    const avail = Math.max(0, 100 - (totalOpenDays / targetDays) * 5);
     return parseFloat(avail.toFixed(2));
   };
+
+  // 1. 整理出所有需要「優先處理」的高風險工單 (Open 狀態 且 停修超過 5 天 或 車輛 Availability 低於 95%)
+  const urgentWorkOrders: any[] = [];
+  vehicles.forEach((v) => {
+    const orders = v.workOrders || v.work_orders || [];
+    const openOrders = orders.filter((o: any) => (o.status || 'Open').toLowerCase() === 'open');
+    const totalOpenDays = calculateTotalOpenDaysForVehicle(orders);
+    const avail = calculateAvailability(totalOpenDays);
+
+    openOrders.forEach((wo: any) => {
+      const days = calculateOpenDaysForOrder(wo);
+      // 警示條件：單張工單 Open > 5 天 或 該車 Availability 已低於 95%
+      if (days >= 5 || avail < 95) {
+        urgentWorkOrders.push({
+          ...wo,
+          vehicle: v,
+          openDays: days,
+          vehicleAvailability: avail,
+          vehicleOpenDays: totalOpenDays,
+        });
+      }
+    });
+  });
+
+  // 按停修日數由高至低排序
+  urgentWorkOrders.sort((a, b) => b.openDays - a.openDays);
 
   const filteredVehicles = vehicles.filter((v) => {
     if (!searchTerm.trim()) return true;
@@ -74,6 +97,7 @@ export default function WorkOrdersSummary() {
 
   return (
     <div className="space-y-6 text-black">
+      {/* 頂部標題與控制項 */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
         <div>
           <h2 className="text-lg font-black text-slate-900">🏛️ 政府合約維修工單 Summary</h2>
@@ -98,6 +122,53 @@ export default function WorkOrdersSummary() {
         </div>
       </div>
 
+      {/* 🚨🚨🚨 【重點復原】優先處理工單提醒卡片 (Urgent Priorities Alert) 🚨🚨🚨 */}
+      {urgentWorkOrders.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-400 rounded-2xl p-5 shadow-sm space-y-3">
+          <div className="flex justify-between items-center border-b border-red-200 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xl animate-bounce">🚨</span>
+              <h3 className="text-base font-black text-red-900">
+                優先處理工單提醒 (需立即排修 / 避免 Availability 超標)
+              </h3>
+              <span className="bg-red-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold">
+                {urgentWorkOrders.length} 張緊急
+              </span>
+            </div>
+            <span className="text-xs text-red-700 font-semibold">⚠️ 停修時間過長將導致 18.25 天可用率扣分或保固強制展延</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {urgentWorkOrders.map((item, idx) => (
+              <div
+                key={idx}
+                className="bg-white border-l-4 border-l-red-600 border border-red-200 rounded-xl p-3 shadow-2xs space-y-2"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="font-extrabold text-blue-900 text-sm block">📋 {item.order_number || 'WO-未知'}</span>
+                    <span className="text-xs font-black text-slate-800">🚘 車牌: {item.vehicle?.plate_number}</span>
+                  </div>
+                  <span className="bg-red-100 text-red-800 font-black text-xs px-2 py-0.5 rounded-lg border border-red-300">
+                    停修 {item.openDays} 天
+                  </span>
+                </div>
+
+                <p className="text-xs text-gray-700 line-clamp-2 bg-slate-50 p-2 rounded border border-slate-200">
+                  {item.description || '無描述'}
+                </p>
+
+                <div className="flex justify-between items-center text-[11px] pt-1 text-slate-600">
+                  <span>位置: <strong>{item.garage_location || item.vehicle?.garage_location || '九龍灣'}</strong></span>
+                  <span>車輛 Availability: <strong className={item.vehicleAvailability < 95 ? 'text-red-600 font-bold' : 'text-emerald-700'}>{item.vehicleAvailability}%</strong></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 車輛主卡片展示列表 */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在載入政府合約 Summary...</div>
       ) : filteredVehicles.length === 0 ? (
@@ -109,9 +180,8 @@ export default function WorkOrdersSummary() {
           {filteredVehicles.map((vehicle, idx) => {
             const orders = vehicle.workOrders || vehicle.work_orders || [];
             const openOrders = orders.filter((o: any) => (o.status || 'Open').toLowerCase() === 'open');
-            const totalOpenDays = calculateTotalOpenDays(orders);
+            const totalOpenDays = calculateTotalOpenDaysForVehicle(orders);
             const availability = calculateAvailability(totalOpenDays);
-
             const isWarning = availability < 95;
 
             return (
@@ -130,7 +200,7 @@ export default function WorkOrdersSummary() {
                     </span>
                   </div>
 
-                  {/* 核心指標：工單累計 Open 日數 & 可用率 Availability */}
+                  {/* 核心指標卡 */}
                   <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
                     <div className="bg-white p-2.5 rounded-lg border">
                       <span className="text-gray-500 block text-[11px]">工單累計 Open 日數</span>
@@ -141,7 +211,7 @@ export default function WorkOrdersSummary() {
 
                     <div className="bg-white p-2.5 rounded-lg border">
                       <span className="text-gray-500 block text-[11px]">Availability (可用率)</span>
-                      <strong className={`text-base font-black ${isWarning ? 'text-red-600' : 'text-emerald-600'}`}>
+                      <strong className={`text-base font-black ${isWarning ? 'text-red-600 font-bold' : 'text-emerald-600'}`}>
                         {availability}%
                       </strong>
                     </div>
@@ -153,7 +223,7 @@ export default function WorkOrdersSummary() {
                   </div>
                 </div>
 
-                {/* 歷史工單列表概覽 */}
+                {/* 歷史工單清單 */}
                 <div className="text-xs space-y-1 border-t pt-2">
                   <span className="font-bold text-gray-700 block text-[11px]">最新工單紀錄:</span>
                   {orders.length === 0 ? (
