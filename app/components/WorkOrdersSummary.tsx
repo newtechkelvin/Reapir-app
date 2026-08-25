@@ -29,42 +29,6 @@ export default function WorkOrdersSummary() {
     fetchGovernmentVehicles();
   }, []);
 
-  const fetchGovernmentVehicles = async () => {
-    try {
-      setIsLoading(true);
-      const res = await fetch('/api/work-orders');
-      if (res.ok) {
-        const data = await res.json();
-        const govVehicles = (data.vehicles || [])
-          .filter((v: any) => {
-            const wType = (v.warranty_type || '').toLowerCase();
-            const project = (v.project || '').toLowerCase();
-            return wType !== 'general' && wType !== '散車' && !project.includes('散車');
-          })
-          .map((v: any) => {
-            const rawOrders = v.workOrders || v.work_orders || [];
-            // 🎯 關鍵修改：只保留 Open 狀態的工單
-            const openOnlyOrders = rawOrders.filter(
-              (o: any) => (o.status || 'Open').toLowerCase() === 'open'
-            );
-            return {
-              ...v,
-              workOrders: openOnlyOrders,
-              work_orders: openOnlyOrders,
-            };
-          })
-          // 如果車輛沒有任何 Open 的工單，就不在 Summary 顯示
-          .filter((v: any) => (v.workOrders || []).length > 0);
-
-        setVehicles(govVehicles);
-      }
-    } catch (err) {
-      console.error('讀取政府合約 Summary 失敗:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const calculateOpenDaysForOrder = (wo: any) => {
     const startDateStr = wo.claim_form_date || wo.created_at;
     if (!startDateStr) return 0;
@@ -89,27 +53,48 @@ export default function WorkOrdersSummary() {
     return parseFloat(avail.toFixed(2));
   };
 
-  // 1. 整理出所有需要優先處理的 Open 工單
-  const urgentWorkOrders: any[] = [];
-  vehicles.forEach((v) => {
-    const orders = v.workOrders || [];
-    const totalOpenDays = calculateTotalOpenDaysForVehicle(orders);
-    const avail = calculateAvailability(totalOpenDays);
+  const fetchGovernmentVehicles = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch('/api/work-orders');
+      if (res.ok) {
+        const data = await res.json();
+        const govVehicles = (data.vehicles || [])
+          .filter((v: any) => {
+            const wType = (v.warranty_type || '').toLowerCase();
+            const project = (v.project || '').toLowerCase();
+            return wType !== 'general' && wType !== '散車' && !project.includes('散車');
+          })
+          .map((v: any) => {
+            const rawOrders = v.workOrders || v.work_orders || [];
+            // 僅保留 Open 狀態的工單
+            const openOnlyOrders = rawOrders.filter(
+              (o: any) => (o.status || 'Open').toLowerCase() === 'open'
+            );
+            return {
+              ...v,
+              workOrders: openOnlyOrders,
+              work_orders: openOnlyOrders,
+              totalOpenDays: calculateTotalOpenDaysForVehicle(openOnlyOrders),
+            };
+          })
+          // 僅顯示至少有一張 Open 工單的車輛
+          .filter((v: any) => (v.workOrders || []).length > 0);
 
-    orders.forEach((wo: any) => {
-      const days = calculateOpenDaysForOrder(wo);
-      if (days >= 5 || avail < 95) {
-        urgentWorkOrders.push({
-          ...wo,
-          vehicle: v,
-          openDays: days,
-          vehicleAvailability: avail,
-        });
+        // 🎯 工單按累計 Open 日數由高至低排序
+        govVehicles.sort((a: any, b: any) => b.totalOpenDays - a.totalOpenDays);
+
+        setVehicles(govVehicles);
       }
-    });
-  });
+    } catch (err) {
+      console.error('讀取政府合約 Summary 失敗:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  urgentWorkOrders.sort((a, b) => b.openDays - a.openDays);
+  // 🎯 計算全站 Open 狀態工單總數
+  const totalOpenOrdersCount = vehicles.reduce((sum, v) => sum + (v.workOrders?.length || 0), 0);
 
   const filteredVehicles = vehicles.filter((v) => {
     if (!searchTerm.trim()) return true;
@@ -278,11 +263,18 @@ export default function WorkOrdersSummary() {
 
   return (
     <div className="space-y-6 text-black">
-      {/* 頂部標題與控制項 */}
+      {/* 頂部標題與控制項 (包含 Open 工單總數顯示) */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
-        <div>
-          <h2 className="text-lg font-black text-slate-900">🏛️ 政府合約維修工單 Summary</h2>
-          <p className="text-xs text-slate-500 mt-0.5">僅顯示 Open 狀態之政府車輛維修工單</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-lg font-black text-slate-900">🏛️ 政府合約維修工單 Summary</h2>
+            <p className="text-xs text-slate-500 mt-0.5">僅顯示 Open 狀態之政府車輛維修工單 (按累計日數由高至低排序)</p>
+          </div>
+          {/* 🎯 頂部顯示 Open 工單總數 */}
+          <div className="bg-amber-500 text-white px-4 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5">
+            <span className="text-xs font-bold">Open 工單總數：</span>
+            <span className="text-xl font-black">{totalOpenOrdersCount} 張</span>
+          </div>
         </div>
 
         <div className="flex gap-2">
@@ -303,52 +295,6 @@ export default function WorkOrdersSummary() {
         </div>
       </div>
 
-      {/* 🚨 優先處理工單提醒 🚨 */}
-      {urgentWorkOrders.length > 0 && (
-        <div className="bg-red-50 border-2 border-red-400 rounded-2xl p-5 shadow-sm space-y-3">
-          <div className="flex justify-between items-center border-b border-red-200 pb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xl animate-bounce">🚨</span>
-              <h3 className="text-base font-black text-red-900">
-                優先處理工單提醒
-              </h3>
-              <span className="bg-red-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold">
-                {urgentWorkOrders.length} 張緊急 (Open)
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {urgentWorkOrders.map((item, idx) => (
-              <div
-                key={idx}
-                onClick={() => handleOpenDetailModal(item.vehicle, item)}
-                className="bg-white border-l-4 border-l-red-600 border border-red-200 rounded-xl p-3 shadow-2xs hover:shadow-md transition-all cursor-pointer space-y-2 group"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="font-extrabold text-blue-900 group-hover:text-blue-700 text-sm block">📋 {item.order_number || 'WO-未知'}</span>
-                    <span className="text-xs font-black text-slate-800">🚘 車牌: {item.vehicle?.plate_number}</span>
-                  </div>
-                  <span className="bg-red-100 text-red-800 font-black text-xs px-2 py-0.5 rounded-lg border border-red-300">
-                    停修 {item.openDays} 天
-                  </span>
-                </div>
-
-                <p className="text-xs text-gray-700 line-clamp-2 bg-slate-50 p-2 rounded border border-slate-200">
-                  {item.description || '無描述'}
-                </p>
-
-                <div className="flex justify-between items-center text-[11px] pt-1 text-slate-600">
-                  <span>位置: <strong>{item.garage_location || item.vehicle?.garage_location || '九龍灣'}</strong></span>
-                  <span className="text-blue-600 font-bold group-hover:underline">檢視內容 →</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* 車輛主卡片展示列表 */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在載入政府合約 Summary...</div>
@@ -360,14 +306,25 @@ export default function WorkOrdersSummary() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredVehicles.map((vehicle, idx) => {
             const orders = vehicle.workOrders || [];
-            const totalOpenDays = calculateTotalOpenDaysForVehicle(orders);
+            const totalOpenDays = vehicle.totalOpenDays || calculateTotalOpenDaysForVehicle(orders);
             const availability = calculateAvailability(totalOpenDays);
-            const isWarning = availability < 95;
+            
+            // 🎯 Availability 條件判定：
+            // 接近 95% (95.00% ~ 96.50%): 閃爍警示 (isNearWarning)
+            // 已過了 95% (< 95.00%): 紅字提醒，不閃爍 (isPassed)
+            const isNearWarning = availability >= 95 && availability <= 96.5;
+            const isPassed = availability < 95;
 
             return (
               <div
                 key={vehicle.id || idx}
-                className="bg-white border rounded-2xl p-5 shadow-xs hover:shadow-md transition-all border-slate-200 flex flex-col justify-between gap-4"
+                className={`bg-white border-2 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-4 ${
+                  isNearWarning
+                    ? 'border-amber-400 bg-amber-50/20 animate-pulse ring-2 ring-amber-300'
+                    : isPassed
+                    ? 'border-red-300'
+                    : 'border-slate-200'
+                }`}
               >
                 <div className="space-y-3">
                   <div className="flex justify-between items-start border-b pb-2">
@@ -388,9 +345,25 @@ export default function WorkOrdersSummary() {
                       </strong>
                     </div>
 
-                    <div className="bg-white p-2.5 rounded-lg border">
-                      <span className="text-gray-500 block text-[11px]">Availability (可用率)</span>
-                      <strong className={`text-base font-black ${isWarning ? 'text-red-600 font-bold' : 'text-emerald-600'}`}>
+                    {/* 🎯 可用率 Availability 閃爍與狀態處理 */}
+                    <div className={`p-2.5 rounded-lg border ${isNearWarning ? 'bg-amber-100 border-amber-400' : 'bg-white'}`}>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500 block text-[11px]">Availability (可用率)</span>
+                        {isNearWarning && (
+                          <span className="text-[10px] font-black bg-amber-600 text-white px-1.5 py-0.5 rounded animate-bounce">
+                            ⚠️ 接近 95%
+                          </span>
+                        )}
+                      </div>
+                      <strong
+                        className={`text-base font-black block mt-0.5 ${
+                          isNearWarning
+                            ? 'text-amber-700 font-extrabold'
+                            : isPassed
+                            ? 'text-red-600 font-bold'
+                            : 'text-emerald-600'
+                        }`}
+                      >
                         {availability}%
                       </strong>
                     </div>
@@ -404,18 +377,25 @@ export default function WorkOrdersSummary() {
 
                 <div className="text-xs space-y-1 border-t pt-2">
                   <span className="font-bold text-gray-700 block text-[11px]">Open 工單清單:</span>
-                  {orders.map((wo: any, oIdx: number) => (
-                    <div
-                      key={oIdx}
-                      onClick={() => handleOpenDetailModal(vehicle, wo)}
-                      className="flex justify-between items-center text-[11px] bg-slate-50 p-1.5 rounded border hover:bg-blue-50 cursor-pointer"
-                    >
-                      <span className="font-bold text-blue-900">{wo.order_number || 'WO-未知'}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                        Open
-                      </span>
-                    </div>
-                  ))}
+                  {orders.map((wo: any, oIdx: number) => {
+                    const orderDays = calculateOpenDaysForOrder(wo);
+
+                    return (
+                      <div
+                        key={oIdx}
+                        onClick={() => handleOpenDetailModal(vehicle, wo)}
+                        className="flex justify-between items-center text-[11px] bg-slate-50 p-2 rounded border border-slate-200 hover:bg-blue-50 cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-blue-900 group-hover:text-blue-700">{wo.order_number || 'WO-未知'}</span>
+                          <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">
+                            Open ({orderDays}天)
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-blue-600 font-bold group-hover:underline">檢視明細 →</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -423,7 +403,7 @@ export default function WorkOrdersSummary() {
         </div>
       )}
 
-      {/* 工單詳細卡片 Modal */}
+      {/* 工單詳細卡片 Modal 彈窗 */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
           <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
