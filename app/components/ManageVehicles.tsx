@@ -17,8 +17,50 @@ export default function ManageVehicles({
 }: ManageVehiclesProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. 計算保固年度 (第 1 年 ~ 第 5 年) 與起算日/到期日
-  const getWarrantyYearInfo = (vehicle: any) => {
+  // 1. 計算本年合約累積停修天數與工單數
+  const getVehicleStats = (vehicle: any) => {
+    const orders = vehicle.workOrders || vehicle.work_orders || [];
+    let totalOpenDays = 0;
+    let openCount = 0;
+
+    const now = new Date();
+
+    orders.forEach((wo: any) => {
+      const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+      
+      if (!isCompleted) {
+        openCount++;
+        const sStr = wo.claim_form_date || wo.created_at;
+        if (sStr) {
+          const start = new Date(sStr);
+          const diffTime = Math.max(0, now.getTime() - start.getTime());
+          const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          totalOpenDays += days;
+        }
+      } else {
+        if (wo.claim_form_date && wo.completed_date) {
+          const s = new Date(wo.claim_form_date);
+          const e = new Date(wo.completed_date);
+          const diffTime = Math.max(0, e.getTime() - s.getTime());
+          totalOpenDays += Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+      }
+    });
+
+    const isExceeded = totalOpenDays > 18.25;
+    const remainingDays = Math.max(0, parseFloat((18.25 - totalOpenDays).toFixed(1)));
+
+    return {
+      totalOpenDays,
+      isExceeded,
+      remainingDays,
+      orderCount: orders.length,
+      openCount,
+    };
+  };
+
+  // 2. 計算保固年度與自動加上展延月份的保固到期日
+  const getWarrantyYearInfo = (vehicle: any, totalOpenDays: number) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
     if (!deliveryDateStr) {
       return {
@@ -40,57 +82,26 @@ export default function ManageVehicles({
 
     const yearNum = Math.max(1, Math.min(5, diffYears + 1));
 
-    // 計算保固到期日 (預設 4 年)
+    // 🎯 核心修正：計算因停修天數超標而展延的月份
+    // 每超過 18.25 天展延 6 個月 (上限 18 個月)
+    let extensionMonths = 0;
+    if (totalOpenDays > 18.25) {
+      const extensionCount = Math.min(3, Math.floor(totalOpenDays / 18.25));
+      extensionMonths = extensionCount * 6;
+    }
+
+    // 基本 4 年保固 + 展延月份
     const endDate = new Date(startDate);
     endDate.setFullYear(endDate.getFullYear() + 4);
+    if (extensionMonths > 0) {
+      endDate.setMonth(endDate.getMonth() + extensionMonths);
+    }
 
     return {
       yearText: `第 ${yearNum} 年`,
       startDateText: startDate.toISOString().split('T')[0],
       endDateText: vehicle.warranty_end_date || endDate.toISOString().split('T')[0],
-    };
-  };
-
-  // 2. 計算本年合約累積停修天數與工單數
-  const getVehicleStats = (vehicle: any) => {
-    const orders = vehicle.workOrders || vehicle.work_orders || [];
-    let totalOpenDays = 0;
-    let openCount = 0;
-
-    const now = new Date();
-
-    orders.forEach((wo: any) => {
-      const isCompleted = (wo.status || '').toLowerCase() === 'completed';
-      
-      if (!isCompleted) {
-        openCount++;
-        const sStr = wo.claim_form_date || wo.created_at;
-        if (sStr) {
-          const start = new Date(sStr);
-          const diffTime = Math.max(0, now.getTime() - start.getTime());
-          const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          totalOpenDays += days;
-        }
-      } else {
-        // 結案工單算已知停修日數
-        if (wo.claim_form_date && wo.completed_date) {
-          const s = new Date(wo.claim_form_date);
-          const e = new Date(wo.completed_date);
-          const diffTime = Math.max(0, e.getTime() - s.getTime());
-          totalOpenDays += Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        }
-      }
-    });
-
-    const isExceeded = totalOpenDays > 18.25;
-    const remainingDays = Math.max(0, parseFloat((18.25 - totalOpenDays).toFixed(1)));
-
-    return {
-      totalOpenDays,
-      isExceeded,
-      remainingDays,
-      orderCount: orders.length,
-      openCount,
+      extensionMonths,
     };
   };
 
@@ -138,8 +149,8 @@ export default function ManageVehicles({
       ) : (
         <div className="space-y-5">
           {filteredVehicles.map((vehicle, idx) => {
-            const wInfo = getWarrantyYearInfo(vehicle);
             const stats = getVehicleStats(vehicle);
+            const wInfo = getWarrantyYearInfo(vehicle, stats.totalOpenDays);
 
             const brandModelStr = [vehicle.brand, vehicle.model].filter(Boolean).join(' ');
 
@@ -195,7 +206,7 @@ export default function ManageVehicles({
                     </div>
                     {stats.isExceeded ? (
                       <span className="text-[11px] font-bold text-red-600 flex items-center gap-1 pt-1">
-                        ⚠️ 已觸發保固延長
+                        ⚠️ 已觸發保固延長 ({wInfo.extensionMonths} 個月)
                       </span>
                     ) : (
                       <span className="text-[11px] text-gray-400 block pt-1">
@@ -239,7 +250,7 @@ export default function ManageVehicles({
 
                   <div>
                     <span className="text-gray-400 block font-medium">保固到期日</span>
-                    <strong className="text-slate-800 font-bold block mt-0.5">{wInfo.endDateText}</strong>
+                    <strong className="text-amber-700 font-bold block mt-0.5">{wInfo.endDateText}</strong>
                   </div>
 
                   <div>
