@@ -33,6 +33,50 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 計算政府車輛的保固年度與保固到期日
+  const getWarrantyInfo = (vehicle: any) => {
+    const startDateStr = vehicle.claim_form_date || vehicle.created_at;
+    if (!startDateStr) {
+      return { yearLabel: '未開始', endDateStr: '未設定', availability: '100%' };
+    }
+
+    const startDate = new Date(startDateStr);
+    const now = new Date();
+    
+    // 計算差距年份 (1st-Full-Year ~ 5th-Full-Year)
+    const diffYears = now.getFullYear() - startDate.getFullYear();
+    let yearLabel = '1st-Full-Year';
+    if (diffYears === 1) yearLabel = '2nd-Full-Year';
+    else if (diffYears === 2) yearLabel = '3rd-Full-Year';
+    else if (diffYears === 3) yearLabel = '4th-Full-Year';
+    else if (diffYears >= 4) yearLabel = '5th-Full-Year';
+
+    // 保固預設為 4 年
+    const endDate = new Date(startDate);
+    endDate.setFullYear(endDate.getFullYear() + 4);
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    // 計算這台車工單總 Open 日數
+    const orders = vehicle.workOrders || vehicle.work_orders || [];
+    let openDays = 0;
+    orders.forEach((wo: any) => {
+      if ((wo.status || 'Open').toLowerCase() === 'open') {
+        const s = new Date(wo.claim_form_date || wo.created_at || now);
+        const diff = Math.max(0, now.getTime() - s.getTime());
+        openDays += Math.ceil(diff / (1000 * 60 * 60 * 24));
+      }
+    });
+
+    const availVal = Math.max(0, 100 - (openDays / 18.25) * 5).toFixed(2);
+
+    return {
+      yearLabel,
+      endDateStr: vehicle.warranty_end_date || endDateStr,
+      availability: `${availVal}%`,
+      openDays,
+    };
+  };
+
   const handleOpenDetailModal = (vehicle: any, order: any) => {
     setSelectedVehicle(vehicle);
     setSelectedOrder(order);
@@ -103,7 +147,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     }, 800);
   };
 
-  // 新增工單維修項目
   const handleAddNewItem = () => {
     const newItem = {
       type: '進廠維修',
@@ -116,7 +159,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     triggerAutoSave({ items: updated });
   };
 
-  // 刪除工單維修項目
   const handleRemoveItem = (index: number) => {
     const updated = modalItems.filter((_, i) => i !== index);
     setModalItems(updated);
@@ -205,7 +247,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
   return (
     <div className="space-y-6">
-      {/* 搜尋列與按鈕 */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl print:hidden">
         <form onSubmit={props.handleSearch} className="flex-1 flex gap-2">
           <input
@@ -242,7 +283,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       </div>
 
-      {/* 車輛與工單清單 */}
       {props.isSearching ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse print:hidden">⏳ 正在搜尋車輛與工單資料...</div>
       ) : props.searchVehicles.length === 0 ? (
@@ -253,10 +293,12 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         <div className="space-y-6 print:hidden">
           {props.searchVehicles.map((vehicle, vIdx) => {
             const orders = vehicle.workOrders || vehicle.work_orders || [];
+            const isSanCheVehicle = vehicle.warranty_type === 'General' || vehicle.project?.includes('散車');
+            const wInfo = getWarrantyInfo(vehicle);
 
             return (
               <div key={vehicle.id || vIdx} className="bg-white border rounded-xl shadow-xs overflow-hidden border-slate-200">
-                {/* 車輛抬頭卡片 */}
+                {/* 車輛抬頭卡片（加入保固年度與可用率展現） */}
                 <div className="bg-slate-800 text-white p-4 flex flex-wrap justify-between items-center gap-2">
                   <div className="flex items-center gap-3">
                     <span className="text-xl font-extrabold text-amber-400">🚘 {vehicle.plate_number}</span>
@@ -265,11 +307,22 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                         專案: {vehicle.project}
                       </span>
                     )}
+                    {!isSanCheVehicle && (
+                      <span className="bg-blue-600 text-white text-xs px-2.5 py-1 rounded-full font-bold">
+                        {wInfo.yearLabel}
+                      </span>
+                    )}
                   </div>
-                  <div className="text-xs text-slate-300 flex flex-wrap gap-4">
+
+                  <div className="text-xs text-slate-300 flex flex-wrap gap-4 items-center">
                     <span>VIN: <strong>{vehicle.vin || '無'}</strong></span>
                     <span>品牌: <strong>{vehicle.brand || '未設定'}</strong></span>
-                    <span>型號: <strong>{vehicle.model || '未設定'}</strong></span>
+                    {!isSanCheVehicle && (
+                      <>
+                        <span>保固到期日: <strong className="text-amber-300">{wInfo.endDateStr}</strong></span>
+                        <span>可用率 (Availability): <strong className="text-emerald-400 font-bold">{wInfo.availability}</strong></span>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -330,7 +383,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 工單詳細明細 Modal */}
+      {/* 工單詳細明細 Modal 視窗 */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
           <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
@@ -428,7 +481,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   </div>
                 )}
 
-                {/* 車輛位置 */}
                 <div>
                   <label className="text-gray-600 block font-semibold print:hidden">車輛位置：</label>
                   <input
@@ -444,7 +496,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   <div className="hidden print:block"><span className="text-gray-600">車輛位置：</span><strong className="text-slate-900">{vehicleLocationInput || '未設定'}</strong></div>
                 </div>
 
-                {/* 取車/回廠日期 */}
                 <div>
                   <label className="text-gray-600 block font-semibold print:hidden">取車/回廠日期：</label>
                   <input
@@ -459,7 +510,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   <div className="hidden print:block"><span className="text-gray-600">取車/回廠日期：</span><strong className="text-slate-900">{pickupReturnDateInput || '未設定'}</strong></div>
                 </div>
 
-                {/* Claim Form 日期 / 維修通知日期 */}
                 <div>
                   <label className="text-gray-600 block font-semibold print:hidden">
                     {isSanCheOrder(selectedOrder, selectedVehicle) ? '維修通知日期：' : 'Claim Form 日期：'}
@@ -479,7 +529,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   </div>
                 </div>
 
-                {/* ✨ 新增修改 1：完成維修 / 交車日期 */}
                 <div>
                   <label className="text-gray-600 block font-semibold print:hidden">完成維修/交車日期：</label>
                   <input
@@ -505,11 +554,10 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-xs print:text-sm text-gray-900 bg-gray-50 print:bg-white p-2.5 rounded-lg border border-slate-300 leading-snug">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 (支援新增與刪除項目) */}
+            {/* 3. 維修項目清單 */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
-                {/* ✨ 新增修改 2：增加新維修項目按鈕 */}
                 <button
                   type="button"
                   onClick={handleAddNewItem}
