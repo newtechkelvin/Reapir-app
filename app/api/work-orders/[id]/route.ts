@@ -6,88 +6,60 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUP
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await context.params;
-    if (!id) return NextResponse.json({ error: '缺少工單 ID' }, { status: 400 });
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json({ error: '缺少工單 ID' }, { status: 400 });
+    }
 
     const body = await request.json();
-    const { 
-      status, 
-      completed_date, 
-      staff_name, 
-      garage_location, 
-      vehicle_location, 
-      pickup_return_date, 
-      claim_form_date,
-      items 
-    } = body;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ message: 'Supabase 環境變數未設定' }, { status: 500 });
-    }
-
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const now = new Date().toISOString();
 
-    // 1. 更新工單項目 (包含 type, notes, is_completed)
-    if (items && Array.isArray(items)) {
-      for (const item of items) {
-        if (item.id) {
-          await supabase
-            .from('work_order_items')
-            .update({
-              type: item.type || '進廠維修',
-              is_completed: !!item.is_completed,
-              notes: item.notes || '',
-            })
-            .eq('id', item.id);
-        }
-      }
-    }
+    const updatePayload: Record<string, any> = {};
+    if (body.status !== undefined) updatePayload.status = body.status;
+    if (body.garage_location !== undefined) updatePayload.garage_location = body.garage_location;
+    if (body.vehicle_location !== undefined) updatePayload.vehicle_location = body.vehicle_location;
+    if (body.pickup_return_date !== undefined) updatePayload.pickup_return_date = body.pickup_return_date || null;
+    if (body.claim_form_date !== undefined) updatePayload.claim_form_date = body.claim_form_date || null;
+    if (body.completed_date !== undefined) updatePayload.completed_date = body.completed_date || null;
+    if (body.staff_name !== undefined) updatePayload.staff_name = body.staff_name;
+    updatePayload.updated_at = new Date().toISOString();
 
-    // 2. 更新工單本體與關聯車輛欄位
-    const updatePayload: any = { updated_at: now };
-    if (status !== undefined) updatePayload.status = status;
-    if (completed_date !== undefined) updatePayload.completed_date = completed_date;
-    if (staff_name !== undefined) updatePayload.staff_name = staff_name;
-    if (garage_location !== undefined) updatePayload.garage_location = garage_location;
-    if (vehicle_location !== undefined) updatePayload.vehicle_location = vehicle_location;
-    if (pickup_return_date !== undefined) updatePayload.pickup_return_date = pickup_return_date;
-    if (claim_form_date !== undefined) updatePayload.claim_form_date = claim_form_date;
-
-    const { data: updatedOrder, error } = await supabase
+    // 1. 更新工單主表格
+    const { data: orderData, error: orderErr } = await supabase
       .from('work_orders')
       .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
 
-    if (error) {
-      console.error('Supabase 更新工單失敗:', error.message);
-      throw new Error(error.message);
+    if (orderErr) {
+      return NextResponse.json({ error: orderErr.message }, { status: 500 });
     }
 
-    // 3. 同步更新至 vehicles 表格
-    if (updatedOrder && updatedOrder.vehicle_id) {
-      const vUpdatePayload: any = {};
-      if (garage_location !== undefined) vUpdatePayload.garage_location = garage_location;
-      if (vehicle_location !== undefined) vUpdatePayload.vehicle_location = vehicle_location;
-      if (pickup_return_date !== undefined) vUpdatePayload.pickup_return_date = pickup_return_date;
-      if (claim_form_date !== undefined) vUpdatePayload.claim_form_date = claim_form_date;
+    // 2. 如果傳入 items，同步更新/新增維修項目列表
+    if (Array.isArray(body.items)) {
+      // 先刪除舊項目重新寫入，確保新增與刪除操作 100% 同步
+      await supabase.from('work_order_items').delete().eq('work_order_id', id);
 
-      if (Object.keys(vUpdatePayload).length > 0) {
-        await supabase
-          .from('vehicles')
-          .update(vUpdatePayload)
-          .eq('id', updatedOrder.vehicle_id);
+      if (body.items.length > 0) {
+        const itemsToInsert = body.items.map((item: any) => ({
+          work_order_id: id,
+          type: item.type || '進廠維修',
+          item_name: item.item_name || '',
+          is_completed: !!item.is_completed,
+          notes: item.notes || '',
+        }));
+
+        await supabase.from('work_order_items').insert(itemsToInsert);
       }
     }
 
-    return NextResponse.json({ success: true, order: updatedOrder, updated_at: now });
+    return NextResponse.json({ success: true, order: orderData });
   } catch (err: any) {
-    console.error('更新工單 API 錯誤:', err);
-    return NextResponse.json({ error: err.message || '更新失敗' }, { status: 500 });
+    console.error('更新工單失敗:', err);
+    return NextResponse.json({ error: err.message || '伺服器內部錯誤' }, { status: 500 });
   }
 }

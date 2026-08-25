@@ -25,8 +25,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const [vehicleLocationInput, setVehicleLocationInput] = useState('');
   const [pickupReturnDateInput, setPickupReturnDateInput] = useState('');
   const [claimFormDateInput, setClaimFormDateInput] = useState('');
-
   const [completedDateInput, setCompletedDateInput] = useState('');
+
   const [staffNameInput, setStaffNameInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
@@ -36,13 +36,13 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const handleOpenDetailModal = (vehicle: any, order: any) => {
     setSelectedVehicle(vehicle);
     setSelectedOrder(order);
-    setCompletedDateInput('');
-    setStaffNameInput('');
+    setStaffNameInput(order.staff_name || '');
 
     setGarageLocationInput(order.garage_location || order.location || vehicle.garage_location || vehicle.location || '');
     setVehicleLocationInput(order.vehicle_location || vehicle.vehicle_location || '');
     setPickupReturnDateInput(order.pickup_return_date || vehicle.pickup_return_date || '');
     setClaimFormDateInput(order.claim_form_date || vehicle.claim_form_date || '');
+    setCompletedDateInput(order.completed_date || '');
 
     const rawItems = order.work_order_items || order.items || [];
     const formattedItems = rawItems.map((item: any) => ({
@@ -79,6 +79,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           vehicle_location: vehicleLocationInput,
           pickup_return_date: pickupReturnDateInput,
           claim_form_date: claimFormDateInput,
+          completed_date: completedDateInput,
           items: modalItems,
           ...overrideData
         };
@@ -102,6 +103,26 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
     }, 800);
   };
 
+  // 新增工單維修項目
+  const handleAddNewItem = () => {
+    const newItem = {
+      type: '進廠維修',
+      item_name: '',
+      is_completed: false,
+      notes: '',
+    };
+    const updated = [...modalItems, newItem];
+    setModalItems(updated);
+    triggerAutoSave({ items: updated });
+  };
+
+  // 刪除工單維修項目
+  const handleRemoveItem = (index: number) => {
+    const updated = modalItems.filter((_, i) => i !== index);
+    setModalItems(updated);
+    triggerAutoSave({ items: updated });
+  };
+
   const handleToggleCheck = (index: number) => {
     const updated = [...modalItems];
     updated[index].is_completed = !updated[index].is_completed;
@@ -112,6 +133,13 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const handleTypeChange = (index: number, typeVal: string) => {
     const updated = [...modalItems];
     updated[index].type = typeVal;
+    setModalItems(updated);
+    triggerAutoSave({ items: updated });
+  };
+
+  const handleItemNameChange = (index: number, nameVal: string) => {
+    const updated = [...modalItems];
+    updated[index].item_name = nameVal;
     setModalItems(updated);
     triggerAutoSave({ items: updated });
   };
@@ -130,7 +158,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const handleMarkAsCompleted = async () => {
     if (!selectedOrder?.id) return;
     if (!completedDateInput) {
-      alert('請選擇或輸入完成日期');
+      alert('請先填寫完成維修/交車日期');
       return;
     }
 
@@ -363,7 +391,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
                 {/* 動態位置標籤與輸入類型 */}
                 {isSanCheOrder(selectedOrder, selectedVehicle) ? (
-                  /* 散車：取車位置 (手動文字輸入) */
                   <div>
                     <label className="text-gray-600 block font-semibold print:hidden">取車位置：</label>
                     <input
@@ -379,7 +406,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                     <div className="hidden print:block"><span className="text-gray-600">取車位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
                   </div>
                 ) : (
-                  /* 政府車輛：車房位置 (下拉選單) */
                   <div>
                     <label className="text-gray-600 block font-semibold print:hidden">車房位置：</label>
                     <select
@@ -433,7 +459,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   <div className="hidden print:block"><span className="text-gray-600">取車/回廠日期：</span><strong className="text-slate-900">{pickupReturnDateInput || '未設定'}</strong></div>
                 </div>
 
-                {/* 動態 Claim Form 日期 / 維修通知日期 */}
+                {/* Claim Form 日期 / 維修通知日期 */}
                 <div>
                   <label className="text-gray-600 block font-semibold print:hidden">
                     {isSanCheOrder(selectedOrder, selectedVehicle) ? '維修通知日期：' : 'Claim Form 日期：'}
@@ -452,6 +478,24 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                     <strong className="text-slate-900">{claimFormDateInput || '未設定'}</strong>
                   </div>
                 </div>
+
+                {/* ✨ 新增修改 1：完成維修 / 交車日期 */}
+                <div>
+                  <label className="text-gray-600 block font-semibold print:hidden">完成維修/交車日期：</label>
+                  <input
+                    type="date"
+                    value={completedDateInput}
+                    onChange={(e) => {
+                      setCompletedDateInput(e.target.value);
+                      triggerAutoSave({ completed_date: e.target.value });
+                    }}
+                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-emerald-50 text-emerald-900"
+                  />
+                  <div className="hidden print:block">
+                    <span className="text-gray-600">完成維修/交車日期：</span>
+                    <strong className="text-emerald-700">{completedDateInput || '未設定'}</strong>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -461,9 +505,20 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-xs print:text-sm text-gray-900 bg-gray-50 print:bg-white p-2.5 rounded-lg border border-slate-300 leading-snug">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 */}
-            <div className="space-y-1">
-              <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
+            {/* 3. 維修項目清單 (支援新增與刪除項目) */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs print:text-sm font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
+                {/* ✨ 新增修改 2：增加新維修項目按鈕 */}
+                <button
+                  type="button"
+                  onClick={handleAddNewItem}
+                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-2xs print:hidden cursor-pointer flex items-center gap-1"
+                >
+                  + 新增維修項目
+                </button>
+              </div>
+
               {modalItems.length > 0 ? (
                 <div className="border-2 rounded-lg overflow-hidden border-slate-400">
                   <table className="w-full text-xs print:text-sm text-left">
@@ -473,6 +528,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                         <th className="p-2 print:p-2 w-32">類別</th>
                         <th className="p-2 print:p-2 w-1/2">項目名稱</th>
                         <th className="p-2 print:p-2">進度備註 (Notes)</th>
+                        <th className="p-2 w-10 text-center print:hidden">刪除</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-300">
@@ -506,17 +562,35 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                                 {item.type || '進廠維修'}
                               </span>
                             </td>
-                            <td className={`p-2 print:p-2 text-slate-900 font-semibold ${isChecked ? 'line-through text-gray-400' : ''}`}>
-                              {item.item_name}
+                            <td className="p-2 print:p-2 font-semibold">
+                              <input
+                                type="text"
+                                value={item.item_name || ''}
+                                onChange={(e) => handleItemNameChange(i, e.target.value)}
+                                placeholder="項目名稱..."
+                                className={`w-full p-1 border rounded text-xs bg-white text-slate-900 font-semibold print:hidden focus:ring-1 focus:ring-blue-500 ${isChecked ? 'line-through text-gray-400' : ''}`}
+                              />
+                              <span className={`hidden print:inline-block ${isChecked ? 'line-through text-gray-400' : 'text-slate-900'}`}>
+                                {item.item_name}
+                              </span>
                             </td>
                             <td className="p-2 print:p-1.5">
                               <input
                                 type="text"
                                 value={item.notes || ''}
                                 onChange={(e) => handleNoteChange(i, e.target.value)}
-                                placeholder="輸入每日工程進度..."
+                                placeholder="輸入工程進度..."
                                 className="note-input w-full p-1 border-b border-slate-400 print:border-b-2 print:border-slate-800 rounded-none text-xs print:text-sm bg-transparent focus:outline-none focus:border-blue-600"
                               />
+                            </td>
+                            <td className="p-2 text-center print:hidden">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(i)}
+                                className="text-red-500 hover:text-red-700 font-bold px-1 cursor-pointer"
+                              >
+                                ✕
+                              </button>
                             </td>
                           </tr>
                         );
@@ -525,7 +599,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   </table>
                 </div>
               ) : (
-                <p className="text-xs text-gray-400 italic">無詳細明細項目</p>
+                <p className="text-xs text-gray-400 italic py-2">無詳細明細項目，可點擊右上角按鈕新增</p>
               )}
             </div>
 
@@ -536,11 +610,14 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">完成日期 *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">簽核完成日期 *</label>
                     <input
                       type="date"
                       value={completedDateInput}
-                      onChange={(e) => setCompletedDateInput(e.target.value)}
+                      onChange={(e) => {
+                        setCompletedDateInput(e.target.value);
+                        triggerAutoSave({ completed_date: e.target.value });
+                      }}
                       className="w-full p-2 border rounded-lg text-xs text-black bg-white focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
