@@ -29,27 +29,31 @@ export default function WorkOrdersSummary() {
     fetchGovernmentVehicles();
   }, []);
 
-  const calculateOpenDaysForOrder = (wo: any) => {
-    const startDateStr = wo.claim_form_date || wo.created_at;
-    if (!startDateStr) return 0;
-    const start = new Date(startDateStr);
-    const now = new Date();
-    const diffTime = Math.max(0, now.getTime() - start.getTime());
+  // 計算單張工單停修天數
+  const calculateDaysForOrder = (wo: any) => {
+    const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+    const sStr = wo.claim_form_date || wo.created_at;
+    if (!sStr) return 0;
+
+    const start = new Date(sStr);
+    const end = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
+    const diffTime = Math.max(0, end.getTime() - start.getTime());
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const calculateTotalOpenDaysForVehicle = (orders: any[]) => {
+  // 🎯 修正核心：計算車輛的全年「總累積停修天數」(Open + Completed 工單)
+  const calculateTotalRepairDaysForVehicle = (orders: any[]) => {
     let total = 0;
     orders.forEach((wo) => {
-      total += calculateOpenDaysForOrder(wo);
+      total += calculateDaysForOrder(wo);
     });
     return total;
   };
 
-  const calculateAvailability = (totalOpenDays: number) => {
-    const targetDays = 18.25;
-    if (totalOpenDays <= 0) return 100;
-    const avail = Math.max(0, 100 - (totalOpenDays / targetDays) * 5);
+  // 🎯 Availability 公式修正：100% - (總停修天數 / 365天)*100%
+  const calculateAvailability = (totalRepairDays: number) => {
+    if (totalRepairDays <= 0) return 100;
+    const avail = Math.max(0, 100 - (totalRepairDays / 365) * 100);
     return parseFloat(avail.toFixed(2));
   };
 
@@ -66,23 +70,27 @@ export default function WorkOrdersSummary() {
             return wType !== 'general' && wType !== '散車' && !project.includes('散車');
           })
           .map((v: any) => {
-            const rawOrders = v.workOrders || v.work_orders || [];
-            // 僅保留 Open 狀態的工單
-            const openOnlyOrders = rawOrders.filter(
+            const allOrders = v.workOrders || v.work_orders || [];
+            // 只篩選出目前 Open 狀態的工單用於清單顯示
+            const openOnlyOrders = allOrders.filter(
               (o: any) => (o.status || 'Open').toLowerCase() === 'open'
             );
+            
+            // 🎯 計算包含舊工單的總停修天數
+            const totalRepairDays = calculateTotalRepairDaysForVehicle(allOrders);
+
             return {
               ...v,
+              allOrders,
               workOrders: openOnlyOrders,
-              work_orders: openOnlyOrders,
-              totalOpenDays: calculateTotalOpenDaysForVehicle(openOnlyOrders),
+              totalRepairDays,
             };
           })
-          // 僅顯示至少有一張 Open 工單的車輛
+          // 僅顯示有 Open 工單的車輛
           .filter((v: any) => (v.workOrders || []).length > 0);
 
-        // 🎯 工單按累計 Open 日數由高至低排序
-        govVehicles.sort((a: any, b: any) => b.totalOpenDays - a.totalOpenDays);
+        // 按總累積停修天數由高至低排序
+        govVehicles.sort((a: any, b: any) => b.totalRepairDays - a.totalRepairDays);
 
         setVehicles(govVehicles);
       }
@@ -93,7 +101,6 @@ export default function WorkOrdersSummary() {
     }
   };
 
-  // 🎯 計算全站 Open 狀態工單總數
   const totalOpenOrdersCount = vehicles.reduce((sum, v) => sum + (v.workOrders?.length || 0), 0);
 
   const filteredVehicles = vehicles.filter((v) => {
@@ -107,7 +114,6 @@ export default function WorkOrdersSummary() {
     );
   });
 
-  // 開啟詳細工單 Modal
   const handleOpenDetailModal = (vehicle: any, order: any) => {
     setSelectedVehicle(vehicle);
     setSelectedOrder(order);
@@ -263,14 +269,13 @@ export default function WorkOrdersSummary() {
 
   return (
     <div className="space-y-6 text-black">
-      {/* 頂部標題與控制項 (包含 Open 工單總數顯示) */}
+      {/* 頂部標題 */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
         <div className="flex items-center gap-4">
           <div>
             <h2 className="text-lg font-black text-slate-900">🏛️ 政府合約維修工單 Summary</h2>
-            <p className="text-xs text-slate-500 mt-0.5">僅顯示 Open 狀態之政府車輛維修工單 (按累計日數由高至低排序)</p>
+            <p className="text-xs text-slate-500 mt-0.5">顯示包含 Open 工單之車輛累積停修總天數與可用率 (按累積天數由高至低排序)</p>
           </div>
-          {/* 🎯 頂部顯示 Open 工單總數 */}
           <div className="bg-amber-500 text-white px-4 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5">
             <span className="text-xs font-bold">Open 工單總數：</span>
             <span className="text-xl font-black">{totalOpenOrdersCount} 張</span>
@@ -305,13 +310,11 @@ export default function WorkOrdersSummary() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredVehicles.map((vehicle, idx) => {
-            const orders = vehicle.workOrders || [];
-            const totalOpenDays = vehicle.totalOpenDays || calculateTotalOpenDaysForVehicle(orders);
-            const availability = calculateAvailability(totalOpenDays);
+            const openOrders = vehicle.workOrders || [];
+            const totalRepairDays = vehicle.totalRepairDays || 0;
+            const availability = calculateAvailability(totalRepairDays);
             
-            // 🎯 Availability 條件判定：
-            // 接近 95% (95.00% ~ 96.50%): 閃爍警示 (isNearWarning)
-            // 已過了 95% (< 95.00%): 紅字提醒，不閃爍 (isPassed)
+            // 接近 95% (95.00% ~ 96.50%): 閃爍提醒
             const isNearWarning = availability >= 95 && availability <= 96.5;
             const isPassed = availability < 95;
 
@@ -339,13 +342,12 @@ export default function WorkOrdersSummary() {
 
                   <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
                     <div className="bg-white p-2.5 rounded-lg border">
-                      <span className="text-gray-500 block text-[11px]">工單累計 Open 日數</span>
-                      <strong className={`text-base font-black ${totalOpenDays > 0 ? 'text-amber-600' : 'text-slate-800'}`}>
-                        {totalOpenDays} 天
+                      <span className="text-gray-500 block text-[11px]">累積停修總天數</span>
+                      <strong className={`text-base font-black ${totalRepairDays > 18.25 ? 'text-red-600' : 'text-slate-800'}`}>
+                        {totalRepairDays} 天
                       </strong>
                     </div>
 
-                    {/* 🎯 可用率 Availability 閃爍與狀態處理 */}
                     <div className={`p-2.5 rounded-lg border ${isNearWarning ? 'bg-amber-100 border-amber-400' : 'bg-white'}`}>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-500 block text-[11px]">Availability (可用率)</span>
@@ -370,15 +372,15 @@ export default function WorkOrdersSummary() {
 
                     <div className="col-span-2 flex justify-between items-center text-[11px] pt-1 border-t border-slate-200">
                       <span>專案：<strong className="text-slate-900">{vehicle.project || '未設定'}</strong></span>
-                      <span>Open 工單數：<strong className="text-amber-700 font-bold">{orders.length} 張</strong></span>
+                      <span>Open 工單數：<strong className="text-amber-700 font-bold">{openOrders.length} 張</strong></span>
                     </div>
                   </div>
                 </div>
 
                 <div className="text-xs space-y-1 border-t pt-2">
                   <span className="font-bold text-gray-700 block text-[11px]">Open 工單清單:</span>
-                  {orders.map((wo: any, oIdx: number) => {
-                    const orderDays = calculateOpenDaysForOrder(wo);
+                  {openOrders.map((wo: any, oIdx: number) => {
+                    const orderDays = calculateDaysForOrder(wo);
 
                     return (
                       <div
@@ -403,7 +405,7 @@ export default function WorkOrdersSummary() {
         </div>
       )}
 
-      {/* 工單詳細卡片 Modal 彈窗 */}
+      {/* 工單詳細卡片 Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
           <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
