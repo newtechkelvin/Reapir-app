@@ -35,11 +35,27 @@ export default function WorkOrdersSummary() {
       const res = await fetch('/api/work-orders');
       if (res.ok) {
         const data = await res.json();
-        const govVehicles = (data.vehicles || []).filter((v: any) => {
-          const wType = (v.warranty_type || '').toLowerCase();
-          const project = (v.project || '').toLowerCase();
-          return wType !== 'general' && wType !== '散車' && !project.includes('散車');
-        });
+        const govVehicles = (data.vehicles || [])
+          .filter((v: any) => {
+            const wType = (v.warranty_type || '').toLowerCase();
+            const project = (v.project || '').toLowerCase();
+            return wType !== 'general' && wType !== '散車' && !project.includes('散車');
+          })
+          .map((v: any) => {
+            const rawOrders = v.workOrders || v.work_orders || [];
+            // 🎯 關鍵修改：只保留 Open 狀態的工單
+            const openOnlyOrders = rawOrders.filter(
+              (o: any) => (o.status || 'Open').toLowerCase() === 'open'
+            );
+            return {
+              ...v,
+              workOrders: openOnlyOrders,
+              work_orders: openOnlyOrders,
+            };
+          })
+          // 如果車輛沒有任何 Open 的工單，就不在 Summary 顯示
+          .filter((v: any) => (v.workOrders || []).length > 0);
+
         setVehicles(govVehicles);
       }
     } catch (err) {
@@ -61,9 +77,7 @@ export default function WorkOrdersSummary() {
   const calculateTotalOpenDaysForVehicle = (orders: any[]) => {
     let total = 0;
     orders.forEach((wo) => {
-      if ((wo.status || 'Open').toLowerCase() === 'open') {
-        total += calculateOpenDaysForOrder(wo);
-      }
+      total += calculateOpenDaysForOrder(wo);
     });
     return total;
   };
@@ -75,16 +89,14 @@ export default function WorkOrdersSummary() {
     return parseFloat(avail.toFixed(2));
   };
 
-  // 1. 僅整理出 Status 是 Open 的工單 (且 Open 天數 >= 5 天 或 Availability < 95%)
+  // 1. 整理出所有需要優先處理的 Open 工單
   const urgentWorkOrders: any[] = [];
   vehicles.forEach((v) => {
-    const orders = v.workOrders || v.work_orders || [];
-    // 嚴格僅抓取 Open 工單
-    const openOrders = orders.filter((o: any) => (o.status || 'Open').toLowerCase() === 'open');
+    const orders = v.workOrders || [];
     const totalOpenDays = calculateTotalOpenDaysForVehicle(orders);
     const avail = calculateAvailability(totalOpenDays);
 
-    openOrders.forEach((wo: any) => {
+    orders.forEach((wo: any) => {
       const days = calculateOpenDaysForOrder(wo);
       if (days >= 5 || avail < 95) {
         urgentWorkOrders.push({
@@ -270,7 +282,7 @@ export default function WorkOrdersSummary() {
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
         <div>
           <h2 className="text-lg font-black text-slate-900">🏛️ 政府合約維修工單 Summary</h2>
-          <p className="text-xs text-slate-500 mt-0.5">監控政府車輛 18.25 天停修日數扣減與 95% 標的可用率 (Committed Availability)</p>
+          <p className="text-xs text-slate-500 mt-0.5">僅顯示 Open 狀態之政府車輛維修工單</p>
         </div>
 
         <div className="flex gap-2">
@@ -301,7 +313,7 @@ export default function WorkOrdersSummary() {
                 優先處理工單提醒
               </h3>
               <span className="bg-red-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold">
-                {urgentWorkOrders.length} 張緊急
+                {urgentWorkOrders.length} 張緊急 (Open)
               </span>
             </div>
           </div>
@@ -342,13 +354,12 @@ export default function WorkOrdersSummary() {
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在載入政府合約 Summary...</div>
       ) : filteredVehicles.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-dashed text-gray-500">
-          <p className="text-base font-bold">無政府合約車輛與工單紀錄</p>
+          <p className="text-base font-bold">目前無 Open 狀態的政府合約工單</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredVehicles.map((vehicle, idx) => {
-            const orders = vehicle.workOrders || vehicle.work_orders || [];
-            const openOrders = orders.filter((o: any) => (o.status || 'Open').toLowerCase() === 'open');
+            const orders = vehicle.workOrders || [];
             const totalOpenDays = calculateTotalOpenDaysForVehicle(orders);
             const availability = calculateAvailability(totalOpenDays);
             const isWarning = availability < 95;
@@ -386,29 +397,25 @@ export default function WorkOrdersSummary() {
 
                     <div className="col-span-2 flex justify-between items-center text-[11px] pt-1 border-t border-slate-200">
                       <span>專案：<strong className="text-slate-900">{vehicle.project || '未設定'}</strong></span>
-                      <span>進行中工單：<strong className="text-amber-700 font-bold">{openOrders.length} 張</strong></span>
+                      <span>Open 工單數：<strong className="text-amber-700 font-bold">{orders.length} 張</strong></span>
                     </div>
                   </div>
                 </div>
 
                 <div className="text-xs space-y-1 border-t pt-2">
-                  <span className="font-bold text-gray-700 block text-[11px]">最新工單紀錄:</span>
-                  {orders.length === 0 ? (
-                    <span className="text-gray-400 italic">無工單紀錄</span>
-                  ) : (
-                    orders.slice(0, 2).map((wo: any, oIdx: number) => (
-                      <div
-                        key={oIdx}
-                        onClick={() => handleOpenDetailModal(vehicle, wo)}
-                        className="flex justify-between items-center text-[11px] bg-slate-50 p-1.5 rounded border hover:bg-blue-50 cursor-pointer"
-                      >
-                        <span className="font-bold text-blue-900">{wo.order_number || 'WO-未知'}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${wo.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                          {wo.status || 'Open'}
-                        </span>
-                      </div>
-                    ))
-                  )}
+                  <span className="font-bold text-gray-700 block text-[11px]">Open 工單清單:</span>
+                  {orders.map((wo: any, oIdx: number) => (
+                    <div
+                      key={oIdx}
+                      onClick={() => handleOpenDetailModal(vehicle, wo)}
+                      className="flex justify-between items-center text-[11px] bg-slate-50 p-1.5 rounded border hover:bg-blue-50 cursor-pointer"
+                    >
+                      <span className="font-bold text-blue-900">{wo.order_number || 'WO-未知'}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                        Open
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             );
@@ -430,8 +437,8 @@ export default function WorkOrdersSummary() {
             <div className="flex justify-between items-center border-b pb-2 print:hidden">
               <div className="flex items-center gap-3">
                 <span className="font-bold text-blue-900 text-lg">📋 {selectedOrder.order_number || 'WO-未知'}</span>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${selectedOrder.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                  狀態: {selectedOrder.status || 'Open'}
+                <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-amber-100 text-amber-800">
+                  狀態: Open
                 </span>
                 {isAutoSaving ? (
                   <span className="text-xs text-blue-600 font-bold animate-pulse">💾 正在保存更新...</span>
@@ -627,35 +634,33 @@ export default function WorkOrdersSummary() {
               )}
             </div>
 
-            {selectedOrder.status?.toLowerCase() !== 'completed' && (
-              <div className="border-t pt-2 space-y-2 bg-slate-50 p-3 rounded-xl border-slate-200">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">✍️ 工單完工簽核與結案設定</h4>
+            <div className="border-t pt-2 space-y-2 bg-slate-50 p-3 rounded-xl border-slate-200">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">✍️ 工單完工簽核與結案設定</h4>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">簽核完成日期 *</label>
-                    <input
-                      type="date"
-                      value={completedDateInput}
-                      onChange={(e) => {
-                        setCompletedDateInput(e.target.value);
-                        triggerAutoSave({ completed_date: e.target.value });
-                      }}
-                      className="w-full p-2 border rounded-lg text-xs text-black bg-white focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">簽核員工姓名</label>
-                    <input
-                      type="text"
-                      value={staffNameInput}
-                      onChange={(e) => setStaffNameInput(e.target.value)}
-                      className="w-full p-2 border rounded-lg text-xs text-black bg-white focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">簽核完成日期 *</label>
+                  <input
+                    type="date"
+                    value={completedDateInput}
+                    onChange={(e) => {
+                      setCompletedDateInput(e.target.value);
+                      triggerAutoSave({ completed_date: e.target.value });
+                    }}
+                    className="w-full p-2 border rounded-lg text-xs text-black bg-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">簽核員工姓名</label>
+                  <input
+                    type="text"
+                    value={staffNameInput}
+                    onChange={(e) => setStaffNameInput(e.target.value)}
+                    className="w-full p-2 border rounded-lg text-xs text-black bg-white focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
               </div>
-            )}
+            </div>
 
             <div className="flex justify-between items-center border-t pt-3">
               <button
@@ -665,16 +670,14 @@ export default function WorkOrdersSummary() {
               >
                 關閉
               </button>
-              {selectedOrder.status?.toLowerCase() !== 'completed' && (
-                <button
-                  type="button"
-                  disabled={isSubmitting}
-                  onClick={handleMarkAsCompleted}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmitting ? '提交中...' : '✅ 提交結案 (Mark as Completed)'}
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleMarkAsCompleted}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? '提交中...' : '✅ 提交結案 (Mark as Completed)'}
+              </button>
             </div>
           </div>
         </div>
