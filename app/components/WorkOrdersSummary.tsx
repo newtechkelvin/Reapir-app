@@ -13,6 +13,9 @@ export default function WorkOrdersSummary() {
   const [modalItems, setModalItems] = useState<any[]>([]);
   const [lastModifiedStr, setLastModifiedStr] = useState<string>('');
 
+  // 對數報表 Modal State
+  const [showAuditModal, setShowAuditModal] = useState(false);
+
   const [garageLocationInput, setGarageLocationInput] = useState('');
   const [vehicleLocationInput, setVehicleLocationInput] = useState('');
   const [pickupReturnDateInput, setPickupReturnDateInput] = useState('');
@@ -53,6 +56,32 @@ export default function WorkOrdersSummary() {
     if (totalRepairDays <= 0) return 100;
     const avail = Math.max(0, 100 - (totalRepairDays / 365) * 100);
     return parseFloat(avail.toFixed(2));
+  };
+
+  // 計算展延保固資訊
+  const getWarrantyInfo = (vehicle: any, totalRepairDays: number) => {
+    const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
+    const startDate = deliveryDateStr ? new Date(deliveryDateStr) : new Date();
+    
+    let extensionMonths = 0;
+    if (totalRepairDays > 18.25) {
+      const extensionCount = Math.min(3, Math.floor(totalRepairDays / 18.25));
+      extensionMonths = extensionCount * 6;
+    }
+
+    const originalEndDate = new Date(startDate);
+    originalEndDate.setFullYear(originalEndDate.getFullYear() + 4);
+
+    const updatedEndDate = new Date(originalEndDate);
+    if (extensionMonths > 0) {
+      updatedEndDate.setMonth(updatedEndDate.getMonth() + extensionMonths);
+    }
+
+    return {
+      originalEndDateStr: vehicle.warranty_end_date || originalEndDate.toISOString().split('T')[0],
+      updatedEndDateStr: updatedEndDate.toISOString().split('T')[0],
+      extensionMonths,
+    };
   };
 
   const fetchGovernmentVehicles = async () => {
@@ -96,6 +125,12 @@ export default function WorkOrdersSummary() {
   };
 
   const totalOpenOrdersCount = vehicles.reduce((sum, v) => sum + (v.workOrders?.length || 0), 0);
+
+  // 🎯 專門過濾出可用率低於 95% (停修天數 > 18.25 天) 的車輛
+  const lowAvailabilityVehicles = vehicles.filter((v) => {
+    const avail = calculateAvailability(v.totalRepairDays || 0);
+    return avail < 95;
+  });
 
   const filteredVehicles = vehicles.filter((v) => {
     if (!searchTerm.trim()) return true;
@@ -261,7 +296,6 @@ export default function WorkOrdersSummary() {
     }
   };
 
-  // 🎯 方法一：刪除工單邏輯
   const handleDeleteWorkOrder = async () => {
     if (!selectedOrder?.id) return;
 
@@ -292,6 +326,66 @@ export default function WorkOrdersSummary() {
     }
   };
 
+  // 🎯 匯出 CSV 功能 (內建 UTF-8 BOM 避免 Excel 亂碼)
+  const handleExportCSV = () => {
+    if (lowAvailabilityVehicles.length === 0) {
+      alert('當前沒有可用率低於 95% 的車輛資料可供匯出');
+      return;
+    }
+
+    const headers = [
+      '車牌號碼',
+      '專案名稱',
+      '品牌型號',
+      'VIN碼',
+      '累積停修天數',
+      '當前可用率(%)',
+      '原保固到期日',
+      '展延月份',
+      '修正後保固到期日',
+      'Open工單數',
+    ];
+
+    const rows = lowAvailabilityVehicles.map((v) => {
+      const avail = calculateAvailability(v.totalRepairDays || 0);
+      const wInfo = getWarrantyInfo(v, v.totalRepairDays || 0);
+      const brandModelStr = [v.brand, v.model].filter(Boolean).join(' ');
+
+      return [
+        `"${v.plate_number || ''}"`,
+        `"${v.project || ''}"`,
+        `"${brandModelStr}"`,
+        `"${v.vin || ''}"`,
+        v.totalRepairDays || 0,
+        `${avail}%`,
+        `"${wInfo.originalEndDateStr}"`,
+        `"+${wInfo.extensionMonths}個月"`,
+        `"${wInfo.updatedEndDateStr}"`,
+        (v.workOrders || []).length,
+      ];
+    });
+
+    const csvContent =
+      '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute(
+      'download',
+      `政府車輛保固展延對數表_可用率低於95%_${new Date().toISOString().split('T')[0]}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 🎯 列印 / 另存 PDF 功能
+  const handlePrintPDF = () => {
+    window.print();
+  };
+
   return (
     <div className="space-y-6 text-black">
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
@@ -306,7 +400,16 @@ export default function WorkOrdersSummary() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {/* 🎯 新增：開啟 95% 超標對數報表按鈕 */}
+          <button
+            type="button"
+            onClick={() => setShowAuditModal(true)}
+            className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 transition-all"
+          >
+            ⚠️ 95% 超標對數報表 ({lowAvailabilityVehicles.length})
+          </button>
+
           <input
             type="text"
             value={searchTerm}
@@ -424,6 +527,101 @@ export default function WorkOrdersSummary() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 🎯 專屬對數報表 Modal (支援 PDF 列印與 CSV 導出) */}
+      {showAuditModal && (
+        <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
+          <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-4xl w-full p-6 print:p-0 space-y-6 print:space-y-4 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
+            
+            {/* 報表抬頭 (PDF 列印時會精美呈現) */}
+            <div className="text-center border-b-2 border-slate-900 pb-3">
+              <h1 className="text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
+              <p className="text-xs text-slate-700 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
+              <p className="text-base font-extrabold text-red-700 mt-2 bg-red-50 py-1.5 rounded-lg border border-red-200">
+                🏛️ 政府車輛保固展延對數報表 (可用率低於 95%)
+              </p>
+              <div className="flex justify-between items-center text-xs text-gray-500 mt-3 px-2">
+                <span>報表產生日期: <strong>{new Date().toISOString().split('T')[0]}</strong></span>
+                <span>超標車輛總計: <strong className="text-red-600 font-black">{lowAvailabilityVehicles.length} 輛</strong></span>
+              </div>
+            </div>
+
+            {/* 表格區塊 */}
+            {lowAvailabilityVehicles.length === 0 ? (
+              <p className="text-center py-8 text-gray-500 font-bold">目前無任何可用率低於 95% 的車輛</p>
+            ) : (
+              <div className="border border-slate-300 rounded-xl overflow-hidden shadow-2xs">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="bg-slate-100 text-slate-900 font-extrabold border-b border-slate-300">
+                    <tr>
+                      <th className="p-2.5 border-r border-slate-300">車牌號碼</th>
+                      <th className="p-2.5 border-r border-slate-300">專案編號</th>
+                      <th className="p-2.5 border-r border-slate-300 text-center">累積停修</th>
+                      <th className="p-2.5 border-r border-slate-300 text-center">可用率 (Availability)</th>
+                      <th className="p-2.5 border-r border-slate-300 text-center">原保固到期日</th>
+                      <th className="p-2.5 border-r border-slate-300 text-center">展延月份</th>
+                      <th className="p-2.5 text-center bg-amber-50">修正後保固到期日</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {lowAvailabilityVehicles.map((v, idx) => {
+                      const avail = calculateAvailability(v.totalRepairDays || 0);
+                      const wInfo = getWarrantyInfo(v, v.totalRepairDays || 0);
+
+                      return (
+                        <tr key={v.id || idx} className="hover:bg-slate-50/80">
+                          <td className="p-2.5 border-r border-slate-200 font-black text-blue-950">{v.plate_number}</td>
+                          <td className="p-2.5 border-r border-slate-200 font-semibold">{v.project || '未設定'}</td>
+                          <td className="p-2.5 border-r border-slate-200 text-center font-extrabold text-red-600">{v.totalRepairDays || 0} 天</td>
+                          <td className="p-2.5 border-r border-slate-200 text-center font-black text-red-600">{avail}%</td>
+                          <td className="p-2.5 border-r border-slate-200 text-center font-medium text-gray-600">{wInfo.originalEndDateStr}</td>
+                          <td className="p-2.5 border-r border-slate-200 text-center font-bold text-amber-700">+{wInfo.extensionMonths} 個月</td>
+                          <td className="p-2.5 text-center font-black text-emerald-700 bg-amber-50/50">{wInfo.updatedEndDateStr}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 備註說明 */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-[11px] text-gray-600 space-y-1">
+              <p className="font-bold text-slate-800">📌 保固展延對數原則說明：</p>
+              <p>1. 車輛可用率公式：<code>Availability = (365 - 累積停修天數) / 365 × 100%</code>。</p>
+              <p>2. 當累積停修天數超過合約門檻 18.25 天 (即可用率低於 95%) 時，每滿 18.25 天自動延伸保固期 6 個月。</p>
+            </div>
+
+            {/* 底部按鈕列 (列印時會自動隱藏) */}
+            <div className="flex justify-between items-center border-t pt-4 print:hidden">
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(false)}
+                className="px-4 py-2 border rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+              >
+                關閉
+              </button>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  📥 匯出 CSV 檔
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintPDF}
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  🖨️ 列印 / 儲存為 PDF
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -667,7 +865,6 @@ export default function WorkOrdersSummary() {
               </div>
             </div>
 
-            {/* 🎯 Modal 底部按鈕區（包含新增的刪除工單按鈕） */}
             <div className="flex justify-between items-center border-t pt-3">
               <div className="flex gap-2">
                 <button
@@ -677,7 +874,6 @@ export default function WorkOrdersSummary() {
                 >
                   關閉
                 </button>
-                {/* 🎯 新增：刪除工單按鈕 */}
                 <button
                   type="button"
                   disabled={isDeleting}
