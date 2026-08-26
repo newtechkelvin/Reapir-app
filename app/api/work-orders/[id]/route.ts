@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
+// 輔助函數：將空字串 "" 或無效日期字串轉為 null，避免 PostgreSQL 日期型別崩潰
+const sanitizeDate = (val: any) => {
+  if (!val || typeof val !== 'string' || val.trim() === '') {
+    return null;
+  }
+  return val.trim();
+};
+
 // -------------------------------------------------------------
 // GET: 讀取單張工單詳細資料
 // -------------------------------------------------------------
@@ -49,6 +57,17 @@ export async function PATCH(
 
     // 分離 items 與主工單欄位
     const { items, ...orderPayload } = body;
+
+    // 🎯 核心修復：清理所有日期欄位，避免將 "" 傳給 DB date 型別
+    if ('completed_date' in orderPayload) {
+      orderPayload.completed_date = sanitizeDate(orderPayload.completed_date);
+    }
+    if ('pickup_return_date' in orderPayload) {
+      orderPayload.pickup_return_date = sanitizeDate(orderPayload.pickup_return_date);
+    }
+    if ('claim_form_date' in orderPayload) {
+      orderPayload.claim_form_date = sanitizeDate(orderPayload.claim_form_date);
+    }
 
     // 1. 更新主工單資料
     const { data: updatedOrder, error: orderError } = await supabaseAdmin
