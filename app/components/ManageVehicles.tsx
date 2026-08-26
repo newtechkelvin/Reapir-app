@@ -17,7 +17,7 @@ export default function ManageVehicles({
 }: ManageVehiclesProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 🎯 內建編輯 Modal 相關 State
+  // 內建編輯 Modal 相關 State
   const [editingVehicle, setEditingVehicle] = useState<any | null>(null);
   const [editPlateNumber, setEditPlateNumber] = useState('');
   const [editVin, setEditVin] = useState('');
@@ -30,7 +30,7 @@ export default function ManageVehicles({
   const [editVehicleLocation, setEditVehicleLocation] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 1. 計算本年合約累積停修天數與工單數
+  // 1. 計算累積停修天數與工單數
   const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || [];
     let totalOpenDays = 0;
@@ -72,14 +72,14 @@ export default function ManageVehicles({
     };
   };
 
-  // 2. 計算保固年度與自動加上展延月份的保固到期日
-  const getWarrantyYearInfo = (vehicle: any, totalOpenDays: number) => {
+  // 🎯 2. 修復：完全對齊動態逐年審查規則，單一年度上限僅算 +6 個月
+  const getWarrantyYearInfo = (vehicle: any) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
     if (!deliveryDateStr) {
       return {
         yearText: '第 1 年',
         startDateText: '未設定',
-        endDateText: vehicle.warranty_end_date || '未設定',
+        endDateText: vehicle.warranty_expiry_date || vehicle.warranty_end_date || '未設定',
         extensionMonths: 0,
       };
     }
@@ -87,35 +87,84 @@ export default function ManageVehicles({
     const startDate = new Date(deliveryDateStr);
     const now = new Date();
     
+    // 計算當前保固年度
     let diffYears = now.getFullYear() - startDate.getFullYear();
     const monthDiff = now.getMonth() - startDate.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < startDate.getDate())) {
       diffYears--;
     }
 
-    const yearNum = Math.max(1, Math.min(5, diffYears + 1));
+    const yearNum = Math.max(1, diffYears + 1);
 
-    let extensionMonths = 0;
-    if (totalOpenDays > 18.25) {
-      const extensionCount = Math.min(3, Math.floor(totalOpenDays / 18.25));
-      extensionMonths = extensionCount * 6;
+    // 取出原始到期日
+    let originalEndDate: Date;
+    if (vehicle.warranty_expiry_date || vehicle.warranty_end_date) {
+      originalEndDate = new Date(vehicle.warranty_expiry_date || vehicle.warranty_end_date);
+    } else {
+      originalEndDate = new Date(startDate);
+      originalEndDate.setFullYear(originalEndDate.getFullYear() + 3);
     }
 
-    const endDate = new Date(startDate);
-    endDate.setFullYear(endDate.getFullYear() + 4);
-    if (extensionMonths > 0) {
-      endDate.setMonth(endDate.getMonth() + extensionMonths);
+    const totalOriginalDays = Math.max(365, (originalEndDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const originalWarrantyYears = Math.round(totalOriginalDays / 365);
+
+    const allOrders = vehicle.workOrders || vehicle.work_orders || [];
+    let currentAssessmentStart = new Date(startDate);
+    let totalExtensionMonths = 0;
+    let extensionCount = 0;
+
+    const maxPeriods = originalWarrantyYears + 3;
+
+    // 逐期審核 (年度: 365天 / 展延期: 182.5天)
+    for (let period = 1; period <= maxPeriods; period++) {
+      if (extensionCount >= 3) break;
+
+      const isExtensionPeriod = period > originalWarrantyYears;
+      const periodDays = isExtensionPeriod ? 182.5 : 365;
+      const thresholdDays = periodDays * 0.05;
+
+      const periodStart = new Date(currentAssessmentStart);
+      const periodEnd = new Date(periodStart.getTime() + periodDays * 24 * 60 * 60 * 1000);
+
+      let periodRepairDays = 0;
+      allOrders.forEach((wo: any) => {
+        const sStr = wo.claim_form_date || wo.created_at;
+        if (!sStr) return;
+
+        const oStart = new Date(sStr);
+        const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+        const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
+
+        if (oStart < periodEnd && oEnd > periodStart) {
+          const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
+          const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
+          const diffDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
+          periodRepairDays += diffDays;
+        }
+      });
+
+      // 該期超標僅觸發 1 次 +6 個月
+      if (periodRepairDays > thresholdDays) {
+        extensionCount++;
+        totalExtensionMonths += 6;
+      }
+
+      currentAssessmentStart = periodEnd;
+    }
+
+    const updatedEndDate = new Date(originalEndDate);
+    if (totalExtensionMonths > 0) {
+      updatedEndDate.setMonth(updatedEndDate.getMonth() + totalExtensionMonths);
     }
 
     return {
       yearText: `第 ${yearNum} 年`,
       startDateText: startDate.toISOString().split('T')[0],
-      endDateText: vehicle.warranty_end_date || endDate.toISOString().split('T')[0],
-      extensionMonths,
+      endDateText: updatedEndDate.toISOString().split('T')[0],
+      extensionMonths: totalExtensionMonths,
     };
   };
 
-  // 🎯 開啟編輯 Modal
   const handleOpenEditModal = (e: React.MouseEvent, vehicle: any) => {
     e.preventDefault();
     e.stopPropagation();
@@ -136,7 +185,6 @@ export default function ManageVehicles({
     }
   };
 
-  // 🎯 儲存編輯資料
   const handleSaveVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVehicle?.id) return;
@@ -191,7 +239,6 @@ export default function ManageVehicles({
 
   return (
     <div className="space-y-6 text-black">
-      {/* 頂部搜尋與重新整理列 */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
         <div className="flex-1 w-full">
           <input
@@ -211,7 +258,6 @@ export default function ManageVehicles({
         </button>
       </div>
 
-      {/* 車輛卡片列表 */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在載入車輛主表資料...</div>
       ) : filteredVehicles.length === 0 ? (
@@ -222,7 +268,7 @@ export default function ManageVehicles({
         <div className="space-y-5">
           {filteredVehicles.map((vehicle, idx) => {
             const stats = getVehicleStats(vehicle);
-            const wInfo = getWarrantyYearInfo(vehicle, stats.totalOpenDays);
+            const wInfo = getWarrantyYearInfo(vehicle);
 
             const brandModelStr = [vehicle.brand, vehicle.model].filter(Boolean).join(' ');
 
@@ -231,7 +277,6 @@ export default function ManageVehicles({
                 key={vehicle.id || idx}
                 className="bg-white border rounded-2xl p-6 shadow-2xs border-slate-200 space-y-5 hover:shadow-sm transition-all"
               >
-                {/* 1. 車牌與專案標頭 */}
                 <div className="flex flex-wrap justify-between items-center gap-3 border-b pb-4 border-slate-200">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-2xl font-black text-blue-900 flex items-center gap-2">
@@ -249,7 +294,6 @@ export default function ManageVehicles({
                     )}
                   </div>
 
-                  {/* 🎯 點擊直接開啟內建 Modal */}
                   <button
                     type="button"
                     onClick={(e) => handleOpenEditModal(e, vehicle)}
@@ -259,7 +303,6 @@ export default function ManageVehicles({
                   </button>
                 </div>
 
-                {/* 2. 三大核心數據統計卡片 */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-1">
                     <span className="text-xs text-gray-500 font-bold block">當前保固年度</span>
@@ -275,7 +318,8 @@ export default function ManageVehicles({
                       </strong>
                       <span className="text-xs text-gray-400 font-bold">/ 18.25 天</span>
                     </div>
-                    {stats.isExceeded ? (
+                    {/* 🎯 正確顯示實際精算的展延月份 */}
+                    {wInfo.extensionMonths > 0 ? (
                       <span className="text-[11px] font-bold text-red-600 flex items-center gap-1 pt-1">
                         ⚠️ 已觸發保固延長 ({wInfo.extensionMonths} 個月)
                       </span>
@@ -296,7 +340,6 @@ export default function ManageVehicles({
                   </div>
                 </div>
 
-                {/* 3. 車輛詳細資訊 8 欄位網格 */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-y-3 gap-x-6 text-xs border-t pt-4 border-slate-100">
                   <div>
                     <span className="text-gray-400 block font-medium">VIN 碼</span>
@@ -346,7 +389,7 @@ export default function ManageVehicles({
         </div>
       )}
 
-      {/* 🎯 內建編輯車輛 Modal 彈窗 */}
+      {/* 內建編輯車輛 Modal 彈窗 */}
       {editingVehicle && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
