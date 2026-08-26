@@ -58,7 +58,6 @@ export default function WorkOrdersSummary() {
     return parseFloat(avail.toFixed(2));
   };
 
-  // 計算展延保固資訊
   const getWarrantyInfo = (vehicle: any, totalRepairDays: number) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
     const startDate = deliveryDateStr ? new Date(deliveryDateStr) : new Date();
@@ -126,7 +125,6 @@ export default function WorkOrdersSummary() {
 
   const totalOpenOrdersCount = vehicles.reduce((sum, v) => sum + (v.workOrders?.length || 0), 0);
 
-  // 🎯 專門過濾出可用率低於 95% (停修天數 > 18.25 天) 的車輛
   const lowAvailabilityVehicles = vehicles.filter((v) => {
     const avail = calculateAvailability(v.totalRepairDays || 0);
     return avail < 95;
@@ -326,7 +324,6 @@ export default function WorkOrdersSummary() {
     }
   };
 
-  // 🎯 匯出 CSV 功能 (內建 UTF-8 BOM 避免 Excel 亂碼)
   const handleExportCSV = () => {
     if (lowAvailabilityVehicles.length === 0) {
       alert('當前沒有可用率低於 95% 的車輛資料可供匯出');
@@ -381,13 +378,46 @@ export default function WorkOrdersSummary() {
     document.body.removeChild(link);
   };
 
-  // 🎯 列印 / 另存 PDF 功能
   const handlePrintPDF = () => {
     window.print();
   };
 
   return (
     <div className="space-y-6 text-black">
+      {/* 🎯 專門針對列印 (Print / Save as PDF) 最佳化的 CSS 樣式 */}
+      <style jsx global>{`
+        @media print {
+          /* 隱藏主頁面內容、導航列與外層 DOM */
+          body * {
+            visibility: hidden !important;
+          }
+
+          /* 僅顯示有 print-modal-content 標記的對數報表內容 */
+          .print-modal-content,
+          .print-modal-content * {
+            visibility: visible !important;
+          }
+
+          /* 將 Modal 定位設定為列印頁面的頂端與滿版 */
+          .print-modal-content {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 20px !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+
+          /* 隱藏彈窗內不需列印的按鈕 */
+          .print-hidden-element {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      {/* 主頁面 UI 區塊 */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
         <div className="flex items-center gap-4">
           <div>
@@ -401,7 +431,6 @@ export default function WorkOrdersSummary() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {/* 🎯 新增：開啟 95% 超標對數報表按鈕 */}
           <button
             type="button"
             onClick={() => setShowAuditModal(true)}
@@ -530,12 +559,12 @@ export default function WorkOrdersSummary() {
         </div>
       )}
 
-      {/* 🎯 專屬對數報表 Modal (支援 PDF 列印與 CSV 導出) */}
+      {/* 🎯 專屬對數報表 Modal (帶有 print-modal-content Class) */}
       {showAuditModal && (
-        <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
-          <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-4xl w-full p-6 print:p-0 space-y-6 print:space-y-4 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="print-modal-content bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto text-black">
             
-            {/* 報表抬頭 (PDF 列印時會精美呈現) */}
+            {/* 報表抬頭 */}
             <div className="text-center border-b-2 border-slate-900 pb-3">
               <h1 className="text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
               <p className="text-xs text-slate-700 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
@@ -594,8 +623,8 @@ export default function WorkOrdersSummary() {
               <p>2. 當累積停修天數超過合約門檻 18.25 天 (即可用率低於 95%) 時，每滿 18.25 天自動延伸保固期 6 個月。</p>
             </div>
 
-            {/* 底部按鈕列 (列印時會自動隱藏) */}
-            <div className="flex justify-between items-center border-t pt-4 print:hidden">
+            {/* 🎯 底部按鈕區 (標記 print-hidden-element，列印時會自動隱藏) */}
+            <div className="flex justify-between items-center border-t pt-4 print-hidden-element">
               <button
                 type="button"
                 onClick={() => setShowAuditModal(false)}
@@ -627,16 +656,16 @@ export default function WorkOrdersSummary() {
 
       {/* 工單詳細 Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
-          <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto text-black">
             
-            <div className="text-center border-b-2 border-slate-900 pb-2 print:pb-2">
-              <h1 className="text-2xl print:text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
-              <p className="text-xs print:text-sm text-slate-700 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
-              <p className="text-sm print:text-base font-extrabold text-blue-950 mt-1.5 bg-slate-100 print:bg-slate-200 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
+            <div className="text-center border-b-2 border-slate-900 pb-2">
+              <h1 className="text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
+              <p className="text-xs text-slate-700 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
+              <p className="text-sm font-extrabold text-blue-950 mt-1.5 bg-slate-100 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
             </div>
 
-            <div className="flex justify-between items-center border-b pb-2 print:hidden">
+            <div className="flex justify-between items-center border-b pb-2">
               <div className="flex items-center gap-3">
                 <span className="font-bold text-blue-900 text-lg">📋 {selectedOrder.order_number || 'WO-未知'}</span>
                 <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-amber-100 text-amber-800">
