@@ -6,7 +6,7 @@ interface ManageVehiclesProps {
   vehicles: any[];
   isLoading: boolean;
   onRefresh: () => void;
-  onEditVehicle: (vehicle: any) => void;
+  onEditVehicle?: (vehicle: any) => void;
 }
 
 export default function ManageVehicles({
@@ -16,6 +16,19 @@ export default function ManageVehicles({
   onEditVehicle,
 }: ManageVehiclesProps) {
   const [searchTerm, setSearchTerm] = useState('');
+
+  // 🎯 內建編輯 Modal 相關 State
+  const [editingVehicle, setEditingVehicle] = useState<any | null>(null);
+  const [editPlateNumber, setEditPlateNumber] = useState('');
+  const [editVin, setEditVin] = useState('');
+  const [editProject, setEditProject] = useState('');
+  const [editBrand, setEditBrand] = useState('');
+  const [editModel, setEditModel] = useState('');
+  const [editWarrantyType, setEditWarrantyType] = useState('government');
+  const [editDeliveryDate, setEditDeliveryDate] = useState('');
+  const [editGarageLocation, setEditGarageLocation] = useState('');
+  const [editVehicleLocation, setEditVehicleLocation] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 1. 計算本年合約累積停修天數與工單數
   const getVehicleStats = (vehicle: any) => {
@@ -102,13 +115,65 @@ export default function ManageVehicles({
     };
   };
 
-  const handleEditClick = (e: React.MouseEvent, vehicle: any) => {
+  // 🎯 開啟編輯 Modal
+  const handleOpenEditModal = (e: React.MouseEvent, vehicle: any) => {
     e.preventDefault();
     e.stopPropagation();
-    if (typeof onEditVehicle === 'function') {
+
+    setEditingVehicle(vehicle);
+    setEditPlateNumber(vehicle.plate_number || '');
+    setEditVin(vehicle.vin || '');
+    setEditProject(vehicle.project || '');
+    setEditBrand(vehicle.brand || '');
+    setEditModel(vehicle.model || '');
+    setEditWarrantyType(vehicle.warranty_type || 'government');
+    setEditDeliveryDate(vehicle.delivery_date || '');
+    setEditGarageLocation(vehicle.garage_location || vehicle.location || '');
+    setEditVehicleLocation(vehicle.vehicle_location || '');
+
+    if (onEditVehicle) {
       onEditVehicle(vehicle);
-    } else {
-      console.warn('onEditVehicle function is not provided in props');
+    }
+  };
+
+  // 🎯 儲存編輯資料
+  const handleSaveVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVehicle?.id) return;
+
+    try {
+      setIsSubmitting(true);
+      const payload = {
+        plate_number: editPlateNumber.trim(),
+        vin: editVin.trim(),
+        project: editProject.trim(),
+        brand: editBrand.trim(),
+        model: editModel.trim(),
+        warranty_type: editWarrantyType,
+        delivery_date: editDeliveryDate,
+        garage_location: editGarageLocation.trim(),
+        vehicle_location: editVehicleLocation.trim(),
+      };
+
+      const res = await fetch(`/api/vehicles/${editingVehicle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        alert('車輛資訊已順利更新！');
+        setEditingVehicle(null);
+        onRefresh();
+      } else {
+        const errData = await res.json().catch(() => null);
+        alert(`更新失敗: ${errData?.error || errData?.message || '請檢查 API 設定'}`);
+      }
+    } catch (err) {
+      console.error('更新車輛資訊失敗:', err);
+      alert('網路連線失敗，請稍後再試');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -184,10 +249,10 @@ export default function ManageVehicles({
                     )}
                   </div>
 
-                  {/* 🎯 修正處：防止事件冒泡並確保呼叫 onEditVehicle */}
+                  {/* 🎯 點擊直接開啟內建 Modal */}
                   <button
                     type="button"
-                    onClick={(e) => handleEditClick(e, vehicle)}
+                    onClick={(e) => handleOpenEditModal(e, vehicle)}
                     className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1 active:scale-95"
                   >
                     ✏️ 編輯車輛資訊
@@ -278,6 +343,140 @@ export default function ManageVehicles({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 🎯 內建編輯車輛 Modal 彈窗 */}
+      {editingVehicle && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-lg font-black text-slate-900">✏️ 編輯車輛主表資訊</h3>
+              <button
+                type="button"
+                onClick={() => setEditingVehicle(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVehicle} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">車牌號碼 *</label>
+                  <input
+                    type="text"
+                    value={editPlateNumber}
+                    onChange={(e) => setEditPlateNumber(e.target.value.toUpperCase())}
+                    className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">VIN 碼</label>
+                  <input
+                    type="text"
+                    value={editVin}
+                    onChange={(e) => setEditVin(e.target.value)}
+                    className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">專案名稱</label>
+                  <input
+                    type="text"
+                    value={editProject}
+                    onChange={(e) => setEditProject(e.target.value)}
+                    className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">品牌</label>
+                  <input
+                    type="text"
+                    value={editBrand}
+                    onChange={(e) => setEditBrand(e.target.value)}
+                    className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">型號</label>
+                  <input
+                    type="text"
+                    value={editModel}
+                    onChange={(e) => setEditModel(e.target.value)}
+                    className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">合約類型</label>
+                  <select
+                    value={editWarrantyType}
+                    onChange={(e) => setEditWarrantyType(e.target.value)}
+                    className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="government">🏛️ 政府合約 (EMSD)</option>
+                    <option value="general">🚗 散車保固 / 一般</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">交車日期 (Delivery)</label>
+                  <input
+                    type="date"
+                    value={editDeliveryDate}
+                    onChange={(e) => setEditDeliveryDate(e.target.value)}
+                    className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">車房位置</label>
+                  <input
+                    type="text"
+                    value={editGarageLocation}
+                    onChange={(e) => setEditGarageLocation(e.target.value)}
+                    placeholder="例如：機電 - 九龍灣1/F"
+                    className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block font-bold text-gray-700 mb-1">車輛位置</label>
+                  <input
+                    type="text"
+                    value={editVehicleLocation}
+                    onChange={(e) => setEditVehicleLocation(e.target.value)}
+                    placeholder="例如：泊位 B2"
+                    className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setEditingVehicle(null)}
+                  className="px-4 py-2 border rounded-xl text-gray-600 font-bold hover:bg-gray-100 cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? '儲存中...' : '💾 儲存修改'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
