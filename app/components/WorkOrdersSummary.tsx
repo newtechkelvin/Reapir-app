@@ -29,7 +29,6 @@ export default function WorkOrdersSummary() {
     fetchGovernmentVehicles();
   }, []);
 
-  // 計算單張工單停修天數
   const calculateDaysForOrder = (wo: any) => {
     const isCompleted = (wo.status || '').toLowerCase() === 'completed';
     const sStr = wo.claim_form_date || wo.created_at;
@@ -41,7 +40,6 @@ export default function WorkOrdersSummary() {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // 🎯 修正核心：計算車輛的全年「總累積停修天數」(Open + Completed 工單)
   const calculateTotalRepairDaysForVehicle = (orders: any[]) => {
     let total = 0;
     orders.forEach((wo) => {
@@ -50,7 +48,6 @@ export default function WorkOrdersSummary() {
     return total;
   };
 
-  // 🎯 Availability 公式修正：100% - (總停修天數 / 365天)*100%
   const calculateAvailability = (totalRepairDays: number) => {
     if (totalRepairDays <= 0) return 100;
     const avail = Math.max(0, 100 - (totalRepairDays / 365) * 100);
@@ -71,12 +68,10 @@ export default function WorkOrdersSummary() {
           })
           .map((v: any) => {
             const allOrders = v.workOrders || v.work_orders || [];
-            // 只篩選出目前 Open 狀態的工單用於清單顯示
             const openOnlyOrders = allOrders.filter(
               (o: any) => (o.status || 'Open').toLowerCase() === 'open'
             );
             
-            // 🎯 計算包含舊工單的總停修天數
             const totalRepairDays = calculateTotalRepairDaysForVehicle(allOrders);
 
             return {
@@ -86,10 +81,8 @@ export default function WorkOrdersSummary() {
               totalRepairDays,
             };
           })
-          // 僅顯示有 Open 工單的車輛
           .filter((v: any) => (v.workOrders || []).length > 0);
 
-        // 按總累積停修天數由高至低排序
         govVehicles.sort((a: any, b: any) => b.totalRepairDays - a.totalRepairDays);
 
         setVehicles(govVehicles);
@@ -269,7 +262,6 @@ export default function WorkOrdersSummary() {
 
   return (
     <div className="space-y-6 text-black">
-      {/* 頂部標題 */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
         <div className="flex items-center gap-4">
           <div>
@@ -300,7 +292,6 @@ export default function WorkOrdersSummary() {
         </div>
       </div>
 
-      {/* 車輛主卡片展示列表 */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在載入政府合約 Summary...</div>
       ) : filteredVehicles.length === 0 ? (
@@ -314,7 +305,6 @@ export default function WorkOrdersSummary() {
             const totalRepairDays = vehicle.totalRepairDays || 0;
             const availability = calculateAvailability(totalRepairDays);
             
-            // 接近 95% (95.00% ~ 96.50%): 閃爍提醒
             const isNearWarning = availability >= 95 && availability <= 96.5;
             const isPassed = availability < 95;
 
@@ -405,7 +395,7 @@ export default function WorkOrdersSummary() {
         </div>
       )}
 
-      {/* 工單詳細卡片 Modal */}
+      {/* 工單詳細 Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
           <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
@@ -463,6 +453,7 @@ export default function WorkOrdersSummary() {
                     <option value="機電 - 屯門">機電 - 屯門</option>
                     <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
                     <option value="機電 - 柴灣">機電 - 柴灣</option>
+                    <option value="機電 - 芬園">機電 - 芬園</option>
                     <option value="車行">車行</option>
                   </select>
                 </div>

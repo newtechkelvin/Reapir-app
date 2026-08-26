@@ -1,567 +1,485 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 
-interface CreateWorkOrderProps {
-  handleCreateOrder: (e: React.FormEvent) => void;
-  plateNumber: string;
-  setPlateNumber: (v: string) => void;
-  vin: string;
-  setVin: (v: string) => void;
-  project: string;
-  setProject: (v: string) => void;
-  brand: string;
-  setBrand: (v: string) => void;
-  model: string;
-  setModel: (v: string) => void;
-  location: string;
-  setLocation: (v: string) => void;
-  claimFormDate: string;
-  setClaimFormDate: (v: string) => void;
-  description: string;
-  setDescription: (v: string) => void;
-  items: any[];
-  setItems?: (items: any[]) => void;
-  handleItemChange: (index: number, field: string, value: any) => void;
-  removeItem: (index: number) => void;
-  addItem: () => void;
-  setShowPasteModal: (v: boolean) => void;
-  isSubmitting: boolean;
-  warrantyType?: string;
-  setWarrantyType?: (v: string) => void;
-  pickupReturnDate?: string;
-  setPickupReturnDate?: (v: string) => void;
+export interface CreateWorkOrderProps {
+  onSuccess?: () => void;
+  vehicles?: any[];
+  [key: string]: any; // 支援 app/page.tsx 傳入的其他 state 與 handler
 }
 
-const REPAIR_DICT: { [key: string]: { zh: string; type: string } } = {
-  brake: { zh: '煞車系統/更換煞車皮', type: '更換零件' },
-  pad: { zh: '煞車皮/煞車片', type: '更換零件' },
-  oil: { zh: '更換機油', type: '進廠維修' },
-  filter: { zh: '更換機油/空氣濾芯', type: '更換零件' },
-  engine: { zh: '檢查/維修引擎', type: '進廠維修' },
-  tyre: { zh: '檢查/更換輪胎', type: '更換零件' },
-  tire: { zh: '檢查/更換輪胎', type: '更換零件' },
-  battery: { zh: '測試/更換汽車電池', type: '更換零件' },
-  coolant: { zh: '檢查水箱/冷卻液', type: '進廠維修' },
-  light: { zh: '更換車燈/燈泡', type: '更換零件' },
-  recall: { zh: 'Recall 召回維修項目', type: 'Recall項目' },
-  charge: { zh: '收費維修項目', type: '收費項目' },
-  leak: { zh: '檢查漏油/漏水問題', type: '進廠維修' },
-};
-
 export default function CreateWorkOrder(props: CreateWorkOrderProps) {
-  const [isScanning, setIsScanning] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState('');
+  const { onSuccess, vehicles = [] } = props;
 
-  // 散車訊息一鍵解析 Modal State
+  const [warrantyType, setWarrantyType] = useState<'government' | 'general'>('government');
+  const [plateNumber, setPlateNumber] = useState('');
+  const [vin, setVin] = useState('');
+  const [project, setProject] = useState('');
+  const [brand, setBrand] = useState('');
+  const [model, setModel] = useState('');
+  
+  const [garageLocation, setGarageLocation] = useState('機電 - 九龍灣1/F');
+  const [isCustomGarage, setIsCustomGarage] = useState(false);
+
+  const [vehicleLocation, setVehicleLocation] = useState('');
+  const [pickupReturnDate, setPickupReturnDate] = useState('');
+  const [claimFormDate, setClaimFormDate] = useState('');
+  const [description, setDescription] = useState('');
+  const [items, setItems] = useState<Array<{ type: string; item_name: string; notes?: string }>>([
+    { type: '進廠維修', item_name: '', notes: '' },
+  ]);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [smartText, setSmartText] = useState('');
   const [showSmartPasteModal, setShowSmartPasteModal] = useState(false);
-  const [smartPasteText, setSmartPasteText] = useState('');
 
-  const loadTesseract = async () => {
-    if ((window as any).Tesseract) return (window as any).Tesseract;
+  const GARAGE_OPTIONS = [
+    '機電 - 九龍灣1/F',
+    '機電 - 九龍灣2/F',
+    '機電 - 屯門',
+    '機電 - 小蠔灣',
+    '機電 - 柴灣',
+    '機電 - 芬園',
+    '車行',
+  ];
 
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-      script.onload = () => resolve((window as any).Tesseract);
-      script.onerror = () => reject(new Error('無法載入 OCR 組件'));
-      document.head.appendChild(script);
-    });
-  };
+  const handlePlateChange = (val: string) => {
+    const upperVal = val.toUpperCase();
+    setPlateNumber(upperVal);
 
-  const translateToZh = async (text: string) => {
-    try {
-      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|zh-TW`);
-      if (res.ok) {
-        const data = await res.json();
-        const translated = data?.responseData?.translatedText;
-        if (translated && !translated.includes('MYMEMORY')) {
-          return translated;
-        }
-      }
-    } catch (e) {
-      console.warn('線上翻譯失敗:', e);
-    }
-    return null;
-  };
-
-  const processImageFile = useCallback(async (file: File) => {
-    if (!file || !file.type.startsWith('image/')) return;
-
-    setIsScanning(true);
-    setOcrProgress('正在初始化照片 OCR 辨識引擎...');
-
-    try {
-      const Tesseract = await loadTesseract();
-      setOcrProgress('正在讀取相片文字 (OCR Scanning)...');
-
-      const result = await Tesseract.recognize(file, 'eng', {
-        logger: (m: any) => {
-          if (m.status === 'recognizing text') {
-            setOcrProgress(`照片辨識進度: ${Math.round((m.progress || 0) * 100)}%`);
-          }
-        },
-      });
-
-      const rawText = result?.data?.text || '';
-      setOcrProgress('辨識完成，正在翻譯與拆解項目...');
-
-      const lines = rawText
-        .split('\n')
-        .map((l: string) => l.trim())
-        .filter((l: string) => l.length > 3 && !/^\d+$/.test(l));
-
-      if (lines.length === 0) {
-        alert('無法從照片中辨識出清晰文字，請確保相片字跡清晰再試一次！');
-        return;
-      }
-
-      const parsedItems: any[] = [];
-
-      for (const line of lines.slice(0, 10)) {
-        let matchedType = '進廠維修';
-        let chineseName = '';
-
-        const lowerLine = line.toLowerCase();
-        Object.keys(REPAIR_DICT).forEach((kw) => {
-          if (lowerLine.includes(kw)) {
-            matchedType = REPAIR_DICT[kw].type;
-            if (!chineseName) chineseName = REPAIR_DICT[kw].zh;
-          }
-        });
-
-        const onlineZh = await translateToZh(line);
-
-        let finalName = '';
-        if (chineseName && onlineZh) {
-          finalName = `${onlineZh} (${chineseName})`;
-        } else if (onlineZh) {
-          finalName = `${onlineZh} (${line})`;
-        } else if (chineseName) {
-          finalName = `${chineseName} (${line})`;
-        } else {
-          finalName = line;
-        }
-
-        parsedItems.push({
-          type: matchedType,
-          item_name: finalName,
-        });
-      }
-
-      if (parsedItems.length > 0) {
-        if (confirm(`成功辨識並翻譯了 ${parsedItems.length} 個項目，是否自動填入表格中？`)) {
-          let newAllItems: any[] = [];
-          if (props.items.length === 1 && !props.items[0].item_name) {
-            newAllItems = [...parsedItems];
+    if (vehicles && vehicles.length > 0) {
+      const match = vehicles.find(
+        (v) => v.plate_number && v.plate_number.toUpperCase() === upperVal
+      );
+      if (match) {
+        if (match.vin) setVin(match.vin);
+        if (match.project) setProject(match.project);
+        if (match.brand) setBrand(match.brand);
+        if (match.model) setModel(match.model);
+        if (match.garage_location) {
+          if (GARAGE_OPTIONS.includes(match.garage_location)) {
+            setGarageLocation(match.garage_location);
+            setIsCustomGarage(false);
           } else {
-            newAllItems = [...props.items, ...parsedItems];
-          }
-
-          if (props.setItems) {
-            props.setItems(newAllItems);
-          } else {
-            newAllItems.forEach((item, idx) => {
-              props.handleItemChange(idx, 'type', item.type);
-              props.handleItemChange(idx, 'item_name', item.item_name);
-            });
-          }
-
-          alert('相片維修項目已全數同步匯入表單！');
-        }
-      }
-    } catch (err: any) {
-      console.error('OCR 辨識失敗:', err);
-      alert(`照片讀取失敗: ${err.message || '請確認圖片清晰度'}`);
-    } finally {
-      setIsScanning(false);
-      setOcrProgress('');
-    }
-  }, [props]);
-
-  useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      const clipboardItems = e.clipboardData?.items;
-      if (!clipboardItems) return;
-
-      for (let i = 0; i < clipboardItems.length; i++) {
-        const item = clipboardItems[i];
-        if (item.type.indexOf('image') !== -1) {
-          const blob = item.getAsFile();
-          if (blob) {
-            e.preventDefault();
-            processImageFile(blob);
-            break;
+            setGarageLocation(match.garage_location);
+            setIsCustomGarage(true);
           }
         }
       }
-    };
-
-    window.addEventListener('paste', handlePaste);
-    return () => {
-      window.removeEventListener('paste', handlePaste);
-    };
-  }, [processImageFile]);
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processImageFile(file);
-      e.target.value = '';
     }
   };
 
-  // 核心：智慧解析散車文字訊息
-  const handleParseSmartPaste = () => {
-    if (!smartPasteText.trim()) return;
+  const handleAddItem = () => {
+    setItems([...items, { type: '進廠維修', item_name: '', notes: '' }]);
+  };
 
-    const lines = smartPasteText.split(/\r\n|\n/);
-    let isParsingItems = false;
-    const extractedItems: any[] = [];
+  const handleRemoveItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
 
-    lines.forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
+  const handleItemChange = (index: number, field: string, value: string) => {
+    const updated = [...items];
+    (updated[index] as any)[field] = value;
+    setItems(updated);
+  };
 
-      const parseDateStr = (str: string) => {
-        const match = str.match(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/);
-        if (match) {
-          const parts = match[0].split(/[-/.]/);
-          return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-        }
-        return '';
+  const handleParseSmartText = () => {
+    if (!smartText.trim()) return;
+
+    const plateMatch = smartText.match(/([A-Z]{1,2}\s?\d{1,4})/i);
+    if (plateMatch) handlePlateChange(plateMatch[1].replace(/\s+/g, ''));
+
+    const vinMatch = smartText.match(/([A-HJ-NPR-Z0-9]{17})/i);
+    if (vinMatch) setVin(vinMatch[1].toUpperCase());
+
+    const dateMatch = smartText.match(/(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
+    if (dateMatch) {
+      const formattedDate = dateMatch[1].replace(/[/.]/g, '-');
+      setPickupReturnDate(formattedDate);
+      setClaimFormDate(formattedDate);
+    }
+
+    setDescription(smartText.trim());
+    setShowSmartPasteModal(false);
+    setSmartText('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (props.handleCreateOrder) {
+      return props.handleCreateOrder(e);
+    }
+
+    if (!plateNumber.trim()) {
+      alert('請輸入車牌號碼');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      const payload = {
+        warranty_type: warrantyType,
+        plate_number: plateNumber.trim(),
+        vin: vin.trim(),
+        project: project.trim(),
+        brand: brand.trim(),
+        model: model.trim(),
+        garage_location: garageLocation.trim(),
+        vehicle_location: vehicleLocation.trim(),
+        pickup_return_date: pickupReturnDate,
+        claim_form_date: claimFormDate,
+        description: description.trim(),
+        items: items.filter((it) => it.item_name.trim() !== ''),
       };
 
-      if (/^車牌[：:]/i.test(trimmed)) {
-        props.setPlateNumber(trimmed.replace(/^車牌[：:]/i, '').trim());
-      } else if (/^品牌[：:]/i.test(trimmed)) {
-        props.setBrand(trimmed.replace(/^品牌[：:]/i, '').trim());
-      } else if (/^型號[：:]/i.test(trimmed)) {
-        props.setModel(trimmed.replace(/^型號[：:]/i, '').trim());
-      } else if (/^VIN[：:]/i.test(trimmed) || /^車身號碼[：:]/i.test(trimmed)) {
-        props.setVin(trimmed.replace(/^(VIN|車身號碼)[：:]/i, '').trim());
-      } else if (/^專案[：:]/i.test(trimmed) || /^專案名稱[：:]/i.test(trimmed)) {
-        props.setProject(trimmed.replace(/^(專案|專案名稱)[：:]/i, '').trim());
-      } else if (/^取車位置[：:]/i.test(trimmed) || /^位置[：:]/i.test(trimmed)) {
-        props.setLocation(trimmed.replace(/^(取車位置|位置)[：:]/i, '').trim());
-      } else if (/^通知日期[：:]/i.test(trimmed) || /^維修通知日期[：:]/i.test(trimmed)) {
-        const d = parseDateStr(trimmed);
-        if (d) props.setClaimFormDate(d);
-      } else if (/^(取車日期|到廠日期|取車\/到廠日期)[：:]/i.test(trimmed)) {
-        const d = parseDateStr(trimmed);
-        if (d && props.setPickupReturnDate) props.setPickupReturnDate(d);
-      } else if (/^狀況描述[：:]/i.test(trimmed) || /^描述[：:]/i.test(trimmed) || /^故障描述[：:]/i.test(trimmed)) {
-        props.setDescription(trimmed.replace(/^(狀況描述|描述|故障描述)[：:]/i, '').trim());
-      } else if (/^維修項目[：:]/i.test(trimmed) || /^維修明細[：:]/i.test(trimmed)) {
-        isParsingItems = true;
-      } else if (isParsingItems || /^[-*•\d.]/.test(trimmed)) {
-        const itemName = trimmed.replace(/^[-*•\d.]\s*/, '').trim();
-        if (itemName) {
-          extractedItems.push({ type: '進廠維修', item_name: itemName });
-        }
-      }
-    });
+      const res = await fetch('/api/work-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    if (extractedItems.length > 0) {
-      if (props.setItems) {
-        props.setItems(extractedItems);
+      if (res.ok) {
+        alert('工單開立成功！');
+        setPlateNumber('');
+        setVin('');
+        setProject('');
+        setBrand('');
+        setModel('');
+        setGarageLocation('機電 - 九龍灣1/F');
+        setIsCustomGarage(false);
+        setVehicleLocation('');
+        setPickupReturnDate('');
+        setClaimFormDate('');
+        setDescription('');
+        setItems([{ type: '進廠維修', item_name: '', notes: '' }]);
+
+        if (onSuccess) onSuccess();
+      } else {
+        const err = await res.json().catch(() => null);
+        alert(`開立失敗: ${err?.error || err?.message || '伺服器錯誤'}`);
       }
+    } catch (err) {
+      console.error('開立工單失敗:', err);
+      alert('網路連線失敗，請稍後再試');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setSmartPasteText('');
-    setShowSmartPasteModal(false);
-    alert('散車通訊訊息已成功解析並自動填入表單！');
   };
 
-  const isSanChe = props.warrantyType === 'General' || props.warrantyType === '散車';
-
   return (
-    <form onSubmit={props.handleCreateOrder} className="space-y-6 text-black">
-      <div className="border-b pb-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+    <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6 text-black">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b pb-4 border-slate-200">
         <div>
-          <h2 className="text-xl font-bold text-gray-800">開立維修工單</h2>
-          <p className="text-xs text-gray-500 mt-0.5">選擇「散車保固」的工單將會歸類至獨立的散車 Summary 頁面</p>
+          <h2 className="text-xl font-black text-slate-900">➕ 開立車輛維修工單</h2>
+          <p className="text-xs text-slate-500 mt-1">填寫維修內容與車輛資料以建立新工單</p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 散車專屬：一鍵貼上通訊軟體訊息按鈕 */}
-          {isSanChe && (
-            <button
-              type="button"
-              onClick={() => setShowSmartPasteModal(true)}
-              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
-            >
-              📋 一鍵貼上報修訊息文字 (自動填單)
-            </button>
-          )}
-
-          {/* 保固與車輛類別選擇器 */}
-          {props.setWarrantyType && (
-            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-300">
-              <span className="text-xs font-bold text-slate-700 pl-2">保固類別:</span>
-              <button
-                type="button"
-                onClick={() => props.setWarrantyType && props.setWarrantyType('Government')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  props.warrantyType === 'Government'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                🏛️ 政府合約專案
-              </button>
-              <button
-                type="button"
-                onClick={() => props.setWarrantyType && props.setWarrantyType('General')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  isSanChe
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                🚗 散車保固
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">車牌號碼 *</label>
-          <input
-            type="text"
-            required
-            value={props.plateNumber}
-            onChange={(e) => props.setPlateNumber(e.target.value)}
-            placeholder="AM1234"
-            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500 font-bold"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">車輛品牌 (Brand)</label>
-          <input
-            type="text"
-            value={props.brand}
-            onChange={(e) => props.setBrand(e.target.value)}
-            placeholder="例如：Toyota / Isuzu"
-            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">車輛型號 (Model)</label>
-          <input
-            type="text"
-            value={props.model}
-            onChange={(e) => props.setModel(e.target.value)}
-            placeholder="例如：Coaster / N-Series"
-            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">VIN 碼</label>
-          <input
-            type="text"
-            value={props.vin}
-            onChange={(e) => props.setVin(e.target.value)}
-            placeholder="車身號碼"
-            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">專案名稱 / 備註</label>
-          <input
-            type="text"
-            value={props.project}
-            onChange={(e) => props.setProject(e.target.value)}
-            placeholder={isSanChe ? '散車客戶 / 項目' : '例如：專案 A'}
-            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* 動態日期標籤 */}
-        <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">
-            {isSanChe ? '維修通知日期' : 'Claim Form 日期 (工單停修起算)'}
-          </label>
-          <input
-            type="date"
-            value={props.claimFormDate}
-            onChange={(e) => props.setClaimFormDate(e.target.value)}
-            className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* 散車專屬：取車/到廠日期 */}
-        {isSanChe && props.setPickupReturnDate && (
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">取車/到廠日期</label>
-            <input
-              type="date"
-              value={props.pickupReturnDate || ''}
-              onChange={(e) => props.setPickupReturnDate && props.setPickupReturnDate(e.target.value)}
-              className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        )}
-
-        {/* 動態車房/車輛位置輸入欄 */}
-        <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1">
-            {isSanChe ? '取車位置' : '車房位置'}
-          </label>
-          {isSanChe ? (
-            <input
-              type="text"
-              value={props.location}
-              onChange={(e) => props.setLocation(e.target.value)}
-              placeholder="院舍 / 客人自行送廠"
-              className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500 font-semibold"
-            />
-          ) : (
-            <select
-              value={props.location}
-              onChange={(e) => props.setLocation(e.target.value)}
-              className="w-full p-2.5 border rounded-lg text-sm text-black bg-white focus:ring-2 focus:ring-blue-500 font-semibold"
-            >
-              <option value="">-- 請選擇車房位置 --</option>
-              <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
-              <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
-              <option value="機電 - 屯門">機電 - 屯門</option>
-              <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
-              <option value="機電 - 柴灣">機電 - 柴灣</option>
-              <option value="車行">車行</option>
-            </select>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-gray-700 mb-1">狀況與維修描述</label>
-        <textarea
-          rows={3}
-          value={props.description}
-          onChange={(e) => props.setDescription(e.target.value)}
-          placeholder="請詳細描述車輛故障狀況或維修需求..."
-          className="w-full p-2.5 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      {/* 維修項目區塊 */}
-      <div className="space-y-3 border-t pt-4">
-        <div className="flex flex-wrap justify-between items-center gap-2">
-          <h3 className="text-sm font-bold text-gray-800">維修與零件項目</h3>
-          
-          <div className="flex gap-2">
-            <label className="text-xs bg-blue-50 text-blue-800 border border-blue-300 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100 cursor-pointer flex items-center gap-1 shadow-2xs">
-              {isScanning ? `⏳ ${ocrProgress}` : '📷 拍照 / Ctrl+V 貼上維修單照片 (自動翻譯中文字)'}
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleImageUpload}
-                disabled={isScanning}
-                className="hidden"
-              />
-            </label>
-
-            <button
-              type="button"
-              onClick={() => props.setShowPasteModal(true)}
-              className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 cursor-pointer"
-            >
-              快速貼上 Excel 項目
-            </button>
-          </div>
-        </div>
-
-        <div className="text-[11px] text-slate-500 bg-slate-100 p-2 rounded-lg border border-dashed border-slate-300 flex items-center justify-between">
-          <span>💡 提示：您可以截圖紙本維修單後，直接在頁面上按下 <kbd className="px-1.5 py-0.5 bg-white border rounded shadow-2xs font-mono font-bold text-slate-700">Ctrl + V</kbd>，系統將會同步新增欄位並填入中文內容！</span>
-        </div>
-
-        {props.items.map((item, idx) => (
-          <div key={idx} className="flex gap-2 items-center">
-            <select
-              value={item.type || '進廠維修'}
-              onChange={(e) => props.handleItemChange(idx, 'type', e.target.value)}
-              className="p-2 border rounded-lg text-sm text-black bg-white focus:ring-2 focus:ring-blue-500 font-semibold"
-            >
-              <option value="進廠維修">進廠維修</option>
-              <option value="更換零件">更換零件</option>
-              <option value="現場處理">現場處理</option>
-              <option value="外判處理">外判處理</option>
-              <option value="收費項目">收費項目</option>
-              <option value="Recall項目">Recall項目</option>
-            </select>
-            <input
-              type="text"
-              value={item.item_name || ''}
-              onChange={(e) => props.handleItemChange(idx, 'item_name', e.target.value)}
-              placeholder="項目名稱"
-              className="flex-1 p-2 border rounded-lg text-sm text-black focus:ring-2 focus:ring-blue-500"
-            />
-            {props.items.length > 1 && (
-              <button
-                type="button"
-                onClick={() => props.removeItem(idx)}
-                className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 cursor-pointer"
-              >
-                刪除
-              </button>
-            )}
-          </div>
-        ))}
 
         <button
           type="button"
-          onClick={props.addItem}
-          className="w-full py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-50 cursor-pointer"
+          onClick={() => setShowSmartPasteModal(true)}
+          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
         >
-          + 新增維修項目
+          ✨ 貼上報修訊息智能填表
         </button>
       </div>
 
-      <div className="flex justify-end pt-4">
-        <button
-          type="submit"
-          disabled={props.isSubmitting}
-          className={`px-6 py-3 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 cursor-pointer transition-all ${
-            isSanChe ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
-          }`}
-        >
-          {props.isSubmitting ? '建立中...' : isSanChe ? '建立散車工單' : '建立政府合約工單'}
-        </button>
-      </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-2">
+          <label className="block text-xs font-bold text-slate-700">合約 / 保固類別 *</label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setWarrantyType('government')}
+              className={`p-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                warrantyType === 'government'
+                  ? 'bg-blue-50 border-blue-600 text-blue-900 ring-2 ring-blue-500/20'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              🏛️ 政府合約專案 (EMSD)
+            </button>
+            <button
+              type="button"
+              onClick={() => setWarrantyType('general')}
+              className={`p-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                warrantyType === 'general'
+                  ? 'bg-amber-50 border-amber-600 text-amber-900 ring-2 ring-amber-500/20'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              🚗 散車保固 / 一般維修
+            </button>
+          </div>
+        </div>
 
-      {/* 散車智慧貼上 Modal 彈窗 */}
-      {showSmartPasteModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl text-black">
-            <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="text-lg font-bold text-slate-900">📋 一鍵貼上散車報修訊息 (自動解析填單)</h3>
-              <button
-                type="button"
-                onClick={() => setShowSmartPasteModal(false)}
-                className="text-gray-400 hover:text-gray-700 text-2xl font-bold px-2 cursor-pointer"
-              >
-                ✕
-              </button>
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+          <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">🚘 車輛基本資料</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div>
+              <label className="block font-bold text-gray-700 mb-1">車牌號碼 *</label>
+              <input
+                type="text"
+                value={props.plateNumber ?? plateNumber}
+                onChange={(e) => {
+                  if (props.setPlateNumber) props.setPlateNumber(e.target.value.toUpperCase());
+                  handlePlateChange(e.target.value);
+                }}
+                placeholder="例如：AM4620"
+                className="w-full p-2.5 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
+                required
+              />
             </div>
 
-            <p className="text-xs text-gray-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-              💡 請直接貼上通訊軟體上的報修文字，系統將自動提取車牌、品牌、型號、專案、位置、通知日期、取車日期與維修項目！
-            </p>
+            <div>
+              <label className="block font-bold text-gray-700 mb-1">VIN 碼</label>
+              <input
+                type="text"
+                value={props.vin ?? vin}
+                onChange={(e) => {
+                  if (props.setVin) props.setVin(e.target.value);
+                  setVin(e.target.value);
+                }}
+                placeholder="17 位 VIN 碼"
+                className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
+            <div>
+              <label className="block font-bold text-gray-700 mb-1">專案名稱</label>
+              <input
+                type="text"
+                value={props.project ?? project}
+                onChange={(e) => {
+                  if (props.setProject) props.setProject(e.target.value);
+                  setProject(e.target.value);
+                }}
+                placeholder="例如：FSD/DLP/24"
+                className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-gray-700 mb-1">品牌</label>
+              <input
+                type="text"
+                value={props.brand ?? brand}
+                onChange={(e) => {
+                  if (props.setBrand) props.setBrand(e.target.value);
+                  setBrand(e.target.value);
+                }}
+                placeholder="例如：Mercedes-Benz"
+                className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-gray-700 mb-1">型號</label>
+              <input
+                type="text"
+                value={props.model ?? model}
+                onChange={(e) => {
+                  if (props.setModel) props.setModel(e.target.value);
+                  setModel(e.target.value);
+                }}
+                placeholder="例如：Atego 1018"
+                className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-gray-700 mb-1">車房位置</label>
+              <select
+                value={isCustomGarage ? 'CUSTOM' : (props.garageLocation ?? garageLocation)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'CUSTOM') {
+                    setIsCustomGarage(true);
+                    if (props.setGarageLocation) props.setGarageLocation('');
+                    setGarageLocation('');
+                  } else {
+                    setIsCustomGarage(false);
+                    if (props.setGarageLocation) props.setGarageLocation(val);
+                    setGarageLocation(val);
+                  }
+                }}
+                className="w-full p-2.5 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
+              >
+                {GARAGE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+                <option value="CUSTOM">✍️ 其他 (手動自由輸入)...</option>
+              </select>
+
+              {isCustomGarage && (
+                <input
+                  type="text"
+                  value={props.garageLocation ?? garageLocation}
+                  onChange={(e) => {
+                    if (props.setGarageLocation) props.setGarageLocation(e.target.value);
+                    setGarageLocation(e.target.value);
+                  }}
+                  placeholder="請輸入自訂車房位置..."
+                  className="mt-2 w-full p-2.5 border border-blue-400 rounded-lg bg-blue-50/50 text-black font-bold focus:ring-2 focus:ring-blue-500 text-xs"
+                />
+              )}
+            </div>
+
+            <div>
+              <label className="block font-bold text-gray-700 mb-1">車輛位置</label>
+              <input
+                type="text"
+                value={props.vehicleLocation ?? vehicleLocation}
+                onChange={(e) => {
+                  if (props.setVehicleLocation) props.setVehicleLocation(e.target.value);
+                  setVehicleLocation(e.target.value);
+                }}
+                placeholder="例如：泊位 B2"
+                className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-gray-700 mb-1">取車/回廠日期</label>
+              <input
+                type="date"
+                value={props.pickupReturnDate ?? pickupReturnDate}
+                onChange={(e) => {
+                  if (props.setPickupReturnDate) props.setPickupReturnDate(e.target.value);
+                  setPickupReturnDate(e.target.value);
+                }}
+                className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-gray-700 mb-1">Claim Form 日期</label>
+              <input
+                type="date"
+                value={props.claimFormDate ?? claimFormDate}
+                onChange={(e) => {
+                  if (props.setClaimFormDate) props.setClaimFormDate(e.target.value);
+                  setClaimFormDate(e.target.value);
+                }}
+                className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-1 text-xs">
+          <label className="block font-bold text-gray-700">狀況與故障描述</label>
+          <textarea
+            rows={3}
+            value={props.description ?? description}
+            onChange={(e) => {
+              if (props.setDescription) props.setDescription(e.target.value);
+              setDescription(e.target.value);
+            }}
+            placeholder="請詳細描述車輛故障狀況與維修需求..."
+            className="w-full p-3 border rounded-xl bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+          ></textarea>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h3>
+            <button
+              type="button"
+              onClick={handleAddItem}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer flex items-center gap-1"
+            >
+              + 新增項目
+            </button>
+          </div>
+
+          <div className="border rounded-xl overflow-hidden border-slate-300">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+                <tr>
+                  <th className="p-2.5 w-32">類別</th>
+                  <th className="p-2.5">項目名稱</th>
+                  <th className="p-2.5">備註</th>
+                  <th className="p-2.5 w-12 text-center">刪除</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {items.map((item, idx) => (
+                  <tr key={idx}>
+                    <td className="p-2">
+                      <select
+                        value={item.type}
+                        onChange={(e) => handleItemChange(idx, 'type', e.target.value)}
+                        className="w-full p-1.5 border rounded bg-white text-black font-bold focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="進廠維修">進廠維修</option>
+                        <option value="更換零件">更換零件</option>
+                        <option value="現場處理">現場處理</option>
+                        <option value="外判處理">外判處理</option>
+                        <option value="收費項目">收費項目</option>
+                        <option value="Recall項目">Recall項目</option>
+                      </select>
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        value={item.item_name}
+                        onChange={(e) => handleItemChange(idx, 'item_name', e.target.value)}
+                        placeholder="請輸入維修項目名稱..."
+                        className="w-full p-1.5 border rounded bg-white text-black font-semibold focus:ring-1 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        value={item.notes || ''}
+                        onChange={(e) => handleItemChange(idx, 'notes', e.target.value)}
+                        placeholder="補充說明..."
+                        className="w-full p-1.5 border rounded bg-white text-black font-semibold focus:ring-1 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="p-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(idx)}
+                        className="text-red-500 hover:text-red-700 font-bold text-sm px-2 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="pt-4 border-t flex justify-end">
+          <button
+            type="submit"
+            disabled={isSubmitting || props.isSubmitting}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
+          >
+            {isSubmitting || props.isSubmitting ? '建立中...' : '✅ 提交並建立工單'}
+          </button>
+        </div>
+      </form>
+
+      {showSmartPasteModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 text-black">
+            <h3 className="text-base font-black text-slate-900">✨ 貼上報修訊息自動解析</h3>
+            <p className="text-xs text-gray-500">直接貼上 WhatsApp 或訊息，系統將自動辨識車牌、VIN 及日期：</p>
             <textarea
-              rows={8}
-              value={smartPasteText}
-              onChange={(e) => setSmartPasteText(e.target.value)}
-              placeholder={`【散車報修通知】\n車牌：AM1234\n品牌：Toyota\n型號：Coaster\nVIN：VIN987654321\n專案：聖公會老人院\n取車位置：沙田亞公角街15號\n通知日期：2026-08-25\n取車日期：2026-08-26\n狀況描述：冷氣不冷，且煞車有異音\n維修項目：\n- 檢查冷媒 leak\n- 更換前煞車皮`}
-              className="w-full p-3 border rounded-xl text-xs font-mono bg-slate-50 text-black border-slate-300 focus:ring-2 focus:ring-blue-500"
-            />
-
-            <div className="flex justify-end gap-2 pt-2 border-t">
+              rows={6}
+              value={smartText}
+              onChange={(e) => setSmartText(e.target.value)}
+              placeholder="貼上訊息內容..."
+              className="w-full p-3 border rounded-xl text-xs bg-slate-50 text-black font-medium focus:ring-2 focus:ring-purple-500"
+            ></textarea>
+            <div className="flex justify-end gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setShowSmartPasteModal(false)}
@@ -571,15 +489,15 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
               </button>
               <button
                 type="button"
-                onClick={handleParseSmartPaste}
-                className="px-5 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 cursor-pointer shadow-md"
+                onClick={handleParseSmartText}
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl cursor-pointer"
               >
-                🚀 解析並自動填入表單
+                ⚡ 開始解析並帶入
               </button>
             </div>
           </div>
         </div>
       )}
-    </form>
+    </div>
   );
 }
