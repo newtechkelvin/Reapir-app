@@ -58,28 +58,80 @@ export default function WorkOrdersSummary() {
     return parseFloat(avail.toFixed(2));
   };
 
-  const getWarrantyInfo = (vehicle: any, totalRepairDays: number) => {
+  // 🎯 核心修復：動態讀取車輛自身的實際保固到期日 (warranty_end_date)，不預設 4 年！
+  const getWarrantyInfo = (vehicle: any, allOrders: any[]) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
     const startDate = deliveryDateStr ? new Date(deliveryDateStr) : new Date();
-    
-    let extensionMonths = 0;
-    if (totalRepairDays > 18.25) {
-      const extensionCount = Math.min(3, Math.floor(totalRepairDays / 18.25));
-      extensionMonths = extensionCount * 6;
+
+    // 1. 動態取得真實的原始保固到期日
+    let originalEndDate: Date;
+    if (vehicle.warranty_end_date) {
+      originalEndDate = new Date(vehicle.warranty_end_date);
+    } else {
+      // 若資料庫未設定，預設為交車後 3 年
+      originalEndDate = new Date(startDate);
+      originalEndDate.setFullYear(originalEndDate.getFullYear() + 3);
     }
 
-    const originalEndDate = new Date(startDate);
-    originalEndDate.setFullYear(originalEndDate.getFullYear() + 4);
+    // 2. 動態計算該專案原有的保固年數 (以 365 天為單位)
+    const totalOriginalDays = Math.max(365, (originalEndDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const originalWarrantyYears = Math.round(totalOriginalDays / 365);
 
+    let currentAssessmentStart = new Date(startDate);
+    let totalExtensionMonths = 0;
+    let extensionCount = 0;
+
+    // 3. 按該專案實際保固年數 + 最多 3 次展延期逐期進行 5% 停修門檻審查
+    const maxPeriods = originalWarrantyYears + 3;
+
+    for (let period = 1; period <= maxPeriods; period++) {
+      if (extensionCount >= 3) break; // 最多展延 3 次 (+18 個月)
+
+      const isExtensionPeriod = period > originalWarrantyYears;
+      const periodDays = isExtensionPeriod ? 182.5 : 365;
+      const thresholdDays = periodDays * 0.05; // 5% 門檻 (18.25 天 或 9.125 天)
+
+      const periodStart = new Date(currentAssessmentStart);
+      const periodEnd = new Date(periodStart.getTime() + periodDays * 24 * 60 * 60 * 1000);
+
+      // 計算在該審查期內的停修天數
+      let periodRepairDays = 0;
+      allOrders.forEach((wo: any) => {
+        const sStr = wo.claim_form_date || wo.created_at;
+        if (!sStr) return;
+
+        const oStart = new Date(sStr);
+        const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+        const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
+
+        if (oStart < periodEnd && oEnd > periodStart) {
+          const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
+          const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
+          const diffDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
+          periodRepairDays += diffDays;
+        }
+      });
+
+      // 停修超過 5% 門檻，觸發 1 次展延 (+6 個月)
+      if (periodRepairDays > thresholdDays) {
+        extensionCount++;
+        totalExtensionMonths += 6;
+      }
+
+      currentAssessmentStart = periodEnd;
+    }
+
+    // 4. 根據真實原到期日累加展延月份得出修正後到期日
     const updatedEndDate = new Date(originalEndDate);
-    if (extensionMonths > 0) {
-      updatedEndDate.setMonth(updatedEndDate.getMonth() + extensionMonths);
+    if (totalExtensionMonths > 0) {
+      updatedEndDate.setMonth(updatedEndDate.getMonth() + totalExtensionMonths);
     }
 
     return {
-      originalEndDateStr: vehicle.warranty_end_date || originalEndDate.toISOString().split('T')[0],
+      originalEndDateStr: originalEndDate.toISOString().split('T')[0],
       updatedEndDateStr: updatedEndDate.toISOString().split('T')[0],
-      extensionMonths,
+      extensionMonths: totalExtensionMonths,
+      extensionCount,
     };
   };
 
@@ -345,7 +397,7 @@ export default function WorkOrdersSummary() {
 
     const rows = lowAvailabilityVehicles.map((v) => {
       const avail = calculateAvailability(v.totalRepairDays || 0);
-      const wInfo = getWarrantyInfo(v, v.totalRepairDays || 0);
+      const wInfo = getWarrantyInfo(v, v.allOrders || []);
       const brandModelStr = [v.brand, v.model].filter(Boolean).join(' ');
 
       return [
@@ -384,21 +436,15 @@ export default function WorkOrdersSummary() {
 
   return (
     <div className="space-y-6 text-black">
-      {/* 🎯 專門針對列印 (Print / Save as PDF) 最佳化的 CSS 樣式 */}
       <style jsx global>{`
         @media print {
-          /* 隱藏主頁面內容、導航列與外層 DOM */
           body * {
             visibility: hidden !important;
           }
-
-          /* 僅顯示有 print-modal-content 標記的對數報表內容 */
           .print-modal-content,
           .print-modal-content * {
             visibility: visible !important;
           }
-
-          /* 將 Modal 定位設定為列印頁面的頂端與滿版 */
           .print-modal-content {
             position: absolute !important;
             left: 0 !important;
@@ -409,8 +455,6 @@ export default function WorkOrdersSummary() {
             box-shadow: none !important;
             border: none !important;
           }
-
-          /* 隱藏彈窗內不需列印的按鈕 */
           .print-hidden-element {
             display: none !important;
           }
@@ -559,12 +603,11 @@ export default function WorkOrdersSummary() {
         </div>
       )}
 
-      {/* 🎯 專屬對數報表 Modal (帶有 print-modal-content Class) */}
+      {/* 🎯 對數報表 Modal */}
       {showAuditModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="print-modal-content bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto text-black">
             
-            {/* 報表抬頭 */}
             <div className="text-center border-b-2 border-slate-900 pb-3">
               <h1 className="text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
               <p className="text-xs text-slate-700 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
@@ -577,7 +620,6 @@ export default function WorkOrdersSummary() {
               </div>
             </div>
 
-            {/* 表格區塊 */}
             {lowAvailabilityVehicles.length === 0 ? (
               <p className="text-center py-8 text-gray-500 font-bold">目前無任何可用率低於 95% 的車輛</p>
             ) : (
@@ -597,7 +639,7 @@ export default function WorkOrdersSummary() {
                   <tbody className="divide-y divide-slate-200">
                     {lowAvailabilityVehicles.map((v, idx) => {
                       const avail = calculateAvailability(v.totalRepairDays || 0);
-                      const wInfo = getWarrantyInfo(v, v.totalRepairDays || 0);
+                      const wInfo = getWarrantyInfo(v, v.allOrders || []);
 
                       return (
                         <tr key={v.id || idx} className="hover:bg-slate-50/80">
@@ -616,14 +658,13 @@ export default function WorkOrdersSummary() {
               </div>
             )}
 
-            {/* 備註說明 */}
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-[11px] text-gray-600 space-y-1">
               <p className="font-bold text-slate-800">📌 保固展延對數原則說明：</p>
-              <p>1. 車輛可用率公式：<code>Availability = (365 - 累積停修天數) / 365 × 100%</code>。</p>
-              <p>2. 當累積停修天數超過合約門檻 18.25 天 (即可用率低於 95%) 時，每滿 18.25 天自動延伸保固期 6 個月。</p>
+              <p>1. 系統自動讀取各車輛實際登錄之「原保固到期日 (warranty_end_date)」，精準計算各合約原保固年數。</p>
+              <p>2. 原保固期內，按每個年度（365天）分開審查，停修天數超標 18.25 天 (5%) 即觸發 1 次展延 (+6 個月)。</p>
+              <p>3. 進入展延期（182.5天/6個月）後，停修上限調為 9.125 天。若期間停修再次超標，則進一步觸發下一期展延。</p>
             </div>
 
-            {/* 🎯 底部按鈕區 (標記 print-hidden-element，列印時會自動隱藏) */}
             <div className="flex justify-between items-center border-t pt-4 print-hidden-element">
               <button
                 type="button"
