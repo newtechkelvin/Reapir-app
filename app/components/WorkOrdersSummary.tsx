@@ -21,6 +21,7 @@ export default function WorkOrdersSummary() {
 
   const [staffNameInput, setStaffNameInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -257,6 +258,37 @@ export default function WorkOrdersSummary() {
       alert('網路連線失敗');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // 🎯 方法一：刪除工單邏輯
+  const handleDeleteWorkOrder = async () => {
+    if (!selectedOrder?.id) return;
+
+    const orderNo = selectedOrder.order_number || '此工單';
+    if (!confirm(`⚠️ 警告：確定要永久刪除【${orderNo}】嗎？刪除後紀錄無法復原！`)) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      const res = await fetch(`/api/work-orders/${selectedOrder.id}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        alert('工單已成功刪除！');
+        handleCloseDetailModal();
+        fetchGovernmentVehicles();
+      } else {
+        const errData = await res.json().catch(() => null);
+        alert(`刪除失敗: ${errData?.error || errData?.message || '請稍後再試'}`);
+      }
+    } catch (err) {
+      console.error('刪除工單錯誤:', err);
+      alert('網路連線失敗，無法刪除工單');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -635,14 +667,27 @@ export default function WorkOrdersSummary() {
               </div>
             </div>
 
+            {/* 🎯 Modal 底部按鈕區（包含新增的刪除工單按鈕） */}
             <div className="flex justify-between items-center border-t pt-3">
-              <button
-                type="button"
-                onClick={handleCloseDetailModal}
-                className="px-4 py-2 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 cursor-pointer"
-              >
-                關閉
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseDetailModal}
+                  className="px-4 py-2 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  關閉
+                </button>
+                {/* 🎯 新增：刪除工單按鈕 */}
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleDeleteWorkOrder}
+                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold text-sm rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isDeleting ? '刪除中...' : '🗑️ 刪除工單'}
+                </button>
+              </div>
+
               <button
                 type="button"
                 disabled={isSubmitting}
