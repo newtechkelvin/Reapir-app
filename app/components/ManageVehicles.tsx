@@ -67,13 +67,13 @@ export default function ManageVehicles({
         yearText: '第 1 年',
         startDateText: '未設定',
         endDateText: vehicle.warranty_end_date || '未設定',
+        extensionMonths: 0,
       };
     }
 
     const startDate = new Date(deliveryDateStr);
     const now = new Date();
     
-    // 計算經過年份
     let diffYears = now.getFullYear() - startDate.getFullYear();
     const monthDiff = now.getMonth() - startDate.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < startDate.getDate())) {
@@ -82,15 +82,12 @@ export default function ManageVehicles({
 
     const yearNum = Math.max(1, Math.min(5, diffYears + 1));
 
-    // 🎯 核心修正：計算因停修天數超標而展延的月份
-    // 每超過 18.25 天展延 6 個月 (上限 18 個月)
     let extensionMonths = 0;
     if (totalOpenDays > 18.25) {
       const extensionCount = Math.min(3, Math.floor(totalOpenDays / 18.25));
       extensionMonths = extensionCount * 6;
     }
 
-    // 基本 4 年保固 + 展延月份
     const endDate = new Date(startDate);
     endDate.setFullYear(endDate.getFullYear() + 4);
     if (extensionMonths > 0) {
@@ -103,6 +100,16 @@ export default function ManageVehicles({
       endDateText: vehicle.warranty_end_date || endDate.toISOString().split('T')[0],
       extensionMonths,
     };
+  };
+
+  const handleEditClick = (e: React.MouseEvent, vehicle: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof onEditVehicle === 'function') {
+      onEditVehicle(vehicle);
+    } else {
+      console.warn('onEditVehicle function is not provided in props');
+    }
   };
 
   const filteredVehicles = vehicles.filter((v) => {
@@ -177,10 +184,11 @@ export default function ManageVehicles({
                     )}
                   </div>
 
+                  {/* 🎯 修正處：防止事件冒泡並確保呼叫 onEditVehicle */}
                   <button
                     type="button"
-                    onClick={() => onEditVehicle(vehicle)}
-                    className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1"
+                    onClick={(e) => handleEditClick(e, vehicle)}
+                    className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1 active:scale-95"
                   >
                     ✏️ 編輯車輛資訊
                   </button>
@@ -188,14 +196,12 @@ export default function ManageVehicles({
 
                 {/* 2. 三大核心數據統計卡片 */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* 卡片 A: 當前保固年度 */}
                   <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-1">
                     <span className="text-xs text-gray-500 font-bold block">當前保固年度</span>
                     <strong className="text-2xl font-black text-blue-900 block">{wInfo.yearText}</strong>
                     <span className="text-[11px] text-gray-400 block pt-1">起算日: {wInfo.startDateText}</span>
                   </div>
 
-                  {/* 卡片 B: 本年合約累積停修天數 */}
                   <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-1">
                     <span className="text-xs text-gray-500 font-bold block">本年合約累積停修天數</span>
                     <div className="flex items-baseline gap-1">
@@ -215,7 +221,6 @@ export default function ManageVehicles({
                     )}
                   </div>
 
-                  {/* 卡片 C: 本年度已開工單數目 */}
                   <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-1">
                     <span className="text-xs text-gray-500 font-bold block">本年度已開工單數目</span>
                     <div className="flex items-baseline gap-1">
