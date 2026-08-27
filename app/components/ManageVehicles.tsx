@@ -143,7 +143,7 @@ export default function ManageVehicles({
     setEditWarrantyType(vehicle.warranty_type || 'government');
     setEditDeliveryDate(vehicle.delivery_date || '');
     setEditWarrantyPeriodYears(String(vehicle.warranty_period_years || '3'));
-    setEditMaxExtensionCount(String(vehicle.max_extension_count ?? '3'));
+    setEditMaxExtensionCount(String(vehicle.max_extension_count !== undefined ? vehicle.max_extension_count : '3'));
     setEditGarageLocation(vehicle.garage_location || vehicle.location || '');
     setEditVehicleLocation(vehicle.vehicle_location || '');
 
@@ -377,6 +377,12 @@ export default function ManageVehicles({
 
           <button
             type="button"
+            onClick={() => setShowAddModal(false)}
+            className="hidden"
+          ></button>
+
+          <button
+            type="button"
             onClick={() => setShowAddModal(true)}
             className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
           >
@@ -607,7 +613,7 @@ export default function ManageVehicles({
                   />
                 </div>
 
-                {/* 🎯 醒目專區：專案與保固條款設定 */}
+                {/* 🎯 專案與保固條款設定欄位 */}
                 <div className="col-span-2 bg-amber-50 p-3 rounded-xl border border-amber-300 space-y-2">
                   <h4 className="font-extrabold text-amber-900 text-xs flex items-center gap-1">
                     🏛️ 專案與保固條款設定
