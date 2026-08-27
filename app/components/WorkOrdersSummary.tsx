@@ -16,7 +16,7 @@ export default function WorkOrdersSummary({
   const [showReportModal, setShowReportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 🎯 完全對齊「車輛維修工單 (Repair Job Sheet)」Modal 狀態
+  // 🎯 對齊「車輛維修工單 (Repair Job Sheet)」Modal 狀態
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [editLocation, setEditLocation] = useState('機電 - 九龍灣1/F');
   const [editSpot, setEditSpot] = useState('');
@@ -27,29 +27,147 @@ export default function WorkOrdersSummary({
   const [editItems, setEditItems] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 1. 計算車輛停修天數、可用率與即時權威保 保固展延精算
+  // 🎯 核心計算：根據交車日與展延規則，計算「當前保固/展延期間」的停修天數與可用率
   const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
-    let totalOpenDays = 0;
+    const now = new Date();
+
+    const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || '2022-07-28';
+    const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
+    const maxExtCount =
+      vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null
+        ? Number(vehicle.max_extension_count)
+        : 3;
+
+    let origExpiryStr = '未設定';
+    let finalExpiryStr = '未設定';
+    let extensionMonths = 0;
+
+    let currentPeriodStart = new Date(deliveryDateStr);
+    let currentPeriodEnd = new Date(currentPeriodStart);
+    currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 1);
+    let currentPeriodTotalDays = 365;
+
+    if (deliveryDateStr) {
+      const startDate = new Date(deliveryDateStr);
+      const originalEndDate = new Date(startDate);
+      originalEndDate.setFullYear(originalEndDate.getFullYear() + projectWarrantyYears);
+      origExpiryStr = originalEndDate.toISOString().split('T')[0];
+
+      let extensionCount = 0;
+
+      // 1. 檢視前 3 個標準保固年度
+      for (let yr = 0; yr < projectWarrantyYears; yr++) {
+        const periodStart = new Date(startDate);
+        periodStart.setFullYear(periodStart.getFullYear() + yr);
+        const periodEnd = new Date(periodStart);
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+
+        if (now >= periodStart && now < periodEnd) {
+          currentPeriodStart = periodStart;
+          currentPeriodEnd = periodEnd;
+          currentPeriodTotalDays = 365;
+        }
+
+        if (extensionCount < maxExtCount) {
+          let periodRepairDays = 0;
+          orders.forEach((wo: any) => {
+            const sStr = wo.claim_form_date || wo.created_at;
+            if (!sStr) return;
+            const oStart = new Date(sStr);
+            const statusLower = (wo.status || 'open').toLowerCase();
+            const isCompleted = statusLower === 'completed' || statusLower === 'closed';
+            const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
+
+            if (oStart < periodEnd && oEnd >= periodStart) {
+              const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
+              const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
+              periodRepairDays += Math.max(
+                0,
+                Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
+              );
+            }
+          });
+
+          if (periodRepairDays > 18.25) extensionCount++;
+        }
+      }
+
+      // 2. 檢視展延期（每 6 個月一期）
+      let currentExtStart = new Date(originalEndDate);
+      for (let ext = 0; ext < maxExtCount; ext++) {
+        const periodStart = new Date(currentExtStart);
+        const periodEnd = new Date(periodStart);
+        periodEnd.setMonth(periodEnd.getMonth() + 6);
+
+        if (now >= periodStart && now < periodEnd) {
+          currentPeriodStart = periodStart;
+          currentPeriodEnd = periodEnd;
+          currentPeriodTotalDays = 182.5; // 6個月標準天數
+        }
+
+        if (extensionCount > ext && extensionCount < maxExtCount) {
+          let periodRepairDays = 0;
+          orders.forEach((wo: any) => {
+            const sStr = wo.claim_form_date || wo.created_at;
+            if (!sStr) return;
+            const oStart = new Date(sStr);
+            const statusLower = (wo.status || 'open').toLowerCase();
+            const isCompleted = statusLower === 'completed' || statusLower === 'closed';
+            const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
+
+            if (oStart < periodEnd && oEnd >= periodStart) {
+              const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
+              const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
+              periodRepairDays += Math.max(
+                0,
+                Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
+              );
+            }
+          });
+
+          if (periodRepairDays > 9.125) extensionCount++;
+        }
+        currentExtStart = periodEnd;
+      }
+
+      extensionMonths = extensionCount * 6;
+      const finalExpiryDate = new Date(originalEndDate);
+      if (extensionMonths > 0) {
+        finalExpiryDate.setMonth(finalExpiryDate.getMonth() + extensionMonths);
+      }
+      finalExpiryStr = finalExpiryDate.toISOString().split('T')[0];
+    }
+
+    // 🎯 3. 計算「當前保固/展延期間」內的實際停修天數
+    let currentPeriodRepairDays = 0;
     let openCount = 0;
     const openOrders: any[] = [];
-
-    const now = new Date();
 
     orders.forEach((wo: any) => {
       const statusLower = (wo.status || 'open').toLowerCase();
       const isCompleted = statusLower === 'completed' || statusLower === 'closed';
 
+      const sStr = wo.claim_form_date || wo.created_at || wo.date;
+      if (!sStr) return;
+      const oStart = new Date(sStr);
+      const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
+
+      // 計算在當前區間內的重疊天數
+      if (oStart < currentPeriodEnd && oEnd >= currentPeriodStart) {
+        const overlapStart = new Date(Math.max(oStart.getTime(), currentPeriodStart.getTime()));
+        const overlapEnd = new Date(Math.min(oEnd.getTime(), currentPeriodEnd.getTime()));
+        const overlapDays = Math.max(
+          0,
+          Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
+        );
+        currentPeriodRepairDays += overlapDays;
+      }
+
       if (!isCompleted) {
         openCount++;
-        const sStr = wo.claim_form_date || wo.created_at || wo.date;
-        let days = 0;
-        if (sStr) {
-          const start = new Date(sStr);
-          const diffTime = Math.max(0, now.getTime() - start.getTime());
-          days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          totalOpenDays += days;
-        }
+        const diffTime = Math.max(0, now.getTime() - oStart.getTime());
+        const openDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
         const woNum =
           wo.order_number ||
@@ -62,119 +180,24 @@ export default function WorkOrdersSummary({
         openOrders.push({
           ...wo,
           woNum,
-          openDays: days,
+          openDays,
           vehiclePlate: vehicle.plate_number,
           vehicleBrand: vehicle.brand || '未設定',
           vehicleModel: vehicle.model || '未設定',
           vehicleVin: vehicle.vin || '未設定',
           vehicleProject: vehicle.project || '未設定',
         });
-      } else {
-        if (wo.claim_form_date && wo.completed_date) {
-          const s = new Date(wo.claim_form_date);
-          const e = new Date(wo.completed_date);
-          const diffTime = Math.max(0, e.getTime() - s.getTime());
-          totalOpenDays += Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        }
       }
     });
 
+    // 🎯 精算當期可用率
     const availability = Math.max(
       0,
-      parseFloat((100 - (totalOpenDays / 365) * 100).toFixed(2))
+      parseFloat((100 - (currentPeriodRepairDays / currentPeriodTotalDays) * 100).toFixed(2))
     );
 
-    // 權威展延邏輯精算 (用於對數報表)
-    const deliveryDateStr = vehicle.delivery_date || vehicle.created_at;
-    const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
-    const maxExtCount =
-      vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null
-        ? Number(vehicle.max_extension_count)
-        : 3;
-
-    let origExpiryStr = '未設定';
-    let finalExpiryStr = '未設定';
-    let extensionMonths = 0;
-
-    if (deliveryDateStr) {
-      const startDate = new Date(deliveryDateStr);
-      const originalEndDate = new Date(startDate);
-      originalEndDate.setFullYear(originalEndDate.getFullYear() + projectWarrantyYears);
-      origExpiryStr = originalEndDate.toISOString().split('T')[0];
-
-      let extensionCount = 0;
-
-      for (let yr = 0; yr < projectWarrantyYears; yr++) {
-        if (extensionCount >= maxExtCount) break;
-
-        const periodStart = new Date(startDate);
-        periodStart.setFullYear(periodStart.getFullYear() + yr);
-        const periodEnd = new Date(periodStart);
-        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-
-        let periodRepairDays = 0;
-        orders.forEach((wo: any) => {
-          const sStr = wo.claim_form_date || wo.created_at;
-          if (!sStr) return;
-          const oStart = new Date(sStr);
-          const statusLower = (wo.status || 'open').toLowerCase();
-          const isCompleted = statusLower === 'completed' || statusLower === 'closed';
-          const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
-
-          if (oStart < periodEnd && oEnd >= periodStart) {
-            const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
-            const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
-            periodRepairDays += Math.max(
-              0,
-              Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
-            );
-          }
-        });
-
-        if (periodRepairDays > 18.25) extensionCount++;
-      }
-
-      let currentExtStart = new Date(originalEndDate);
-      for (let ext = 0; ext < maxExtCount; ext++) {
-        if (extensionCount <= ext || extensionCount >= maxExtCount) break;
-
-        const periodStart = new Date(currentExtStart);
-        const periodEnd = new Date(periodStart);
-        periodEnd.setMonth(periodEnd.getMonth() + 6);
-
-        let periodRepairDays = 0;
-        orders.forEach((wo: any) => {
-          const sStr = wo.claim_form_date || wo.created_at;
-          if (!sStr) return;
-          const oStart = new Date(sStr);
-          const statusLower = (wo.status || 'open').toLowerCase();
-          const isCompleted = statusLower === 'completed' || statusLower === 'closed';
-          const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
-
-          if (oStart < periodEnd && oEnd >= periodStart) {
-            const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
-            const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
-            periodRepairDays += Math.max(
-              0,
-              Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
-            );
-          }
-        });
-
-        if (periodRepairDays > 9.125) extensionCount++;
-        currentExtStart = periodEnd;
-      }
-
-      extensionMonths = extensionCount * 6;
-      const finalExpiryDate = new Date(originalEndDate);
-      if (extensionMonths > 0) {
-        finalExpiryDate.setMonth(finalExpiryDate.getMonth() + extensionMonths);
-      }
-      finalExpiryStr = finalExpiryDate.toISOString().split('T')[0];
-    }
-
     return {
-      totalOpenDays,
+      totalOpenDays: currentPeriodRepairDays, // 👈 顯示當前保固/展延期的精算停修天數
       availability,
       orderCount: orders.length,
       openCount,
@@ -185,7 +208,7 @@ export default function WorkOrdersSummary({
     };
   };
 
-  // 2. 篩選有 Open 工單的政府車輛
+  // 篩選有 Open 工單的政府車輛
   const governmentVehiclesWithOpenOrders = (vehicles || [])
     .filter((v: any) => (v.warranty_type || 'government').toLowerCase() === 'government')
     .map((v: any) => ({ ...v, stats: getVehicleStats(v) }))
@@ -218,7 +241,7 @@ export default function WorkOrdersSummary({
     })
     .sort((a: any, b: any) => b.stats.openCount - a.stats.openCount || b.stats.totalOpenDays - a.stats.totalOpenDays);
 
-  // 🎯 開啟工單明細（強效解析維修與零件項目）
+  // 開啟工單明細
   const handleOpenDetailModal = (order: any) => {
     setSelectedOrder(order);
     setEditLocation(order.garage_location || order.location || '機電 - 九龍灣1/F');
@@ -228,15 +251,12 @@ export default function WorkOrdersSummary({
     setEditCompletedDate(order.completed_date || '');
     setEditDescription(order.description || '');
 
-    // 🎯 多重安全解析 items 資料
     let rawItems: any = order.items || order.work_order_items || order.repair_items || [];
     
-    // 如果是 JSON 字串，進行 parse
     if (typeof rawItems === 'string') {
       try {
         rawItems = JSON.parse(rawItems);
       } catch (e) {
-        // 分號分隔字串相容處理
         rawItems = rawItems.split(';').map((str: string) => ({
           completed: true,
           type: '進廠維修',
@@ -405,11 +425,11 @@ export default function WorkOrdersSummary({
 
                 <hr className="border-slate-100" />
 
-                {/* 2. 停修天數與可用率 */}
+                {/* 2. 停修天數與可用率 (當期精算) */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl min-w-0">
                     <span className="text-[11px] text-gray-400 font-bold block truncate">
-                      累積停修總天數
+                      當期累積停修天數
                     </span>
                     <strong className="text-xl font-black text-red-600 block mt-1 truncate">
                       {stats.totalOpenDays} 天
@@ -492,11 +512,11 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* 🖼️ 「車輛維修工單 (Repair Job Sheet)」Modal */}
+      {/* 「車輛維修工單 (Repair Job Sheet)」Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
-            {/* 1. Header 標題 Banner */}
+            {/* Header 標題 Banner */}
             <div className="text-center space-y-1 pb-2">
               <h2 className="text-xl font-black text-slate-900 tracking-wide">
                 新力機械有限公司
@@ -513,7 +533,7 @@ export default function WorkOrdersSummary({
 
             <hr className="border-slate-800 border-t-2" />
 
-            {/* 2. 單號列與工具列 */}
+            {/* 單號列與工具列 */}
             <div className="flex flex-wrap justify-between items-center gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-lg font-black text-blue-900 flex items-center gap-1">
@@ -546,7 +566,7 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 3. 🚘 車輛與合約基本資訊區塊 */}
+            {/* 車輛與合約基本資訊區塊 */}
             <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 space-y-3">
               <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5 border-b pb-2 border-slate-200">
                 🚘 車輛與合約基本資訊
@@ -640,7 +660,7 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 4. 📝 狀況與故障描述區塊 */}
+            {/* 狀況與故障描述區塊 */}
             <div className="space-y-1.5">
               <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                 📝 狀況與故障描述
@@ -654,7 +674,7 @@ export default function WorkOrdersSummary({
               />
             </div>
 
-            {/* 5. 🛠️ 維修與零件項目明細表格區塊 (強效資料讀取) */}
+            {/* 維修與零件項目明細表格區塊 */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
@@ -737,7 +757,7 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 6. 底部控制按鈕 */}
+            {/* 底部控制按鈕 */}
             <div className="flex justify-between items-center pt-3 border-t border-slate-200">
               <button
                 type="button"
