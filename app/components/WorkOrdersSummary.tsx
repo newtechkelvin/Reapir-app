@@ -174,28 +174,30 @@ export default function WorkOrdersSummary({
     };
   };
 
-  // 過濾政府車輛
-  const governmentVehicles = (vehicles || []).filter(
-    (v) => (v.warranty_type || 'government').toLowerCase() === 'government'
-  );
-
-  // 對數報表（< 95%）
-  const lowAvailabilityVehicles = governmentVehicles
+  // 🎯 關鍵過濾 1：僅挑出「有工單/有維修紀錄」的政府車輛，過濾掉沒有工單的車輛
+  const governmentVehiclesWithOrders = (vehicles || [])
+    .filter((v) => (v.warranty_type || 'government').toLowerCase() === 'government')
     .map((v) => ({ ...v, stats: getVehicleStats(v) }))
+    .filter((v) => v.stats.orderCount > 0); // 👈 排除沒有工單的車輛
+
+  // 對數報表（可用率 < 95%）
+  const lowAvailabilityVehicles = governmentVehiclesWithOrders
     .filter((v) => v.stats.availability < 95)
     .sort((a, b) => b.stats.totalOpenDays - a.stats.totalOpenDays);
 
-  // 搜尋過濾
-  const filteredVehicles = governmentVehicles.filter((v) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      v.plate_number?.toLowerCase().includes(term) ||
-      v.project?.toLowerCase().includes(term) ||
-      v.brand?.toLowerCase().includes(term) ||
-      v.model?.toLowerCase().includes(term)
-    );
-  });
+  // 🎯 關鍵過濾 2：搜尋與最終呈現 (按照累積停修天數/Open工單降序排列)
+  const filteredVehicles = governmentVehiclesWithOrders
+    .filter((v) => {
+      if (!searchTerm.trim()) return true;
+      const term = searchTerm.toLowerCase();
+      return (
+        v.plate_number?.toLowerCase().includes(term) ||
+        v.project?.toLowerCase().includes(term) ||
+        v.brand?.toLowerCase().includes(term) ||
+        v.model?.toLowerCase().includes(term)
+      );
+    })
+    .sort((a, b) => b.stats.openCount - a.stats.openCount || b.stats.totalOpenDays - a.stats.totalOpenDays);
 
   return (
     <div className="space-y-6 text-black">
@@ -230,19 +232,19 @@ export default function WorkOrdersSummary({
         </div>
       </div>
 
-      {/* 3 欄式卡片列表 */}
+      {/* 3 欄式卡片列表 (僅顯示有工單的車輛) */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">
           ⏳ 正在載入車輛工單資料...
         </div>
       ) : filteredVehicles.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-2xl border border-dashed text-gray-500">
-          <p className="text-base font-bold">沒有對應的政府車輛資料</p>
+          <p className="text-base font-bold">目前沒有有開立工單的政府車輛</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {filteredVehicles.map((vehicle, idx) => {
-            const stats = getVehicleStats(vehicle);
+            const { stats } = vehicle;
 
             const isCritical = stats.availability < 95;
             const isWarning = stats.availability >= 95 && stats.availability <= 96;
@@ -256,7 +258,7 @@ export default function WorkOrdersSummary({
                 key={vehicle.id || idx}
                 className={`bg-white border-2 rounded-2xl p-5 shadow-2xs space-y-4 hover:shadow-md transition-all ${cardBorderClass}`}
               >
-                {/* 1. 車牌與類別標籤 (單行約束) */}
+                {/* 1. 車牌與類別標籤 */}
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0 flex-1">
                     <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2 truncate">
@@ -274,7 +276,7 @@ export default function WorkOrdersSummary({
 
                 <hr className="border-slate-100" />
 
-                {/* 2. 停修天數與可用率 (單行約束) */}
+                {/* 2. 停修天數與可用率 */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl min-w-0">
                     <span className="text-[11px] text-gray-400 font-bold block truncate">
@@ -306,7 +308,7 @@ export default function WorkOrdersSummary({
                   </div>
                 </div>
 
-                {/* 3. 專案名稱與 Open 工單數 (單行約束) */}
+                {/* 3. 專案名稱與 Open 工單數 */}
                 <div className="flex justify-between items-center text-xs pt-1 gap-2">
                   <span
                     className="text-slate-800 font-extrabold truncate flex-1"
@@ -344,7 +346,6 @@ export default function WorkOrdersSummary({
                           </span>
                         </div>
 
-                        {/* 🎯 點擊觸發檢視明細 Modal */}
                         <button
                           type="button"
                           onClick={() => setSelectedOrder(wo)}
@@ -362,7 +363,7 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* 🔍 工單明細卡片彈窗 Modal */}
+      {/* 工單明細彈窗 Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
@@ -434,7 +435,7 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* 📋 保固展延對數報表 Modal */}
+      {/* 保固展延對數報表 Modal */}
       {showReportModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
