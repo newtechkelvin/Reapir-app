@@ -16,10 +16,17 @@ export default function WorkOrdersSummary({
   const [showReportModal, setShowReportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. 工單明細 Modal 狀態
+  // 工單編輯與明細 Modal 狀態 (對齊查詢車輛工單規格)
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editStatus, setEditStatus] = useState('Open');
+  const [editClaimDate, setEditClaimDate] = useState('');
+  const [editCompletedDate, setEditCompletedDate] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editItems, setEditItems] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // 計算車輛停修天數、可用率與即時權威保固展延精算
+  // 1. 計算車輛停修天數、可用率與即時權威保固展延精算
   const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
     let totalOpenDays = 0;
@@ -43,7 +50,6 @@ export default function WorkOrdersSummary({
           totalOpenDays += days;
         }
 
-        // 取出標準工單單號
         const woNum =
           wo.order_number ||
           wo.work_order_number ||
@@ -174,11 +180,17 @@ export default function WorkOrdersSummary({
     };
   };
 
-  // 🎯 關鍵修正：只保留「Open 工單數 > 0」的政府車輛
+  // 2. 篩選有 Open 工單的政府車輛
   const governmentVehiclesWithOpenOrders = (vehicles || [])
     .filter((v: any) => (v.warranty_type || 'government').toLowerCase() === 'government')
     .map((v: any) => ({ ...v, stats: getVehicleStats(v) }))
-    .filter((v: any) => v.stats.openCount > 0); // 👈 確保完全排除 Open 工單數 : 0 張的車輛
+    .filter((v: any) => v.stats.openCount > 0);
+
+  // 🎯 計算全站現時 Open 工單總數
+  const totalOpenOrdersCount = governmentVehiclesWithOpenOrders.reduce(
+    (sum: number, v: any) => sum + v.stats.openCount,
+    0
+  );
 
   // 對數報表（可用率 < 95%）
   const lowAvailabilityVehicles = (vehicles || [])
@@ -187,7 +199,7 @@ export default function WorkOrdersSummary({
     .filter((v: any) => v.stats.availability < 95)
     .sort((a: any, b: any) => b.stats.totalOpenDays - a.stats.totalOpenDays);
 
-  // 搜尋與最終呈現 (按 Open 工單數 / 累積停修天數降序排列)
+  // 搜尋過濾
   const filteredVehicles = governmentVehiclesWithOpenOrders
     .filter((v: any) => {
       if (!searchTerm.trim()) return true;
@@ -201,11 +213,54 @@ export default function WorkOrdersSummary({
     })
     .sort((a: any, b: any) => b.stats.openCount - a.stats.openCount || b.stats.totalOpenDays - a.stats.totalOpenDays);
 
+  // 🎯 開啟檢視/編輯明細 Modal
+  const handleOpenDetailModal = (order: any) => {
+    setSelectedOrder(order);
+    setIsEditing(false);
+    setEditStatus((order.status || 'open').toLowerCase() === 'completed' ? 'Completed' : 'Open');
+    setEditClaimDate(order.claim_form_date || '');
+    setEditCompletedDate(order.completed_date || '');
+    setEditDescription(order.description || '');
+    setEditItems(order.items || []);
+  };
+
+  // 🎯 儲存工單編輯變更
+  const handleSaveOrderEdit = async () => {
+    if (!selectedOrder) return;
+    try {
+      setIsSaving(true);
+      const res = await fetch(`/api/work-orders/${selectedOrder.id || selectedOrder.woNum}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: editStatus,
+          claim_form_date: editClaimDate,
+          completed_date: editStatus === 'Completed' ? editCompletedDate || new Date().toISOString().split('T')[0] : null,
+          description: editDescription,
+          items: editItems,
+        }),
+      });
+
+      if (res.ok) {
+        alert('工單修訂成功！');
+        setSelectedOrder(null);
+        onRefresh();
+      } else {
+        alert('儲存失敗，請重試');
+      }
+    } catch (err) {
+      console.error('儲存工單出錯:', err);
+      alert('網路連線失敗');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6 text-black">
-      {/* 搜尋與頂部工具列 */}
+      {/* 搜尋與頂部工具列 (帶有現時 Open 工單總數顯示) */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-        <div className="flex-1 w-full">
+        <div className="flex-1 w-full flex items-center gap-3">
           <input
             type="text"
             value={searchTerm}
@@ -213,9 +268,15 @@ export default function WorkOrdersSummary({
             placeholder="搜尋車牌、專案、品牌..."
             className="w-full p-2.5 border rounded-xl text-sm font-semibold bg-white text-black focus:ring-2 focus:ring-blue-500 border-slate-300"
           />
+
+          {/* 🎯 1. 顯示現時 Open 工單總數 */}
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap shrink-0 shadow-2xs flex items-center gap-1.5">
+            <span>🔥 現時 Open 工單總數:</span>
+            <strong className="text-base text-red-600 font-black">{totalOpenOrdersCount} 張</strong>
+          </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setShowReportModal(true)}
@@ -234,7 +295,7 @@ export default function WorkOrdersSummary({
         </div>
       </div>
 
-      {/* 3 欄式卡片列表 (僅顯示有 Open 工單的車輛) */}
+      {/* 3 欄式卡片列表 */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">
           ⏳ 正在載入車輛工單資料...
@@ -348,9 +409,10 @@ export default function WorkOrdersSummary({
                           </span>
                         </div>
 
+                        {/* 🎯 2. 按下檢視明細，觸發與「查詢車輛工單」規格一致的彈窗 */}
                         <button
                           type="button"
-                          onClick={() => setSelectedOrder(wo)}
+                          onClick={() => handleOpenDetailModal(wo)}
                           className="text-blue-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5 whitespace-nowrap shrink-0 border-0 bg-transparent"
                         >
                           檢視明細 &rarr;
@@ -365,7 +427,7 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* 工單明細彈窗 Modal */}
+      {/* 🎯 2. 對齊「查詢車輛工單」規格且帶有編輯功能的工單明細彈窗 Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
@@ -378,61 +440,144 @@ export default function WorkOrdersSummary({
                   車牌號碼: {selectedOrder.vehiclePlate}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedOrder(null)}
-                className="text-gray-400 hover:text-gray-600 text-2xl font-bold cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                {!isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+                  >
+                    ✏️ 編輯工單
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrder(null)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-gray-400 font-bold block">工單狀態</span>
-                <strong className="text-sm font-black text-amber-600 block mt-1">
-                  Open (已停修 {selectedOrder.openDays} 天)
-                </strong>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-gray-400 font-bold block">Claim Form 日期</span>
-                <strong className="text-sm font-black text-slate-800 block mt-1">
-                  {selectedOrder.claim_form_date || selectedOrder.created_at || '未設定'}
-                </strong>
-              </div>
-
-              <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <span className="text-gray-400 font-bold block mb-1">維修描述 / 故障說明</span>
-                <p className="text-slate-800 font-semibold leading-relaxed">
-                  {selectedOrder.description || selectedOrder.notes || '無詳細描述'}
-                </p>
-              </div>
-
-              {selectedOrder.items && selectedOrder.items.length > 0 && (
-                <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                  <span className="text-gray-400 font-bold block">維修項目清單</span>
-                  <ul className="divide-y divide-slate-200">
-                    {selectedOrder.items.map((item: any, iIdx: number) => (
-                      <li key={iIdx} className="py-1.5 flex justify-between text-xs">
-                        <span className="font-bold text-slate-700">{item.item_name || item.name || item}</span>
-                        <span className="text-gray-400 font-semibold">{item.type || '維修項目'}</span>
-                      </li>
-                    ))}
-                  </ul>
+            {/* 編輯 / 檢視切換模式 */}
+            {!isEditing ? (
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-gray-400 font-bold block">工單狀態</span>
+                  <strong className="text-sm font-black text-amber-600 block mt-1">
+                    Open (已停修 {selectedOrder.openDays} 天)
+                  </strong>
                 </div>
-              )}
-            </div>
 
-            <div className="flex justify-end pt-3 border-t">
-              <button
-                type="button"
-                onClick={() => setSelectedOrder(null)}
-                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl cursor-pointer"
-              >
-                關閉明細
-              </button>
-            </div>
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-gray-400 font-bold block">Claim Form 日期</span>
+                  <strong className="text-sm font-black text-slate-800 block mt-1">
+                    {selectedOrder.claim_form_date || selectedOrder.created_at || '未設定'}
+                  </strong>
+                </div>
+
+                <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-gray-400 font-bold block mb-1">維修描述 / 故障說明</span>
+                  <p className="text-slate-800 font-semibold leading-relaxed">
+                    {selectedOrder.description || selectedOrder.notes || '無詳細描述'}
+                  </p>
+                </div>
+
+                {selectedOrder.items && selectedOrder.items.length > 0 && (
+                  <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                    <span className="text-gray-400 font-bold block">維修項目清單</span>
+                    <ul className="divide-y divide-slate-200">
+                      {selectedOrder.items.map((item: any, iIdx: number) => (
+                        <li key={iIdx} className="py-1.5 flex justify-between text-xs">
+                          <span className="font-bold text-slate-700">{item.item_name || item.name || item}</span>
+                          <span className="text-gray-400 font-semibold">{item.type || '維修項目'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* 🎯 編輯狀態介面 */
+              <div className="space-y-4 text-xs">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-1">工單狀態</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value)}
+                      className="w-full p-2 border rounded-xl font-bold bg-white"
+                    >
+                      <option value="Open">Open (維修中)</option>
+                      <option value="Completed">Completed (已完工結案)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-1">Claim Form 日期</label>
+                    <input
+                      type="date"
+                      value={editClaimDate}
+                      onChange={(e) => setEditClaimDate(e.target.value)}
+                      className="w-full p-2 border rounded-xl font-semibold bg-white"
+                    />
+                  </div>
+
+                  {editStatus === 'Completed' && (
+                    <div className="col-span-2">
+                      <label className="block text-gray-700 font-bold mb-1">完工日期 (Completed Date)</label>
+                      <input
+                        type="date"
+                        value={editCompletedDate}
+                        onChange={(e) => setEditCompletedDate(e.target.value)}
+                        className="w-full p-2 border rounded-xl font-semibold bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 font-bold mb-1">維修描述 / 故障說明</label>
+                  <textarea
+                    rows={3}
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="w-full p-2 border rounded-xl font-semibold bg-white"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    className="px-4 py-2 border rounded-xl font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={handleSaveOrderEdit}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    {isSaving ? '⏳ 儲存中...' : '💾 儲存修改'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!isEditing && (
+              <div className="flex justify-end pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrder(null)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  關閉明細
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
