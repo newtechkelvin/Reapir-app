@@ -27,14 +27,14 @@ export default function WorkOrdersSummary({
   const [editItems, setEditItems] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 🎯 核心精算：將每台車的保固年數、展延上限納入計算，並直接讀取 Database 修正後到期日
+  // 🎯 核心精算：包含車輛保固年數與展延上限，並直接讀取 Database 的 warranty_expiry_date 欄位
   const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
     const now = new Date();
 
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || '2022-07-28';
 
-    // 🎯 1. 包含每台車設定的保固年數與展延上限至算式內
+    // 1. 包含每台車設定的保固年數與展延上限至算式內
     const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
     const maxExtCount =
       vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null
@@ -193,8 +193,9 @@ export default function WorkOrdersSummary({
 
     const finalExtensionMonths = extensionCount * 6;
 
-    // 🎯 2. 修正後保固到期日：直接讀取 Database 欄位 (若 Database 無值再以原到期日為基準)
+    // 🎯 2. 修正後保固到期日：直接讀取 Database 的 warranty_expiry_date 欄位
     const dbFinalExpiryStr =
+      vehicle.warranty_expiry_date ||
       vehicle.extended_warranty_expiry ||
       vehicle.final_warranty_expiry ||
       vehicle.revised_warranty_expiry ||
@@ -218,7 +219,7 @@ export default function WorkOrdersSummary({
       openCount,
       openOrders,
       origExpiryStr,
-      finalExpiryStr, // 👈 直接讀取 Database
+      finalExpiryStr, // 👈 直接讀取 Database 欄位 warranty_expiry_date
       extensionMonths: finalExtensionMonths,
     };
   };
