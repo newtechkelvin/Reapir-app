@@ -58,44 +58,37 @@ export default function WorkOrdersSummary() {
     return parseFloat(avail.toFixed(2));
   };
 
-  // 🎯 核心修復：動態讀取車輛自身的實際保固到期日 (warranty_end_date)，不預設 4 年！
+  // 🎯 完全同步「兩階段精算演算法」：固定 3 個標準年度 + 滾動式展延期審查
   const getWarrantyInfo = (vehicle: any, allOrders: any[]) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
-    const startDate = deliveryDateStr ? new Date(deliveryDateStr) : new Date();
-
-    // 1. 動態取得真實的原始保固到期日
-    let originalEndDate: Date;
-    if (vehicle.warranty_end_date) {
-      originalEndDate = new Date(vehicle.warranty_end_date);
-    } else {
-      // 若資料庫未設定，預設為交車後 3 年
-      originalEndDate = new Date(startDate);
-      originalEndDate.setFullYear(originalEndDate.getFullYear() + 3);
+    if (!deliveryDateStr) {
+      return {
+        originalEndDateStr: vehicle.warranty_expiry_date || vehicle.warranty_end_date || '未設定',
+        updatedEndDateStr: vehicle.warranty_expiry_date || vehicle.warranty_end_date || '未設定',
+        extensionMonths: 0,
+        extensionCount: 0,
+      };
     }
 
-    // 2. 動態計算該專案原有的保固年數 (以 365 天為單位)
-    const totalOriginalDays = Math.max(365, (originalEndDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-    const originalWarrantyYears = Math.round(totalOriginalDays / 365);
+    const startDate = new Date(deliveryDateStr);
+    
+    // 原始標準保固 3 年
+    let originalEndDate = new Date(startDate);
+    originalEndDate.setFullYear(originalEndDate.getFullYear() + 3);
 
-    let currentAssessmentStart = new Date(startDate);
-    let totalExtensionMonths = 0;
     let extensionCount = 0;
 
-    // 3. 按該專案實際保固年數 + 最多 3 次展延期逐期進行 5% 停修門檻審查
-    const maxPeriods = originalWarrantyYears + 3;
+    // 階段 1：審查原保固期（固定 3 個標準年度，每年 365 天，5% 門檻 18.25 天）
+    for (let yr = 0; yr < 3; yr++) {
+      if (extensionCount >= 3) break;
 
-    for (let period = 1; period <= maxPeriods; period++) {
-      if (extensionCount >= 3) break; // 最多展延 3 次 (+18 個月)
+      const pStart = new Date(startDate);
+      pStart.setFullYear(pStart.getFullYear() + yr);
 
-      const isExtensionPeriod = period > originalWarrantyYears;
-      const periodDays = isExtensionPeriod ? 182.5 : 365;
-      const thresholdDays = periodDays * 0.05; // 5% 門檻 (18.25 天 或 9.125 天)
+      const pEnd = new Date(pStart);
+      pEnd.setFullYear(pEnd.getFullYear() + 1);
 
-      const periodStart = new Date(currentAssessmentStart);
-      const periodEnd = new Date(periodStart.getTime() + periodDays * 24 * 60 * 60 * 1000);
-
-      // 計算在該審查期內的停修天數
-      let periodRepairDays = 0;
+      let repairDays = 0;
       allOrders.forEach((wo: any) => {
         const sStr = wo.claim_form_date || wo.created_at;
         if (!sStr) return;
@@ -104,24 +97,54 @@ export default function WorkOrdersSummary() {
         const isCompleted = (wo.status || '').toLowerCase() === 'completed';
         const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
 
-        if (oStart < periodEnd && oEnd > periodStart) {
-          const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
-          const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
+        if (oStart < pEnd && oEnd >= pStart) {
+          const overlapStart = new Date(Math.max(oStart.getTime(), pStart.getTime()));
+          const overlapEnd = new Date(Math.min(oEnd.getTime(), pEnd.getTime()));
           const diffDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
-          periodRepairDays += diffDays;
+          repairDays += diffDays;
         }
       });
 
-      // 停修超過 5% 門檻，觸發 1 次展延 (+6 個月)
-      if (periodRepairDays > thresholdDays) {
+      if (repairDays > 18.25) {
         extensionCount++;
-        totalExtensionMonths += 6;
       }
-
-      currentAssessmentStart = periodEnd;
     }
 
-    // 4. 根據真實原到期日累加展延月份得出修正後到期日
+    // 階段 2：若前階段觸展延，接著滾動審查展延期（最多 3 期，每期 6 個月，5% 門檻 9.125 天）
+    let currentExtStart = new Date(originalEndDate);
+
+    for (let ext = 0; ext < 3; ext++) {
+      if (extensionCount <= ext || extensionCount >= 3) break;
+
+      const pStart = new Date(currentExtStart);
+      const pEnd = new Date(pStart);
+      pEnd.setMonth(pEnd.getMonth() + 6);
+
+      let repairDays = 0;
+      allOrders.forEach((wo: any) => {
+        const sStr = wo.claim_form_date || wo.created_at;
+        if (!sStr) return;
+
+        const oStart = new Date(sStr);
+        const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+        const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
+
+        if (oStart < pEnd && oEnd >= pStart) {
+          const overlapStart = new Date(Math.max(oStart.getTime(), pStart.getTime()));
+          const overlapEnd = new Date(Math.min(oEnd.getTime(), pEnd.getTime()));
+          const diffDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
+          repairDays += diffDays;
+        }
+      });
+
+      if (repairDays > 9.125) {
+        extensionCount++;
+      }
+
+      currentExtStart = pEnd;
+    }
+
+    const totalExtensionMonths = extensionCount * 6;
     const updatedEndDate = new Date(originalEndDate);
     if (totalExtensionMonths > 0) {
       updatedEndDate.setMonth(updatedEndDate.getMonth() + totalExtensionMonths);
@@ -603,7 +626,7 @@ export default function WorkOrdersSummary() {
         </div>
       )}
 
-      {/* 🎯 對數報表 Modal */}
+      {/* 🎯 對數報表 Modal (已對齊最新兩階段精算法) */}
       {showAuditModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="print-modal-content bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto text-black">
@@ -660,9 +683,9 @@ export default function WorkOrdersSummary() {
 
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-[11px] text-gray-600 space-y-1">
               <p className="font-bold text-slate-800">📌 保固展延對數原則說明：</p>
-              <p>1. 系統自動讀取各車輛實際登錄之「原保固到期日 (warranty_end_date)」，精準計算各合約原保固年數。</p>
-              <p>2. 原保固期內，按每個年度（365天）分開審查，停修天數超標 18.25 天 (5%) 即觸發 1 次展延 (+6 個月)。</p>
-              <p>3. 進入展延期（182.5天/6個月）後，停修上限調為 9.125 天。若期間停修再次超標，則進一步觸發下一期展延。</p>
+              <p>1. 原保固期內，按前 3 個標準年度分開審查，停修天數超標 18.25 天 (5%) 即觸發 1 次展延 (+6 個月)。</p>
+              <p>2. 進入展延期（182.5天/6個月）後，停修上限調為 9.125 天。若期間停修再次超標，則進一步觸發下一期展延。</p>
+              <p>3. 展延上限最多 3 次 (上限 18 個月)。</p>
             </div>
 
             <div className="flex justify-between items-center border-t pt-4 print-hidden-element">
