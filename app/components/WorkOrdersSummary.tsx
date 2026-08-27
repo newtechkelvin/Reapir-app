@@ -54,7 +54,9 @@ export default function WorkOrdersSummary({
     // 🎯 權威展延邏輯精算 (確保 AM7633 等車輛 100% 正確)
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at;
     const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
-    const maxExtCount = Number(vehicle.max_extension_count ?? 3);
+    const maxExtCount = vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null 
+      ? Number(vehicle.max_extension_count) 
+      : 3;
 
     let origExpiryStr = '未設定';
     let finalExpiryStr = '未設定';
@@ -360,5 +362,3 @@ export default function WorkOrdersSummary({
     </div>
   );
 }
-
-
