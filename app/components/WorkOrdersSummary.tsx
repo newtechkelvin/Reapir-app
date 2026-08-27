@@ -16,7 +16,7 @@ export default function WorkOrdersSummary({
   const [showReportModal, setShowReportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. 計算個別車輛的累積停修天數與可用率
+  // 1. 計算個別車輛的累積停修天數、可用率與即時權威保固展延精算
   const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || [];
     let totalOpenDays = 0;
@@ -51,15 +51,98 @@ export default function WorkOrdersSummary({
       parseFloat((100 - (totalOpenDays / 365) * 100).toFixed(2))
     );
 
+    // 🎯 權威展延邏輯精算 (確保 AM7633 等車輛 100% 正確)
+    const deliveryDateStr = vehicle.delivery_date || vehicle.created_at;
+    const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
+    const maxExtCount = Number(vehicle.max_extension_count ?? 3);
+
+    let origExpiryStr = '未設定';
+    let finalExpiryStr = '未設定';
+    let extensionMonths = 0;
+
+    if (deliveryDateStr) {
+      const startDate = new Date(deliveryDateStr);
+      const originalEndDate = new Date(startDate);
+      originalEndDate.setFullYear(originalEndDate.getFullYear() + projectWarrantyYears);
+      origExpiryStr = originalEndDate.toISOString().split('T')[0];
+
+      let extensionCount = 0;
+
+      // 階段 1：年度原保固期審查
+      for (let yr = 0; yr < projectWarrantyYears; yr++) {
+        if (extensionCount >= maxExtCount) break;
+
+        const periodStart = new Date(startDate);
+        periodStart.setFullYear(periodStart.getFullYear() + yr);
+        const periodEnd = new Date(periodStart);
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+
+        let periodRepairDays = 0;
+        orders.forEach((wo: any) => {
+          const sStr = wo.claim_form_date || wo.created_at;
+          if (!sStr) return;
+          const oStart = new Date(sStr);
+          const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+          const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
+
+          if (oStart < periodEnd && oEnd >= periodStart) {
+            const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
+            const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
+            periodRepairDays += Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
+          }
+        });
+
+        if (periodRepairDays > 18.25) extensionCount++;
+      }
+
+      // 階段 2：滾動展延期審查
+      let currentExtStart = new Date(originalEndDate);
+      for (let ext = 0; ext < maxExtCount; ext++) {
+        if (extensionCount <= ext || extensionCount >= maxExtCount) break;
+
+        const periodStart = new Date(currentExtStart);
+        const periodEnd = new Date(periodStart);
+        periodEnd.setMonth(periodEnd.getMonth() + 6);
+
+        let periodRepairDays = 0;
+        orders.forEach((wo: any) => {
+          const sStr = wo.claim_form_date || wo.created_at;
+          if (!sStr) return;
+          const oStart = new Date(sStr);
+          const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+          const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
+
+          if (oStart < periodEnd && oEnd >= periodStart) {
+            const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
+            const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
+            periodRepairDays += Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
+          }
+        });
+
+        if (periodRepairDays > 9.125) extensionCount++;
+        currentExtStart = periodEnd;
+      }
+
+      extensionMonths = extensionCount * 6;
+      const finalExpiryDate = new Date(originalEndDate);
+      if (extensionMonths > 0) {
+        finalExpiryDate.setMonth(finalExpiryDate.getMonth() + extensionMonths);
+      }
+      finalExpiryStr = finalExpiryDate.toISOString().split('T')[0];
+    }
+
     return {
       totalOpenDays,
       availability,
       orderCount: orders.length,
       openCount,
+      origExpiryStr,
+      finalExpiryStr,
+      extensionMonths,
     };
   };
 
-  // 2. 過濾可用率低於 95% 的政府車輛 (用於對數報表 Modal)
+  // 2. 過濾可用率低於 95% 的政府車輛
   const lowAvailabilityVehicles = vehicles
     .filter((v) => (v.warranty_type || 'government') === 'government')
     .map((v) => {
@@ -127,14 +210,6 @@ export default function WorkOrdersSummary({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredVehicles.map((vehicle, idx) => {
             const stats = getVehicleStats(vehicle);
-            const deliveryStr = vehicle.delivery_date || vehicle.created_at;
-            let origExpiry = '未設定';
-
-            if (deliveryStr) {
-              const d = new Date(deliveryStr);
-              d.setFullYear(d.getFullYear() + (vehicle.warranty_period_years || 3));
-              origExpiry = d.toISOString().split('T')[0];
-            }
 
             return (
               <div
@@ -172,9 +247,9 @@ export default function WorkOrdersSummary({
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-gray-400 block font-medium">保固到期日</span>
+                    <span className="text-gray-400 block font-medium">修正後保固到期日</span>
                     <strong className="text-base font-black text-amber-700">
-                      {vehicle.warranty_expiry_date || origExpiry}
+                      {stats.finalExpiryStr}
                     </strong>
                   </div>
                 </div>
@@ -242,58 +317,29 @@ export default function WorkOrdersSummary({
                       </td>
                     </tr>
                   ) : (
-                    lowAvailabilityVehicles.map((vehicle, idx) => {
-                      const deliveryStr = vehicle.delivery_date || vehicle.created_at;
-                      let origExpiryStr = '未設定';
-
-                      if (deliveryStr) {
-                        const d = new Date(deliveryStr);
-                        d.setFullYear(d.getFullYear() + (vehicle.warranty_period_years || 3));
-                        origExpiryStr = d.toISOString().split('T')[0];
-                      }
-
-                      // 推算備用展延月份
-                      let calcExtMonths = 0;
-                      if (vehicle.warranty_expiry_date && origExpiryStr !== '未設定') {
-                        const origDate = new Date(origExpiryStr);
-                        const currDate = new Date(vehicle.warranty_expiry_date);
-                        const diffMs = currDate.getTime() - origDate.getTime();
-                        if (diffMs > 0) {
-                          calcExtMonths = Math.round(diffMs / (1000 * 60 * 60 * 24 * 30.4375));
-                        }
-                      }
-
-                      const finalExtMonths =
-                        vehicle.extension_months !== undefined && vehicle.extension_months !== null
-                          ? vehicle.extension_months
-                          : calcExtMonths;
-
-                      return (
-                        <tr key={vehicle.id || idx} className="hover:bg-slate-50 transition-all">
-                          <td className="p-3 text-center font-black text-blue-900">
-                            {vehicle.plate_number}
-                          </td>
-                          <td className="p-3 text-slate-700">{vehicle.project || '未指定'}</td>
-                          <td className="p-3 text-center font-bold text-red-600">
-                            {vehicle.stats.totalOpenDays} 天
-                          </td>
-                          <td className="p-3 text-center font-black text-red-600">
-                            {vehicle.stats.availability}%
-                          </td>
-                          <td className="p-3 text-center text-gray-400">{origExpiryStr}</td>
-
-                          {/* 🎯 直讀 Supabase 權威展延月份 (例如 AM7633 顯示 +18 個月) */}
-                          <td className="p-3 text-center font-bold text-amber-700">
-                            +{finalExtMonths} 個月
-                          </td>
-
-                          {/* 🎯 直讀 Supabase 權威修正後到期日 (例如 AM7633 顯示 2027-01-28) */}
-                          <td className="p-3 text-center font-black text-emerald-800">
-                            {vehicle.warranty_expiry_date || origExpiryStr}
-                          </td>
-                        </tr>
-                      );
-                    })
+                    lowAvailabilityVehicles.map((vehicle, idx) => (
+                      <tr key={vehicle.id || idx} className="hover:bg-slate-50 transition-all">
+                        <td className="p-3 text-center font-black text-blue-900">
+                          {vehicle.plate_number}
+                        </td>
+                        <td className="p-3 text-slate-700">{vehicle.project || '未指定'}</td>
+                        <td className="p-3 text-center font-bold text-red-600">
+                          {vehicle.stats.totalOpenDays} 天
+                        </td>
+                        <td className="p-3 text-center font-black text-red-600">
+                          {vehicle.stats.availability}%
+                        </td>
+                        <td className="p-3 text-center text-gray-400">
+                          {vehicle.stats.origExpiryStr}
+                        </td>
+                        <td className="p-3 text-center font-bold text-amber-700">
+                          +{vehicle.stats.extensionMonths} 個月
+                        </td>
+                        <td className="p-3 text-center font-black text-emerald-800">
+                          {vehicle.stats.finalExpiryStr}
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
