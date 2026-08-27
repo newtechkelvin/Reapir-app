@@ -3,15 +3,15 @@
 import React, { useState } from 'react';
 
 interface WorkOrdersSummaryProps {
-  vehicles: any[];
-  isLoading: boolean;
-  onRefresh: () => void;
+  vehicles?: any[];
+  isLoading?: boolean;
+  onRefresh?: () => void;
 }
 
 export default function WorkOrdersSummary({
-  vehicles,
-  isLoading,
-  onRefresh,
+  vehicles = [],
+  isLoading = false,
+  onRefresh = () => {},
 }: WorkOrdersSummaryProps) {
   const [showReportModal, setShowReportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -145,8 +145,8 @@ export default function WorkOrdersSummary({
   };
 
   // 2. 過濾可用率低於 95% 的政府車輛
-  const lowAvailabilityVehicles = vehicles
-    .filter((v) => (v.warranty_type || 'government') === 'government')
+  const lowAvailabilityVehicles = (vehicles || [])
+    .filter((v) => (v.warranty_type || 'government').toLowerCase() === 'government')
     .map((v) => {
       const stats = getVehicleStats(v);
       return { ...v, stats };
@@ -155,7 +155,7 @@ export default function WorkOrdersSummary({
     .sort((a, b) => b.stats.totalOpenDays - a.stats.totalOpenDays);
 
   // 3. 一般搜尋過濾
-  const filteredVehicles = vehicles.filter((v) => {
+  const filteredVehicles = (vehicles || []).filter((v) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     return (
