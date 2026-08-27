@@ -179,7 +179,7 @@ export default function ManageVehicles({
       });
 
       if (res.ok) {
-        alert('車輛資訊已順利更新！');
+        alert('車輛資訊與保固條款已順利更新！');
         setEditingVehicle(null);
         onRefresh();
       } else {
@@ -597,7 +597,7 @@ export default function ManageVehicles({
                   </select>
                 </div>
 
-                <div>
+                <div className="col-span-2">
                   <label className="block font-bold text-gray-700 mb-1">交車日期 (Delivery)</label>
                   <input
                     type="date"
@@ -607,30 +607,36 @@ export default function ManageVehicles({
                   />
                 </div>
 
-                {/* 🎯 專案保固年期 */}
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">專案保固年期 (年)</label>
-                  <input
-                    type="number"
-                    value={editWarrantyPeriodYears}
-                    onChange={(e) => setEditWarrantyPeriodYears(e.target.value)}
-                    min="1"
-                    max="10"
-                    className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                {/* 🎯 醒目專區：專案與保固條款設定 */}
+                <div className="col-span-2 bg-amber-50 p-3 rounded-xl border border-amber-300 space-y-2">
+                  <h4 className="font-extrabold text-amber-900 text-xs flex items-center gap-1">
+                    🏛️ 專案與保固條款設定
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">專案保固年期 (年)</label>
+                      <input
+                        type="number"
+                        value={editWarrantyPeriodYears}
+                        onChange={(e) => setEditWarrantyPeriodYears(e.target.value)}
+                        min="1"
+                        max="10"
+                        className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
 
-                {/* 🎯 展延上限次數 */}
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">展延上限次數 (0代表不展延)</label>
-                  <input
-                    type="number"
-                    value={editMaxExtensionCount}
-                    onChange={(e) => setEditMaxExtensionCount(e.target.value)}
-                    min="0"
-                    max="5"
-                    className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
-                  />
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">展延上限次數 (0=不展延)</label>
+                      <input
+                        type="number"
+                        value={editMaxExtensionCount}
+                        onChange={(e) => setEditMaxExtensionCount(e.target.value)}
+                        min="0"
+                        max="5"
+                        className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -644,7 +650,7 @@ export default function ManageVehicles({
                   />
                 </div>
 
-                <div className="col-span-2">
+                <div>
                   <label className="block font-bold text-gray-700 mb-1">車輛位置</label>
                   <input
                     type="text"
@@ -756,7 +762,7 @@ export default function ManageVehicles({
                   />
                 </div>
 
-                <div>
+                <div className="col-span-2">
                   <label className="block font-bold text-gray-700 mb-1">交車日期 (Delivery)</label>
                   <input
                     type="date"
@@ -766,30 +772,36 @@ export default function ManageVehicles({
                   />
                 </div>
 
-                {/* 🎯 專案保固年期 */}
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">專案保固年期 (年)</label>
-                  <input
-                    type="number"
-                    value={warrantyPeriodYears}
-                    onChange={(e) => handlePeriodChange(e.target.value)}
-                    min="1"
-                    max="10"
-                    className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                {/* 🎯 醒目專區：專案與保固條款設定 */}
+                <div className="col-span-2 bg-amber-50 p-3 rounded-xl border border-amber-300 space-y-2">
+                  <h4 className="font-extrabold text-amber-900 text-xs flex items-center gap-1">
+                    🏛️ 專案與保固條款設定
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">專案保固年期 (年)</label>
+                      <input
+                        type="number"
+                        value={warrantyPeriodYears}
+                        onChange={(e) => handlePeriodChange(e.target.value)}
+                        min="1"
+                        max="10"
+                        className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
 
-                {/* 🎯 展延上限次數 */}
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">展延上限次數 (0代表不展延)</label>
-                  <input
-                    type="number"
-                    value={maxExtensionCount}
-                    onChange={(e) => setMaxExtensionCount(e.target.value)}
-                    min="0"
-                    max="5"
-                    className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
-                  />
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">展延上限次數 (0=不展延)</label>
+                      <input
+                        type="number"
+                        value={maxExtensionCount}
+                        onChange={(e) => setMaxExtensionCount(e.target.value)}
+                        min="0"
+                        max="5"
+                        className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="col-span-2">
