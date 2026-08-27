@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-// PATCH: 更新特定車輛資訊 (包含保固年期與展延上限)
+// PATCH: 更新特定車輛資訊 (相容 Async Params)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params;
     const body = await request.json();
     const {
       plate_number,
@@ -38,7 +39,7 @@ export async function PATCH(
     const { data, error } = await supabaseAdmin
       .from('vehicles')
       .update(updatePayload)
-      .eq('id', params.id)
+      .eq('id', id)
       .select();
 
     if (error) {
@@ -54,13 +55,14 @@ export async function PATCH(
 // DELETE: 刪除特定車輛
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params;
     const { error } = await supabaseAdmin
       .from('vehicles')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
