@@ -349,7 +349,6 @@ export default function Home() {
           </nav>
         </header>
 
-        {/* 🎯 這裡加上傳入 WorkOrdersSummary 的必要 Props，完美解決 Vercel 編譯錯誤 */}
         {activeTab === 'summary' && (
           <WorkOrdersSummary
             vehicles={vehicles}
@@ -371,10 +370,9 @@ export default function Home() {
               project={project}
               setProject={setProject}
               brand={brand}
-              setModel={setModel}
-              brand={brand}
               setBrand={setBrand}
               model={model}
+              setModel={setModel}
               location={location}
               setLocation={setLocation}
               claimFormDate={claimFormDate}
