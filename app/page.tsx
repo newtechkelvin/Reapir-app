@@ -349,7 +349,11 @@ export default function Home() {
           </nav>
         </header>
 
-        {activeTab === 'summary' && <WorkOrdersSummary />}
+        {activeTab === 'summary' && <WorkOrdersSummary
+  vehicles={vehicles}
+  isLoading={isLoading}
+  onRefresh={fetchData}
+/>}
         {activeTab === 'general_summary' && <GeneralWarrantySummary />}
 
         {activeTab === 'create' && (
