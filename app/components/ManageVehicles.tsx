@@ -26,6 +26,8 @@ export default function ManageVehicles({
   const [editModel, setEditModel] = useState('');
   const [editWarrantyType, setEditWarrantyType] = useState('government');
   const [editDeliveryDate, setEditDeliveryDate] = useState('');
+  const [editWarrantyPeriodYears, setEditWarrantyPeriodYears] = useState('3');
+  const [editMaxExtensionCount, setEditMaxExtensionCount] = useState('3');
   const [editGarageLocation, setEditGarageLocation] = useState('');
   const [editVehicleLocation, setEditVehicleLocation] = useState('');
 
@@ -39,6 +41,7 @@ export default function ManageVehicles({
   const [model, setModel] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
   const [warrantyPeriodYears, setWarrantyPeriodYears] = useState('3');
+  const [maxExtensionCount, setMaxExtensionCount] = useState('3');
   const [warrantyExpiryDate, setWarrantyExpiryDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -79,7 +82,7 @@ export default function ManageVehicles({
     };
   };
 
-  // 🎯 2. 直接讀取資料庫權威數據，不再容易算錯！
+  // 2. 資訊計算與資料庫讀取
   const getWarrantyYearInfo = (vehicle: any) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at;
     if (!deliveryDateStr) {
@@ -102,9 +105,9 @@ export default function ManageVehicles({
 
     const yearNum = Math.max(1, diffYears + 1);
 
-    // 🎯 直接從資料庫推算展延月份 (如果資料庫到期日與原到期日不同)
+    const originalYears = Number(vehicle.warranty_period_years) || 3;
     const originalEndDate = new Date(startDate);
-    originalEndDate.setFullYear(originalEndDate.getFullYear() + (vehicle.warranty_period_years || 3));
+    originalEndDate.setFullYear(originalEndDate.getFullYear() + originalYears);
 
     let dbExpiryDateStr = vehicle.warranty_expiry_date;
     let extMonths = vehicle.extension_months || 0;
@@ -122,7 +125,7 @@ export default function ManageVehicles({
     return {
       yearText: `第 ${yearNum} 年`,
       startDateText: startDate.toISOString().split('T')[0],
-      endDateText: dbExpiryDateStr, // 🎯 直接顯示資料庫的 2027-01-28！
+      endDateText: dbExpiryDateStr,
       extensionMonths: extMonths > 0 ? extMonths : 0,
     };
   };
@@ -139,6 +142,8 @@ export default function ManageVehicles({
     setEditModel(vehicle.model || '');
     setEditWarrantyType(vehicle.warranty_type || 'government');
     setEditDeliveryDate(vehicle.delivery_date || '');
+    setEditWarrantyPeriodYears(String(vehicle.warranty_period_years || '3'));
+    setEditMaxExtensionCount(String(vehicle.max_extension_count ?? '3'));
     setEditGarageLocation(vehicle.garage_location || vehicle.location || '');
     setEditVehicleLocation(vehicle.vehicle_location || '');
 
@@ -161,6 +166,8 @@ export default function ManageVehicles({
         model: editModel.trim(),
         warranty_type: editWarrantyType,
         delivery_date: editDeliveryDate,
+        warranty_period_years: Number(editWarrantyPeriodYears),
+        max_extension_count: Number(editMaxExtensionCount),
         garage_location: editGarageLocation.trim(),
         vehicle_location: editVehicleLocation.trim(),
       };
@@ -223,6 +230,7 @@ export default function ManageVehicles({
         model: model.trim(),
         delivery_date: deliveryDate,
         warranty_period_years: Number(warrantyPeriodYears),
+        max_extension_count: Number(maxExtensionCount),
         warranty_expiry_date: warrantyExpiryDate,
       };
 
@@ -258,6 +266,7 @@ export default function ManageVehicles({
     setModel('');
     setDeliveryDate('');
     setWarrantyPeriodYears('3');
+    setMaxExtensionCount('3');
     setWarrantyExpiryDate('');
   };
 
@@ -284,8 +293,9 @@ export default function ManageVehicles({
           const wType = rawCategory.includes('散車') || rawCategory === 'general' ? 'general' : 'government';
           const delDate = cols[6] || null;
           const periodYears = cols[7] ? Number(cols[7]) : 3;
+          const maxExt = cols[8] ? Number(cols[8]) : 3;
 
-          let expDate = cols[8] || null;
+          let expDate = cols[9] || null;
           if (!expDate && delDate && periodYears) {
             const d = new Date(delDate);
             d.setFullYear(d.getFullYear() + periodYears);
@@ -301,6 +311,7 @@ export default function ManageVehicles({
             model: cols[5] || null,
             delivery_date: delDate,
             warranty_period_years: periodYears,
+            max_extension_count: maxExt,
             warranty_expiry_date: expDate,
           });
         }
@@ -346,6 +357,7 @@ export default function ManageVehicles({
 
   return (
     <div className="space-y-6 text-black">
+      {/* 頂部工具列 */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
         <div className="flex-1 w-full">
           <input
@@ -381,6 +393,7 @@ export default function ManageVehicles({
         </div>
       </div>
 
+      {/* 車輛卡片列表 */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在載入車輛主表資料...</div>
       ) : filteredVehicles.length === 0 ? (
@@ -484,7 +497,6 @@ export default function ManageVehicles({
 
                   <div>
                     <span className="text-gray-400 block font-medium">保固到期日</span>
-                    {/* 🎯 直讀 Supabase 資料庫欄位，保證顯示 2027-01-28 */}
                     <strong className="text-amber-700 font-bold block mt-0.5">{wInfo.endDateText}</strong>
                   </div>
 
@@ -592,6 +604,32 @@ export default function ManageVehicles({
                     value={editDeliveryDate}
                     onChange={(e) => setEditDeliveryDate(e.target.value)}
                     className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* 🎯 專案保固年期 */}
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">專案保固年期 (年)</label>
+                  <input
+                    type="number"
+                    value={editWarrantyPeriodYears}
+                    onChange={(e) => setEditWarrantyPeriodYears(e.target.value)}
+                    min="1"
+                    max="10"
+                    className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* 🎯 展延上限次數 */}
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">展延上限次數 (0代表不展延)</label>
+                  <input
+                    type="number"
+                    value={editMaxExtensionCount}
+                    onChange={(e) => setEditMaxExtensionCount(e.target.value)}
+                    min="0"
+                    max="5"
+                    className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -728,14 +766,28 @@ export default function ManageVehicles({
                   />
                 </div>
 
+                {/* 🎯 專案保固年期 */}
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">保固年期 (年)</label>
+                  <label className="block font-bold text-gray-700 mb-1">專案保固年期 (年)</label>
                   <input
                     type="number"
                     value={warrantyPeriodYears}
                     onChange={(e) => handlePeriodChange(e.target.value)}
                     min="1"
                     max="10"
+                    className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* 🎯 展延上限次數 */}
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">展延上限次數 (0代表不展延)</label>
+                  <input
+                    type="number"
+                    value={maxExtensionCount}
+                    onChange={(e) => setMaxExtensionCount(e.target.value)}
+                    min="0"
+                    max="5"
                     className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
