@@ -27,7 +27,7 @@ export default function WorkOrdersSummary({
   const [editItems, setEditItems] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 1. 計算車輛停修天數、可用率與即時權威保固展延精算
+  // 1. 計算車輛停修天數、可用率與即時權威保 保固展延精算
   const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
     let totalOpenDays = 0;
@@ -218,7 +218,7 @@ export default function WorkOrdersSummary({
     })
     .sort((a: any, b: any) => b.stats.openCount - a.stats.openCount || b.stats.totalOpenDays - a.stats.totalOpenDays);
 
-  // 🎯 開啟對齊截圖規格的工單明細彈窗 Modal
+  // 🎯 開啟工單明細（強效解析維修與零件項目）
   const handleOpenDetailModal = (order: any) => {
     setSelectedOrder(order);
     setEditLocation(order.garage_location || order.location || '機電 - 九龍灣1/F');
@@ -227,16 +227,46 @@ export default function WorkOrdersSummary({
     setEditClaimDate(order.claim_form_date || '');
     setEditCompletedDate(order.completed_date || '');
     setEditDescription(order.description || '');
-    setEditItems(
-      order.items && order.items.length > 0
-        ? order.items.map((it: any) => ({
-            completed: it.completed ?? false,
-            type: it.type || '進廠維修',
-            item_name: typeof it === 'string' ? it : it.item_name || it.name || '',
-            notes: it.notes || '',
-          }))
-        : [{ completed: false, type: '進廠維修', item_name: '', notes: '' }]
-    );
+
+    // 🎯 多重安全解析 items 資料
+    let rawItems: any = order.items || order.work_order_items || order.repair_items || [];
+    
+    // 如果是 JSON 字串，進行 parse
+    if (typeof rawItems === 'string') {
+      try {
+        rawItems = JSON.parse(rawItems);
+      } catch (e) {
+        // 分號分隔字串相容處理
+        rawItems = rawItems.split(';').map((str: string) => ({
+          completed: true,
+          type: '進廠維修',
+          item_name: str.trim(),
+          notes: '舊保單批次自動匯入',
+        }));
+      }
+    }
+
+    if (Array.isArray(rawItems) && rawItems.length > 0) {
+      const parsed = rawItems.map((it: any) => {
+        if (typeof it === 'string') {
+          return {
+            completed: true,
+            type: '進廠維修',
+            item_name: it,
+            notes: '舊保單批次自動匯入',
+          };
+        }
+        return {
+          completed: it.completed ?? true,
+          type: it.type || '進廠維修',
+          item_name: it.item_name || it.name || '',
+          notes: it.notes || '舊保單批次自動匯入',
+        };
+      });
+      setEditItems(parsed);
+    } else {
+      setEditItems([{ completed: false, type: '進廠維修', item_name: '', notes: '' }]);
+    }
   };
 
   // 新增維修項目
@@ -462,11 +492,11 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* 🖼️ 100% 對齊截圖的「車輛維修工單 (Repair Job Sheet)」Modal */}
+      {/* 🖼️ 「車輛維修工單 (Repair Job Sheet)」Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
-            {/* 1. Header 標題 Banner (100% 還原截圖) */}
+            {/* 1. Header 標題 Banner */}
             <div className="text-center space-y-1 pb-2">
               <h2 className="text-xl font-black text-slate-900 tracking-wide">
                 新力機械有限公司
@@ -516,7 +546,7 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 3. 🚘 車輛與合約基本資訊區塊 (卡片灰框) */}
+            {/* 3. 🚘 車輛與合約基本資訊區塊 */}
             <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 space-y-3">
               <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5 border-b pb-2 border-slate-200">
                 🚘 車輛與合約基本資訊
@@ -624,7 +654,7 @@ export default function WorkOrdersSummary({
               />
             </div>
 
-            {/* 5. 🛠️ 維修與零件項目明細表格區塊 (100% 對齊截圖表格) */}
+            {/* 5. 🛠️ 維修與零件項目明細表格區塊 (強效資料讀取) */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
@@ -679,7 +709,7 @@ export default function WorkOrdersSummary({
                             value={item.item_name}
                             onChange={(e) => handleItemChange(iIdx, 'item_name', e.target.value)}
                             placeholder="請輸入項目名稱..."
-                            className="w-full p-1.5 border rounded-lg font-bold bg-white text-xs border-slate-300"
+                            className="w-full p-1.5 border rounded-lg font-bold bg-white text-xs border-slate-300 text-slate-900"
                           />
                         </td>
                         <td className="p-2">
@@ -688,7 +718,7 @@ export default function WorkOrdersSummary({
                             value={item.notes}
                             onChange={(e) => handleItemChange(iIdx, 'notes', e.target.value)}
                             placeholder="例如：舊保單批次自動匯入"
-                            className="w-full p-1.5 border border-dashed rounded-lg font-medium bg-slate-50 text-xs border-slate-300"
+                            className="w-full p-1.5 border border-dashed rounded-lg font-medium bg-slate-50 text-xs border-slate-300 text-slate-700"
                           />
                         </td>
                         <td className="p-2 text-center">
