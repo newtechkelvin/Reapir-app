@@ -1,69 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-export async function GET() {
-  try {
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ message: 'Supabase 環境變數未設定' }, { status: 500 });
-    }
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    const { data, error } = await supabase.from('vehicles').select('*').order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return NextResponse.json({ vehicles: data });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || '無法取得車輛資料' }, { status: 500 });
-  }
-}
-
+// POST: 新增單筆或批次車輛資料
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { plate_number, vin, project, brand, model, location, claim_form_date, delivery_date, warranty_expiry_date } = body;
+    const payload = Array.isArray(body) ? body : [body];
 
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ message: 'Supabase 環境變數未設定' }, { status: 500 });
+    const formattedPayload = payload.map((v) => ({
+      warranty_type: v.warranty_type || 'government', // government 或 general
+      project: v.project?.trim() || null,
+      vin: v.vin?.trim() || null,
+      plate_number: v.plate_number?.trim().toUpperCase(),
+      brand: v.brand?.trim() || null,
+      model: v.model?.trim() || null,
+      delivery_date: v.delivery_date || null,
+      warranty_period_years: v.warranty_period_years ? Number(v.warranty_period_years) : null,
+      warranty_expiry_date: v.warranty_expiry_date || null,
+      created_at: new Date().toISOString(),
+    }));
+
+    // 檢查車牌號碼必填
+    if (formattedPayload.some((v) => !v.plate_number)) {
+      return NextResponse.json({ error: '車牌號碼為必填欄位' }, { status: 400 });
     }
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('vehicles')
-      .insert([{ plate_number, vin, project, brand, model, location, claim_form_date, delivery_date, warranty_expiry_date }])
-      .select()
-      .single();
+      .insert(formattedPayload)
+      .select();
 
-    if (error) throw error;
-    return NextResponse.json({ success: true, vehicle: data });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || '新增車輛失敗' }, { status: 500 });
-  }
-}
-
-export async function PATCH(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { id, plate_number, vin, project, brand, model, location, claim_form_date, delivery_date, warranty_expiry_date } = body;
-
-    if (!id) return NextResponse.json({ error: '缺少車輛 ID' }, { status: 400 });
-
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ message: 'Supabase 環境變數未設定' }, { status: 500 });
+    if (error) {
+      console.error('新增車輛資料失敗:', error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { data, error } = await supabase
-      .from('vehicles')
-      .update({ plate_number, vin, project, brand, model, location, claim_form_date, delivery_date, warranty_expiry_date })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return NextResponse.json({ success: true, vehicle: data });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || '更新車輛失敗' }, { status: 500 });
+    return NextResponse.json({ success: true, count: data.length, data });
+  } catch (err) {
+    console.error('API POST 錯誤:', err);
+    return NextResponse.json({ error: '伺服器內部錯誤' }, { status: 500 });
   }
 }
