@@ -72,25 +72,22 @@ export default function ManageVehicles({
       }
     });
 
-    const remainingDays = Math.max(0, parseFloat((18.25 - totalOpenDays).toFixed(1)));
-
     return {
       totalOpenDays,
-      remainingDays,
       orderCount: orders.length,
       openCount,
     };
   };
 
-  // 🎯 2. 徹底修復：穩健可靠的單一滾動審查演算法
+  // 🎯 2. 直接讀取資料庫權威數據，不再容易算錯！
   const getWarrantyYearInfo = (vehicle: any) => {
-    const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
+    const deliveryDateStr = vehicle.delivery_date || vehicle.created_at;
     if (!deliveryDateStr) {
       return {
         yearText: '第 1 年',
         startDateText: '未設定',
-        endDateText: vehicle.warranty_expiry_date || vehicle.warranty_end_date || '未設定',
-        extensionMonths: 0,
+        endDateText: vehicle.warranty_expiry_date || '未設定',
+        extensionMonths: vehicle.extension_months || 0,
       };
     }
 
@@ -105,66 +102,28 @@ export default function ManageVehicles({
 
     const yearNum = Math.max(1, diffYears + 1);
 
-    // 原始標準保固 3 年
-    let originalEndDate = new Date(startDate);
-    originalEndDate.setFullYear(originalEndDate.getFullYear() + 3);
+    // 🎯 直接從資料庫推算展延月份 (如果資料庫到期日與原到期日不同)
+    const originalEndDate = new Date(startDate);
+    originalEndDate.setFullYear(originalEndDate.getFullYear() + (vehicle.warranty_period_years || 3));
 
-    const allOrders = vehicle.workOrders || vehicle.work_orders || [];
-    let currentAssessmentStart = new Date(startDate);
-    let totalExtensionMonths = 0;
-    let extensionCount = 0;
+    let dbExpiryDateStr = vehicle.warranty_expiry_date;
+    let extMonths = vehicle.extension_months || 0;
 
-    // 進行最多 6 個審查區間 (前 3 個 1 年區間 + 後續最多 3 個 6 個月展延區間)
-    for (let period = 1; period <= 6; period++) {
-      if (extensionCount >= 3) break;
-
-      const isExtensionPeriod = period > 3;
-      const periodStart = new Date(currentAssessmentStart);
-      const periodEnd = new Date(periodStart);
-
-      if (isExtensionPeriod) {
-        periodEnd.setMonth(periodEnd.getMonth() + 6);
-      } else {
-        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+    if (dbExpiryDateStr) {
+      const dbExpiry = new Date(dbExpiryDateStr);
+      const diffMs = dbExpiry.getTime() - originalEndDate.getTime();
+      if (diffMs > 0) {
+        extMonths = Math.round(diffMs / (1000 * 60 * 60 * 24 * 30.4375));
       }
-
-      const thresholdDays = isExtensionPeriod ? 9.125 : 18.25;
-
-      let repairDays = 0;
-      allOrders.forEach((wo: any) => {
-        const sStr = wo.claim_form_date || wo.created_at;
-        if (!sStr) return;
-
-        const oStart = new Date(sStr);
-        const isCompleted = (wo.status || '').toLowerCase() === 'completed';
-        const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
-
-        if (oStart < periodEnd && oEnd >= periodStart) {
-          const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
-          const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
-          const diffDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
-          repairDays += diffDays;
-        }
-      });
-
-      if (repairDays > thresholdDays) {
-        extensionCount++;
-        totalExtensionMonths += 6;
-      }
-
-      currentAssessmentStart = periodEnd;
-    }
-
-    const updatedEndDate = new Date(originalEndDate);
-    if (totalExtensionMonths > 0) {
-      updatedEndDate.setMonth(updatedEndDate.getMonth() + totalExtensionMonths);
+    } else {
+      dbExpiryDateStr = originalEndDate.toISOString().split('T')[0];
     }
 
     return {
       yearText: `第 ${yearNum} 年`,
       startDateText: startDate.toISOString().split('T')[0],
-      endDateText: updatedEndDate.toISOString().split('T')[0],
-      extensionMonths: totalExtensionMonths,
+      endDateText: dbExpiryDateStr, // 🎯 直接顯示資料庫的 2027-01-28！
+      extensionMonths: extMonths > 0 ? extMonths : 0,
     };
   };
 
@@ -525,6 +484,7 @@ export default function ManageVehicles({
 
                   <div>
                     <span className="text-gray-400 block font-medium">保固到期日</span>
+                    {/* 🎯 直讀 Supabase 資料庫欄位，保證顯示 2027-01-28 */}
                     <strong className="text-amber-700 font-bold block mt-0.5">{wInfo.endDateText}</strong>
                   </div>
 
