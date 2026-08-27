@@ -82,7 +82,7 @@ export default function ManageVehicles({
     };
   };
 
-  // 🎯 2. 徹底重構修復：分段審查算法 (原保固年度 + 滾動展延期)
+  // 🎯 2. 徹底修復：穩健可靠的單一滾動審查演算法
   const getWarrantyYearInfo = (vehicle: any) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
     if (!deliveryDateStr) {
@@ -110,17 +110,25 @@ export default function ManageVehicles({
     originalEndDate.setFullYear(originalEndDate.getFullYear() + 3);
 
     const allOrders = vehicle.workOrders || vehicle.work_orders || [];
+    let currentAssessmentStart = new Date(startDate);
+    let totalExtensionMonths = 0;
     let extensionCount = 0;
 
-    // 階段 1：審查原保固期（固定 3 個標準年度，每個年度 365 天，5% 門檻 18.25 天）
-    for (let yr = 0; yr < 3; yr++) {
+    // 進行最多 6 個審查區間 (前 3 個 1 年區間 + 後續最多 3 個 6 個月展延區間)
+    for (let period = 1; period <= 6; period++) {
       if (extensionCount >= 3) break;
 
-      const pStart = new Date(startDate);
-      pStart.setFullYear(pStart.getFullYear() + yr);
+      const isExtensionPeriod = period > 3;
+      const periodStart = new Date(currentAssessmentStart);
+      const periodEnd = new Date(periodStart);
 
-      const pEnd = new Date(pStart);
-      pEnd.setFullYear(pEnd.getFullYear() + 1);
+      if (isExtensionPeriod) {
+        periodEnd.setMonth(periodEnd.getMonth() + 6);
+      } else {
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+      }
+
+      const thresholdDays = isExtensionPeriod ? 9.125 : 18.25;
 
       let repairDays = 0;
       allOrders.forEach((wo: any) => {
@@ -131,54 +139,22 @@ export default function ManageVehicles({
         const isCompleted = (wo.status || '').toLowerCase() === 'completed';
         const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
 
-        if (oStart < pEnd && oEnd >= pStart) {
-          const overlapStart = new Date(Math.max(oStart.getTime(), pStart.getTime()));
-          const overlapEnd = new Date(Math.min(oEnd.getTime(), pEnd.getTime()));
+        if (oStart < periodEnd && oEnd >= periodStart) {
+          const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
+          const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
           const diffDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
           repairDays += diffDays;
         }
       });
 
-      if (repairDays > 18.25) {
+      if (repairDays > thresholdDays) {
         extensionCount++;
-      }
-    }
-
-    // 階段 2：若前階段觸展延，接著滾動審查展延期（最多 3 期，每期 6 個月，5% 門檻 9.125 天）
-    let currentExtStart = new Date(originalEndDate);
-
-    for (let ext = 0; ext < 3; ext++) {
-      if (extensionCount <= ext || extensionCount >= 3) break;
-
-      const pStart = new Date(currentExtStart);
-      const pEnd = new Date(pStart);
-      pEnd.setMonth(pEnd.getMonth() + 6);
-
-      let repairDays = 0;
-      allOrders.forEach((wo: any) => {
-        const sStr = wo.claim_form_date || wo.created_at;
-        if (!sStr) return;
-
-        const oStart = new Date(sStr);
-        const isCompleted = (wo.status || '').toLowerCase() === 'completed';
-        const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
-
-        if (oStart < pEnd && oEnd >= pStart) {
-          const overlapStart = new Date(Math.max(oStart.getTime(), pStart.getTime()));
-          const overlapEnd = new Date(Math.min(oEnd.getTime(), pEnd.getTime()));
-          const diffDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
-          repairDays += diffDays;
-        }
-      });
-
-      if (repairDays > 9.125) {
-        extensionCount++;
+        totalExtensionMonths += 6;
       }
 
-      currentExtStart = pEnd;
+      currentAssessmentStart = periodEnd;
     }
 
-    const totalExtensionMonths = extensionCount * 6;
     const updatedEndDate = new Date(originalEndDate);
     if (totalExtensionMonths > 0) {
       updatedEndDate.setMonth(updatedEndDate.getMonth() + totalExtensionMonths);
