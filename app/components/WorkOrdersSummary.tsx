@@ -16,9 +16,12 @@ export default function WorkOrdersSummary({
   const [showReportModal, setShowReportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. 計算車輛停修天數、可用率與即時權威保固展延精算
+  // 1. 工單明細 Modal 狀態
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+
+  // 計算車輛停修天數、可用率與即時權威保固展延精算
   const getVehicleStats = (vehicle: any) => {
-    const orders = vehicle.workOrders || vehicle.work_orders || [];
+    const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
     let totalOpenDays = 0;
     let openCount = 0;
     const openOrders: any[] = [];
@@ -26,11 +29,12 @@ export default function WorkOrdersSummary({
     const now = new Date();
 
     orders.forEach((wo: any) => {
-      const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+      const statusLower = (wo.status || 'open').toLowerCase();
+      const isCompleted = statusLower === 'completed' || statusLower === 'closed';
 
       if (!isCompleted) {
         openCount++;
-        const sStr = wo.claim_form_date || wo.created_at;
+        const sStr = wo.claim_form_date || wo.created_at || wo.date;
         let days = 0;
         if (sStr) {
           const start = new Date(sStr);
@@ -38,9 +42,21 @@ export default function WorkOrdersSummary({
           days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           totalOpenDays += days;
         }
+
+        // 取出標準工單單號
+        const woNum =
+          wo.order_number ||
+          wo.work_order_number ||
+          wo.form_number ||
+          wo.claim_form_number ||
+          (typeof wo.id === 'string' && wo.id.startsWith('WO-') ? wo.id : null) ||
+          'WO-PENDING';
+
         openOrders.push({
           ...wo,
+          woNum,
           openDays: days,
+          vehiclePlate: vehicle.plate_number,
         });
       } else {
         if (wo.claim_form_date && wo.completed_date) {
@@ -57,12 +73,13 @@ export default function WorkOrdersSummary({
       parseFloat((100 - (totalOpenDays / 365) * 100).toFixed(2))
     );
 
-    // 🎯 權威展延邏輯精算 (確保 AM7633 顯示 +18 個月 / 2027-01-28)
+    // 權威展延邏輯精算 (用於對數報表)
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at;
     const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
-    const maxExtCount = vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null 
-      ? Number(vehicle.max_extension_count) 
-      : 3;
+    const maxExtCount =
+      vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null
+        ? Number(vehicle.max_extension_count)
+        : 3;
 
     let origExpiryStr = '未設定';
     let finalExpiryStr = '未設定';
@@ -89,13 +106,17 @@ export default function WorkOrdersSummary({
           const sStr = wo.claim_form_date || wo.created_at;
           if (!sStr) return;
           const oStart = new Date(sStr);
-          const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+          const statusLower = (wo.status || 'open').toLowerCase();
+          const isCompleted = statusLower === 'completed' || statusLower === 'closed';
           const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
 
           if (oStart < periodEnd && oEnd >= periodStart) {
             const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
             const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
-            periodRepairDays += Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
+            periodRepairDays += Math.max(
+              0,
+              Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
+            );
           }
         });
 
@@ -115,13 +136,17 @@ export default function WorkOrdersSummary({
           const sStr = wo.claim_form_date || wo.created_at;
           if (!sStr) return;
           const oStart = new Date(sStr);
-          const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+          const statusLower = (wo.status || 'open').toLowerCase();
+          const isCompleted = statusLower === 'completed' || statusLower === 'closed';
           const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
 
           if (oStart < periodEnd && oEnd >= periodStart) {
             const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
             const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
-            periodRepairDays += Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
+            periodRepairDays += Math.max(
+              0,
+              Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
+            );
           }
         });
 
@@ -205,7 +230,7 @@ export default function WorkOrdersSummary({
         </div>
       </div>
 
-      {/* 🖼️ 原汁原味 3 欄式卡片列表 (完全還原截圖) */}
+      {/* 3 欄式卡片列表 */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">
           ⏳ 正在載入車輛工單資料...
@@ -219,7 +244,6 @@ export default function WorkOrdersSummary({
           {filteredVehicles.map((vehicle, idx) => {
             const stats = getVehicleStats(vehicle);
 
-            // 邊框狀態判斷 (嚴格按照截圖)
             const isCritical = stats.availability < 95;
             const isWarning = stats.availability >= 95 && stats.availability <= 96;
 
@@ -232,54 +256,65 @@ export default function WorkOrdersSummary({
                 key={vehicle.id || idx}
                 className={`bg-white border-2 rounded-2xl p-5 shadow-2xs space-y-4 hover:shadow-md transition-all ${cardBorderClass}`}
               >
-                {/* 1. 車牌與類別標籤 */}
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                {/* 1. 車牌與類別標籤 (單行約束) */}
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2 truncate">
                       🚘 {vehicle.plate_number}
                     </h3>
-                    <span className="text-[11px] text-gray-400 block mt-0.5 font-medium">
+                    <span className="text-[11px] text-gray-400 block mt-0.5 font-medium truncate">
                       VIN: {vehicle.vin || '未設定'}
                     </span>
                   </div>
 
-                  <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[11px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
+                  <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[11px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 whitespace-nowrap shrink-0">
                     🏛️ 政府合約
                   </span>
                 </div>
 
                 <hr className="border-slate-100" />
 
-                {/* 2. 停修天數與可用率 (雙圓角方框) */}
+                {/* 2. 停修天數與可用率 (單行約束) */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
-                    <span className="text-[11px] text-gray-400 font-bold block">累積停修總天數</span>
-                    <strong className="text-xl font-black text-red-600 block mt-1">
+                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl min-w-0">
+                    <span className="text-[11px] text-gray-400 font-bold block truncate">
+                      累積停修總天數
+                    </span>
+                    <strong className="text-xl font-black text-red-600 block mt-1 truncate">
                       {stats.totalOpenDays} 天
                     </strong>
                   </div>
 
-                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl relative">
-                    <div className="flex justify-between items-start">
-                      <span className="text-[11px] text-gray-400 font-bold block">Availability (可用率)</span>
+                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl min-w-0 relative">
+                    <div className="flex justify-between items-start gap-1">
+                      <span className="text-[11px] text-gray-400 font-bold block truncate">
+                        Availability (可用率)
+                      </span>
                       {isWarning && (
-                        <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded font-black">
+                        <span className="bg-amber-500 text-white text-[10px] px-1 py-0.5 rounded font-black whitespace-nowrap shrink-0">
                           ⚠️ 接近 95%
                         </span>
                       )}
                     </div>
-                    <strong className={`text-xl font-black block mt-1 ${isCritical ? 'text-red-600' : 'text-amber-600'}`}>
+                    <strong
+                      className={`text-xl font-black block mt-1 truncate ${
+                        isCritical ? 'text-red-600' : 'text-amber-600'
+                      }`}
+                    >
                       {stats.availability}%
                     </strong>
                   </div>
                 </div>
 
-                {/* 3. 專案名稱與 Open 工單數 */}
-                <div className="flex justify-between items-center text-xs pt-1">
-                  <span className="text-slate-800 font-extrabold truncate max-w-[200px]" title={vehicle.project}>
+                {/* 3. 專案名稱與 Open 工單數 (單行約束) */}
+                <div className="flex justify-between items-center text-xs pt-1 gap-2">
+                  <span
+                    className="text-slate-800 font-extrabold truncate flex-1"
+                    title={vehicle.project}
+                  >
                     專案 : {vehicle.project || '預設專案'}
                   </span>
-                  <span className="text-slate-700 font-bold">
+                  <span className="text-slate-700 font-bold whitespace-nowrap shrink-0">
                     Open 工單數 : <strong className="text-red-600">{stats.openCount} 張</strong>
                   </span>
                 </div>
@@ -298,18 +333,25 @@ export default function WorkOrdersSummary({
                     stats.openOrders.map((wo, wIdx) => (
                       <div
                         key={wo.id || wIdx}
-                        className="bg-blue-50/50 border border-blue-100 p-2.5 rounded-xl flex justify-between items-center text-xs"
+                        className="bg-blue-50/50 border border-blue-100 p-2.5 rounded-xl flex justify-between items-center text-xs gap-2"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-blue-900">{wo.work_order_number || wo.id || `WO-${wIdx + 1}`}</span>
-                          <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-md text-[10px]">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className="font-bold text-blue-900 truncate">
+                            {wo.woNum}
+                          </span>
+                          <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-md text-[10px] whitespace-nowrap shrink-0">
                             Open ({wo.openDays}天)
                           </span>
                         </div>
 
-                        <span className="text-blue-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5">
+                        {/* 🎯 點擊觸發檢視明細 Modal */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrder(wo)}
+                          className="text-blue-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5 whitespace-nowrap shrink-0 border-0 bg-transparent"
+                        >
                           檢視明細 &rarr;
-                        </span>
+                        </button>
                       </div>
                     ))
                   )}
@@ -317,6 +359,78 @@ export default function WorkOrdersSummary({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 🔍 工單明細卡片彈窗 Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                  📋 工單明細: {selectedOrder.woNum}
+                </h3>
+                <span className="text-xs text-gray-500 font-bold">
+                  車牌號碼: {selectedOrder.vehiclePlate}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="text-gray-400 hover:text-gray-600 text-2xl font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-gray-400 font-bold block">工單狀態</span>
+                <strong className="text-sm font-black text-amber-600 block mt-1">
+                  Open (已停修 {selectedOrder.openDays} 天)
+                </strong>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-gray-400 font-bold block">Claim Form 日期</span>
+                <strong className="text-sm font-black text-slate-800 block mt-1">
+                  {selectedOrder.claim_form_date || selectedOrder.created_at || '未設定'}
+                </strong>
+              </div>
+
+              <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-gray-400 font-bold block mb-1">維修描述 / 故障說明</span>
+                <p className="text-slate-800 font-semibold leading-relaxed">
+                  {selectedOrder.description || selectedOrder.notes || '無詳細描述'}
+                </p>
+              </div>
+
+              {selectedOrder.items && selectedOrder.items.length > 0 && (
+                <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                  <span className="text-gray-400 font-bold block">維修項目清單</span>
+                  <ul className="divide-y divide-slate-200">
+                    {selectedOrder.items.map((item: any, iIdx: number) => (
+                      <li key={iIdx} className="py-1.5 flex justify-between text-xs">
+                        <span className="font-bold text-slate-700">{item.item_name || item.name || item}</span>
+                        <span className="text-gray-400 font-semibold">{item.type || '維修項目'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl cursor-pointer"
+              >
+                關閉明細
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
