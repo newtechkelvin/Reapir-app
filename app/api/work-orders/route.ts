@@ -90,8 +90,12 @@ export async function POST(request: NextRequest) {
       warranty_type
     } = body;
 
-    if (!plate_number) {
+    const normalizedPlate = String(plate_number || '').trim().toUpperCase();
+    if (!normalizedPlate) {
       return NextResponse.json({ error: '請輸入車牌號碼' }, { status: 400 });
+    }
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: 'Supabase 環境變數未設定' }, { status: 500 });
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -100,12 +104,12 @@ export async function POST(request: NextRequest) {
     let { data: vehicle } = await supabase
       .from('vehicles')
       .select('*')
-      .eq('plate_number', plate_number.trim())
+      .eq('plate_number', normalizedPlate)
       .maybeSingle();
 
     if (!vehicle) {
       const insertPayload: Record<string, any> = {
-        plate_number: plate_number.trim(),
+        plate_number: normalizedPlate,
         vin: vin || '',
         project: project || (targetWarrantyType === 'General' ? '散車保固' : ''),
         brand: brand || '',
@@ -147,13 +151,15 @@ export async function POST(request: NextRequest) {
       if (vin) updateData.vin = vin;
       if (project) updateData.project = project;
 
-      try {
-        await supabase
-          .from('vehicles')
-          .update(updateData)
-          .eq('id', vehicle.id);
-      } catch (e) {
-        console.warn('更新車輛屬性失敗 (非致命):', e);
+      const { error: vehicleUpdateError } = await supabase
+        .from('vehicles')
+        .update(updateData)
+        .eq('id', vehicle.id);
+      if (vehicleUpdateError) {
+        return NextResponse.json(
+          { error: `更新車輛資料失敗: ${vehicleUpdateError.message}` },
+          { status: 500 },
+        );
       }
     }
 
@@ -197,13 +203,25 @@ export async function POST(request: NextRequest) {
     }
 
     if (Array.isArray(items) && items.length > 0) {
-      const itemsToInsert = items.map((i: any) => ({
-        work_order_id: order.id,
-        type: i.type || '進廠維修',
-        item_name: i.item_name || '',
-        is_completed: false
-      }));
-      await supabase.from('work_order_items').insert(itemsToInsert);
+      const itemsToInsert = items
+        .map((i: any) => ({
+          work_order_id: order.id,
+          type: i.type || '進廠維修',
+          item_name: String(i.item_name || '').trim(),
+          is_completed: false,
+        }))
+        .filter((item: any) => item.item_name);
+      if (itemsToInsert.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('work_order_items')
+          .insert(itemsToInsert);
+        if (itemsError) {
+          return NextResponse.json(
+            { error: `建立工單項目失敗: ${itemsError.message}` },
+            { status: 500 },
+          );
+        }
+      }
     }
 
     return NextResponse.json({ success: true, order });
