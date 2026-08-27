@@ -174,20 +174,20 @@ export default function WorkOrdersSummary({
     };
   };
 
-  // 🎯 關鍵過濾 1：僅挑出「有工單/有維修紀錄」的政府車輛，過濾掉沒有工單的車輛
+  // 僅挑出「有工單/有維修紀錄」的政府車輛
   const governmentVehiclesWithOrders = (vehicles || [])
-    .filter((v) => (v.warranty_type || 'government').toLowerCase() === 'government')
-    .map((v) => ({ ...v, stats: getVehicleStats(v) }))
-    .filter((v) => v.stats.orderCount > 0); // 👈 排除沒有工單的車輛
+    .filter((v: any) => (v.warranty_type || 'government').toLowerCase() === 'government')
+    .map((v: any) => ({ ...v, stats: getVehicleStats(v) }))
+    .filter((v: any) => v.stats.orderCount > 0);
 
   // 對數報表（可用率 < 95%）
   const lowAvailabilityVehicles = governmentVehiclesWithOrders
-    .filter((v) => v.stats.availability < 95)
-    .sort((a, b) => b.stats.totalOpenDays - a.stats.totalOpenDays);
+    .filter((v: any) => v.stats.availability < 95)
+    .sort((a: any, b: any) => b.stats.totalOpenDays - a.stats.totalOpenDays);
 
-  // 🎯 關鍵過濾 2：搜尋與最終呈現 (按照累積停修天數/Open工單降序排列)
+  // 搜尋與最終呈現 (按照 Open 工單數 / 累積停修天數降序排列)
   const filteredVehicles = governmentVehiclesWithOrders
-    .filter((v) => {
+    .filter((v: any) => {
       if (!searchTerm.trim()) return true;
       const term = searchTerm.toLowerCase();
       return (
@@ -197,7 +197,7 @@ export default function WorkOrdersSummary({
         v.model?.toLowerCase().includes(term)
       );
     })
-    .sort((a, b) => b.stats.openCount - a.stats.openCount || b.stats.totalOpenDays - a.stats.totalOpenDays);
+    .sort((a: any, b: any) => b.stats.openCount - a.stats.openCount || b.stats.totalOpenDays - a.stats.totalOpenDays);
 
   return (
     <div className="space-y-6 text-black">
@@ -232,7 +232,7 @@ export default function WorkOrdersSummary({
         </div>
       </div>
 
-      {/* 3 欄式卡片列表 (僅顯示有工單的車輛) */}
+      {/* 3 欄式卡片列表 */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">
           ⏳ 正在載入車輛工單資料...
@@ -243,7 +243,7 @@ export default function WorkOrdersSummary({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {filteredVehicles.map((vehicle, idx) => {
+          {filteredVehicles.map((vehicle: any, idx: number) => {
             const { stats } = vehicle;
 
             const isCritical = stats.availability < 95;
@@ -332,7 +332,7 @@ export default function WorkOrdersSummary({
                       目前無進行中的工單
                     </div>
                   ) : (
-                    stats.openOrders.map((wo, wIdx) => (
+                    stats.openOrders.map((wo: any, wIdx: number) => (
                       <div
                         key={wo.id || wIdx}
                         className="bg-blue-50/50 border border-blue-100 p-2.5 rounded-xl flex justify-between items-center text-xs gap-2"
@@ -490,7 +490,7 @@ export default function WorkOrdersSummary({
                       </td>
                     </tr>
                   ) : (
-                    lowAvailabilityVehicles.map((vehicle, idx) => (
+                    lowAvailabilityVehicles.map((vehicle: any, idx: number) => (
                       <tr key={vehicle.id || idx} className="hover:bg-slate-50 transition-all">
                         <td className="p-3 text-center font-black text-blue-900">
                           {vehicle.plate_number}
