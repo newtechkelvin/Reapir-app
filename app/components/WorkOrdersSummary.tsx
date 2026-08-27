@@ -174,19 +174,21 @@ export default function WorkOrdersSummary({
     };
   };
 
-  // 僅挑出「有工單/有維修紀錄」的政府車輛
-  const governmentVehiclesWithOrders = (vehicles || [])
+  // 🎯 關鍵修正：只保留「Open 工單數 > 0」的政府車輛
+  const governmentVehiclesWithOpenOrders = (vehicles || [])
     .filter((v: any) => (v.warranty_type || 'government').toLowerCase() === 'government')
     .map((v: any) => ({ ...v, stats: getVehicleStats(v) }))
-    .filter((v: any) => v.stats.orderCount > 0);
+    .filter((v: any) => v.stats.openCount > 0); // 👈 確保完全排除 Open 工單數 : 0 張的車輛
 
   // 對數報表（可用率 < 95%）
-  const lowAvailabilityVehicles = governmentVehiclesWithOrders
+  const lowAvailabilityVehicles = (vehicles || [])
+    .filter((v: any) => (v.warranty_type || 'government').toLowerCase() === 'government')
+    .map((v: any) => ({ ...v, stats: getVehicleStats(v) }))
     .filter((v: any) => v.stats.availability < 95)
     .sort((a: any, b: any) => b.stats.totalOpenDays - a.stats.totalOpenDays);
 
-  // 搜尋與最終呈現 (按照 Open 工單數 / 累積停修天數降序排列)
-  const filteredVehicles = governmentVehiclesWithOrders
+  // 搜尋與最終呈現 (按 Open 工單數 / 累積停修天數降序排列)
+  const filteredVehicles = governmentVehiclesWithOpenOrders
     .filter((v: any) => {
       if (!searchTerm.trim()) return true;
       const term = searchTerm.toLowerCase();
@@ -232,14 +234,14 @@ export default function WorkOrdersSummary({
         </div>
       </div>
 
-      {/* 3 欄式卡片列表 */}
+      {/* 3 欄式卡片列表 (僅顯示有 Open 工單的車輛) */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">
           ⏳ 正在載入車輛工單資料...
         </div>
       ) : filteredVehicles.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-2xl border border-dashed text-gray-500">
-          <p className="text-base font-bold">目前沒有有開立工單的政府車輛</p>
+          <p className="text-base font-bold">目前沒有有 Open 工單的政府車輛</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
