@@ -82,7 +82,7 @@ export default function ManageVehicles({
     };
   };
 
-  // 🎯 2. 精準修復：採用月份精準推移 (Month-Based Assessment Window)，完整捕捉邊界工單
+  // 🎯 2. 核心修正：精確精算展延月份 (精準處理滾動展延與邊界日期)
   const getWarrantyYearInfo = (vehicle: any) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
     if (!deliveryDateStr) {
@@ -105,7 +105,7 @@ export default function ManageVehicles({
 
     const yearNum = Math.max(1, diffYears + 1);
 
-    // 原始標準保固到期日 (3 年)
+    // 原始標準保固 3 年
     let originalEndDate = new Date(startDate);
     originalEndDate.setFullYear(originalEndDate.getFullYear() + 3);
 
@@ -114,13 +114,12 @@ export default function ManageVehicles({
     let totalExtensionMonths = 0;
     let extensionCount = 0;
 
-    // 進行最多 6 期（3 個標準年 + 最多 3 個展延期）滾動式審查
-    for (let period = 1; period <= 6; period++) {
-      if (extensionCount >= 3) break;
+    // 進行最多 7 期（3 個標準年 + 最多 3 個展延期）滾動式審查
+    for (let period = 1; period <= 7; period++) {
+      if (extensionCount >= 3) break; // 上限 3 次 (+18 個月)
 
-      const isExtensionPeriod = period > 3;
+      const isExtensionPeriod = extensionCount > 0 || period > 3;
       
-      // 計算該期的起止日期 (以月份推進避免閏年落差)
       const periodStart = new Date(currentAssessmentStart);
       const periodEnd = new Date(periodStart);
       if (isExtensionPeriod) {
@@ -141,8 +140,8 @@ export default function ManageVehicles({
         const isCompleted = (wo.status || '').toLowerCase() === 'completed';
         const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
 
-        // 精準判斷工單時間重疊
-        if (oStart <= periodEnd && oEnd >= periodStart) {
+        // 精準時間重疊判定：oStart < periodEnd 且 oEnd >= periodStart
+        if (oStart < periodEnd && oEnd >= periodStart) {
           const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
           const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
           const diffDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
@@ -150,7 +149,7 @@ export default function ManageVehicles({
         }
       });
 
-      // 超過 5% 門檻，觸發 1 次展延 (+6 個月)
+      // 只要該期總停修天數超標，即觸發 +6 個月展延
       if (periodRepairDays > thresholdDays) {
         extensionCount++;
         totalExtensionMonths += 6;
@@ -490,9 +489,9 @@ export default function ManageVehicles({
                         ⚠️ 已觸發保固延長 ({wInfo.extensionMonths} 個月)
                       </span>
                     ) : (
-                 <span className="text-[11px] text-emerald-600 font-bold block pt-1">
-  可用率符合 &gt; 95% 標準
-</span>
+                      <span className="text-[11px] text-emerald-600 font-bold block pt-1">
+                        可用率符合 &gt; 95% 標準
+                      </span>
                     )}
                   </div>
 
