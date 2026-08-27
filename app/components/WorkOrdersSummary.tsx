@@ -3,15 +3,15 @@
 import React, { useState } from 'react';
 
 interface WorkOrdersSummaryProps {
-  vehicles?: any[];
-  isLoading?: boolean;
-  onRefresh?: () => void;
+  vehicles: any[];
+  isLoading: boolean;
+  onRefresh: () => void;
 }
 
 export default function WorkOrdersSummary({
-  vehicles = [],
-  isLoading = false,
-  onRefresh = () => {},
+  vehicles,
+  isLoading,
+  onRefresh,
 }: WorkOrdersSummaryProps) {
   const [showReportModal, setShowReportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,9 +54,7 @@ export default function WorkOrdersSummary({
     // 🎯 權威展延邏輯精算 (確保 AM7633 等車輛 100% 正確)
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at;
     const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
-    const maxExtCount = vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null 
-      ? Number(vehicle.max_extension_count) 
-      : 3;
+    const maxExtCount = Number(vehicle.max_extension_count ?? 3);
 
     let origExpiryStr = '未設定';
     let finalExpiryStr = '未設定';
@@ -145,8 +143,8 @@ export default function WorkOrdersSummary({
   };
 
   // 2. 過濾可用率低於 95% 的政府車輛
-  const lowAvailabilityVehicles = (vehicles || [])
-    .filter((v) => (v.warranty_type || 'government').toLowerCase() === 'government')
+  const lowAvailabilityVehicles = vehicles
+    .filter((v) => (v.warranty_type || 'government') === 'government')
     .map((v) => {
       const stats = getVehicleStats(v);
       return { ...v, stats };
@@ -155,7 +153,7 @@ export default function WorkOrdersSummary({
     .sort((a, b) => b.stats.totalOpenDays - a.stats.totalOpenDays);
 
   // 3. 一般搜尋過濾
-  const filteredVehicles = (vehicles || []).filter((v) => {
+  const filteredVehicles = vehicles.filter((v) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     return (
