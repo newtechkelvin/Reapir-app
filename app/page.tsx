@@ -349,6 +349,7 @@ export default function Home() {
           </nav>
         </header>
 
+        {/* 🎯 關鍵修正：傳入實時車輛資料 */}
         {activeTab === 'summary' && (
           <WorkOrdersSummary
             vehicles={vehicles}
