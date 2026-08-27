@@ -72,19 +72,17 @@ export default function ManageVehicles({
       }
     });
 
-    const isExceeded = totalOpenDays > 18.25;
     const remainingDays = Math.max(0, parseFloat((18.25 - totalOpenDays).toFixed(1)));
 
     return {
       totalOpenDays,
-      isExceeded,
       remainingDays,
       orderCount: orders.length,
       openCount,
     };
   };
 
-  // 2. 動態逐年審查算展延資訊 (保有原本 3 塊 Summary 計算)
+  // 🎯 2. 精準修復：採用月份精準推移 (Month-Based Assessment Window)，完整捕捉邊界工單
   const getWarrantyYearInfo = (vehicle: any) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || vehicle.claim_form_date;
     if (!deliveryDateStr) {
@@ -107,33 +105,32 @@ export default function ManageVehicles({
 
     const yearNum = Math.max(1, diffYears + 1);
 
-    let originalEndDate: Date;
-    if (vehicle.warranty_expiry_date || vehicle.warranty_end_date) {
-      originalEndDate = new Date(vehicle.warranty_expiry_date || vehicle.warranty_end_date);
-    } else {
-      originalEndDate = new Date(startDate);
-      originalEndDate.setFullYear(originalEndDate.getFullYear() + 3);
-    }
-
-    const totalOriginalDays = Math.max(365, (originalEndDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-    const originalWarrantyYears = Math.round(totalOriginalDays / 365);
+    // 原始標準保固到期日 (3 年)
+    let originalEndDate = new Date(startDate);
+    originalEndDate.setFullYear(originalEndDate.getFullYear() + 3);
 
     const allOrders = vehicle.workOrders || vehicle.work_orders || [];
     let currentAssessmentStart = new Date(startDate);
     let totalExtensionMonths = 0;
     let extensionCount = 0;
 
-    const maxPeriods = originalWarrantyYears + 3;
-
-    for (let period = 1; period <= maxPeriods; period++) {
+    // 進行最多 6 期（3 個標準年 + 最多 3 個展延期）滾動式審查
+    for (let period = 1; period <= 6; period++) {
       if (extensionCount >= 3) break;
 
-      const isExtensionPeriod = period > originalWarrantyYears;
-      const periodDays = isExtensionPeriod ? 182.5 : 365;
-      const thresholdDays = periodDays * 0.05;
-
+      const isExtensionPeriod = period > 3;
+      
+      // 計算該期的起止日期 (以月份推進避免閏年落差)
       const periodStart = new Date(currentAssessmentStart);
-      const periodEnd = new Date(periodStart.getTime() + periodDays * 24 * 60 * 60 * 1000);
+      const periodEnd = new Date(periodStart);
+      if (isExtensionPeriod) {
+        periodEnd.setMonth(periodEnd.getMonth() + 6);
+      } else {
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+      }
+
+      const periodDays = isExtensionPeriod ? 182.5 : 365;
+      const thresholdDays = periodDays * 0.05; // 5% 門檻 (18.25 天 或 9.125 天)
 
       let periodRepairDays = 0;
       allOrders.forEach((wo: any) => {
@@ -144,7 +141,8 @@ export default function ManageVehicles({
         const isCompleted = (wo.status || '').toLowerCase() === 'completed';
         const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : new Date();
 
-        if (oStart < periodEnd && oEnd > periodStart) {
+        // 精準判斷工單時間重疊
+        if (oStart <= periodEnd && oEnd >= periodStart) {
           const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
           const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
           const diffDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)));
@@ -152,6 +150,7 @@ export default function ManageVehicles({
         }
       });
 
+      // 超過 5% 門檻，觸發 1 次展延 (+6 個月)
       if (periodRepairDays > thresholdDays) {
         extensionCount++;
         totalExtensionMonths += 6;
@@ -173,7 +172,6 @@ export default function ManageVehicles({
     };
   };
 
-  // 開啟編輯 Modal
   const handleOpenEditModal = (e: React.MouseEvent, vehicle: any) => {
     e.preventDefault();
     e.stopPropagation();
@@ -194,7 +192,6 @@ export default function ManageVehicles({
     }
   };
 
-  // 儲存編輯車輛
   const handleSaveVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVehicle?.id) return;
@@ -235,7 +232,6 @@ export default function ManageVehicles({
     }
   };
 
-  // 新增車輛到期日推算
   const handleDeliveryDateChange = (dateVal: string, periodVal: string) => {
     setDeliveryDate(dateVal);
     if (dateVal && periodVal) {
@@ -254,7 +250,6 @@ export default function ManageVehicles({
     }
   };
 
-  // 提交新增車輛
   const handleAddVehicleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!plateNumber.trim()) {
@@ -311,7 +306,6 @@ export default function ManageVehicles({
     setWarrantyExpiryDate('');
   };
 
-  // CSV 匯入處理
   const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -397,7 +391,6 @@ export default function ManageVehicles({
 
   return (
     <div className="space-y-6 text-black">
-      {/* 頂部工具列 */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
         <div className="flex-1 w-full">
           <input
@@ -410,13 +403,11 @@ export default function ManageVehicles({
         </div>
 
         <div className="flex gap-2">
-          {/* 📥 CSV 匯入 */}
           <label className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 whitespace-nowrap">
             📥 CSV 批次匯入
             <input type="file" accept=".csv" onChange={handleCSVImport} className="hidden" />
           </label>
 
-          {/* ➕ 新增車輛 */}
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
@@ -435,7 +426,6 @@ export default function ManageVehicles({
         </div>
       </div>
 
-      {/* 車輛卡片列表 (完全保留原版卡片 + 3 塊 Summary + 8 欄位) */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">⏳ 正在載入車輛主表資料...</div>
       ) : filteredVehicles.length === 0 ? (
@@ -455,7 +445,6 @@ export default function ManageVehicles({
                 key={vehicle.id || idx}
                 className="bg-white border rounded-2xl p-6 shadow-2xs border-slate-200 space-y-5 hover:shadow-sm transition-all"
               >
-                {/* 1. 車牌與專案標頭 */}
                 <div className="flex flex-wrap justify-between items-center gap-3 border-b pb-4 border-slate-200">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-2xl font-black text-blue-900 flex items-center gap-2">
@@ -482,7 +471,6 @@ export default function ManageVehicles({
                   </button>
                 </div>
 
-                {/* 2. 三大核心數據統計卡片 (原汁原味 Summary) */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-1">
                     <span className="text-xs text-gray-500 font-bold block">當前保固年度</span>
@@ -491,21 +479,20 @@ export default function ManageVehicles({
                   </div>
 
                   <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-1">
-                    <span className="text-xs text-gray-500 font-bold block">本年合約累積停修天數</span>
+                    <span className="text-xs text-gray-500 font-bold block">合約歷來累積停修天數</span>
                     <div className="flex items-baseline gap-1">
                       <strong className={`text-2xl font-black ${stats.totalOpenDays > 0 ? 'text-red-600' : 'text-slate-900'}`}>
                         {stats.totalOpenDays} 天
                       </strong>
-                      <span className="text-xs text-gray-400 font-bold">/ 18.25 天</span>
                     </div>
                     {wInfo.extensionMonths > 0 ? (
                       <span className="text-[11px] font-bold text-red-600 flex items-center gap-1 pt-1">
                         ⚠️ 已觸發保固延長 ({wInfo.extensionMonths} 個月)
                       </span>
                     ) : (
-                      <span className="text-[11px] text-gray-400 block pt-1">
-                        剩餘額度: {stats.remainingDays} 天
-                      </span>
+                 <span className="text-[11px] text-emerald-600 font-bold block pt-1">
+  可用率符合 &gt; 95% 標準
+</span>
                     )}
                   </div>
 
@@ -519,7 +506,6 @@ export default function ManageVehicles({
                   </div>
                 </div>
 
-                {/* 3. 車輛詳細資訊 8 欄位網格 (原汁原味) */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-y-3 gap-x-6 text-xs border-t pt-4 border-slate-100">
                   <div>
                     <span className="text-gray-400 block font-medium">VIN 碼</span>
