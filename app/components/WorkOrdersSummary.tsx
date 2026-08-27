@@ -16,11 +16,12 @@ export default function WorkOrdersSummary({
   const [showReportModal, setShowReportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. 計算個別車輛的累積停修天數、可用率與即時權威保固展延精算
+  // 1. 計算車輛停修天數、可用率與即時權威保固展延精算
   const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || [];
     let totalOpenDays = 0;
     let openCount = 0;
+    const openOrders: any[] = [];
 
     const now = new Date();
 
@@ -30,12 +31,17 @@ export default function WorkOrdersSummary({
       if (!isCompleted) {
         openCount++;
         const sStr = wo.claim_form_date || wo.created_at;
+        let days = 0;
         if (sStr) {
           const start = new Date(sStr);
           const diffTime = Math.max(0, now.getTime() - start.getTime());
-          const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           totalOpenDays += days;
         }
+        openOrders.push({
+          ...wo,
+          openDays: days,
+        });
       } else {
         if (wo.claim_form_date && wo.completed_date) {
           const s = new Date(wo.claim_form_date);
@@ -51,7 +57,7 @@ export default function WorkOrdersSummary({
       parseFloat((100 - (totalOpenDays / 365) * 100).toFixed(2))
     );
 
-    // 🎯 權威展延邏輯精算 (確保 AM7633 等車輛 100% 正確)
+    // 🎯 權威展延邏輯精算 (確保 AM7633 顯示 +18 個月 / 2027-01-28)
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at;
     const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
     const maxExtCount = vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null 
@@ -70,7 +76,6 @@ export default function WorkOrdersSummary({
 
       let extensionCount = 0;
 
-      // 階段 1：年度原保固期審查
       for (let yr = 0; yr < projectWarrantyYears; yr++) {
         if (extensionCount >= maxExtCount) break;
 
@@ -97,7 +102,6 @@ export default function WorkOrdersSummary({
         if (periodRepairDays > 18.25) extensionCount++;
       }
 
-      // 階段 2：滾動展延期審查
       let currentExtStart = new Date(originalEndDate);
       for (let ext = 0; ext < maxExtCount; ext++) {
         if (extensionCount <= ext || extensionCount >= maxExtCount) break;
@@ -138,24 +142,26 @@ export default function WorkOrdersSummary({
       availability,
       orderCount: orders.length,
       openCount,
+      openOrders,
       origExpiryStr,
       finalExpiryStr,
       extensionMonths,
     };
   };
 
-  // 2. 過濾可用率低於 95% 的政府車輛
-  const lowAvailabilityVehicles = (vehicles || [])
-    .filter((v) => (v.warranty_type || 'government').toLowerCase() === 'government')
-    .map((v) => {
-      const stats = getVehicleStats(v);
-      return { ...v, stats };
-    })
+  // 過濾政府車輛
+  const governmentVehicles = (vehicles || []).filter(
+    (v) => (v.warranty_type || 'government').toLowerCase() === 'government'
+  );
+
+  // 對數報表（< 95%）
+  const lowAvailabilityVehicles = governmentVehicles
+    .map((v) => ({ ...v, stats: getVehicleStats(v) }))
     .filter((v) => v.stats.availability < 95)
     .sort((a, b) => b.stats.totalOpenDays - a.stats.totalOpenDays);
 
-  // 3. 一般搜尋過濾
-  const filteredVehicles = (vehicles || []).filter((v) => {
+  // 搜尋過濾
+  const filteredVehicles = governmentVehicles.filter((v) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -168,8 +174,8 @@ export default function WorkOrdersSummary({
 
   return (
     <div className="space-y-6 text-black">
-      {/* 頂部工具列 */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+      {/* 搜尋與頂部工具列 */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
         <div className="flex-1 w-full">
           <input
             type="text"
@@ -199,61 +205,114 @@ export default function WorkOrdersSummary({
         </div>
       </div>
 
-      {/* 車輛工單 Summary 列表 */}
+      {/* 🖼️ 原汁原味 3 欄式卡片列表 (完全還原截圖) */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">
-          ⏳ 正在載入工單 Summary 資料...
+          ⏳ 正在載入車輛工單資料...
         </div>
       ) : filteredVehicles.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-2xl border border-dashed text-gray-500">
-          <p className="text-base font-bold">沒有對應的車輛工單資料</p>
+          <p className="text-base font-bold">沒有對應的政府車輛資料</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {filteredVehicles.map((vehicle, idx) => {
             const stats = getVehicleStats(vehicle);
+
+            // 邊框狀態判斷 (嚴格按照截圖)
+            const isCritical = stats.availability < 95;
+            const isWarning = stats.availability >= 95 && stats.availability <= 96;
+
+            let cardBorderClass = 'border-slate-200';
+            if (isCritical) cardBorderClass = 'border-red-300 ring-1 ring-red-300';
+            if (isWarning) cardBorderClass = 'border-amber-400 ring-2 ring-amber-400';
 
             return (
               <div
                 key={vehicle.id || idx}
-                className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-3 hover:shadow-sm transition-all"
+                className={`bg-white border-2 rounded-2xl p-5 shadow-2xs space-y-4 hover:shadow-md transition-all ${cardBorderClass}`}
               >
-                <div className="flex justify-between items-center border-b pb-3 border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl font-black text-blue-950">
+                {/* 1. 車牌與類別標籤 */}
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                       🚘 {vehicle.plate_number}
+                    </h3>
+                    <span className="text-[11px] text-gray-400 block mt-0.5 font-medium">
+                      VIN: {vehicle.vin || '未設定'}
                     </span>
-                    {vehicle.project && (
-                      <span className="bg-purple-100 text-purple-900 border border-purple-200 text-[11px] px-2.5 py-0.5 rounded-full font-bold">
-                        {vehicle.project}
-                      </span>
-                    )}
                   </div>
-                  <span
-                    className={`text-sm font-black px-3 py-1 rounded-full ${
-                      stats.availability < 95
-                        ? 'bg-red-100 text-red-700 border border-red-200'
-                        : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                    }`}
-                  >
-                    可用率: {stats.availability}%
+
+                  <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[11px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
+                    🏛️ 政府合約
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-gray-400 block font-medium">累積停修天數</span>
-                    <strong className="text-base font-black text-red-600">
+                <hr className="border-slate-100" />
+
+                {/* 2. 停修天數與可用率 (雙圓角方框) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                    <span className="text-[11px] text-gray-400 font-bold block">累積停修總天數</span>
+                    <strong className="text-xl font-black text-red-600 block mt-1">
                       {stats.totalOpenDays} 天
                     </strong>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-gray-400 block font-medium">修正後保固到期日</span>
-                    <strong className="text-base font-black text-amber-700">
-                      {stats.finalExpiryStr}
+                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl relative">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[11px] text-gray-400 font-bold block">Availability (可用率)</span>
+                      {isWarning && (
+                        <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded font-black">
+                          ⚠️ 接近 95%
+                        </span>
+                      )}
+                    </div>
+                    <strong className={`text-xl font-black block mt-1 ${isCritical ? 'text-red-600' : 'text-amber-600'}`}>
+                      {stats.availability}%
                     </strong>
                   </div>
+                </div>
+
+                {/* 3. 專案名稱與 Open 工單數 */}
+                <div className="flex justify-between items-center text-xs pt-1">
+                  <span className="text-slate-800 font-extrabold truncate max-w-[200px]" title={vehicle.project}>
+                    專案 : {vehicle.project || '預設專案'}
+                  </span>
+                  <span className="text-slate-700 font-bold">
+                    Open 工單數 : <strong className="text-red-600">{stats.openCount} 張</strong>
+                  </span>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                {/* 4. Open 工單清單區塊 */}
+                <div className="space-y-2 pt-1">
+                  <span className="text-xs text-slate-800 font-bold block">Open 工單清單:</span>
+
+                  {stats.openOrders.length === 0 ? (
+                    <div className="text-xs text-gray-400 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-center font-medium">
+                      目前無進行中的工單
+                    </div>
+                  ) : (
+                    stats.openOrders.map((wo, wIdx) => (
+                      <div
+                        key={wo.id || wIdx}
+                        className="bg-blue-50/50 border border-blue-100 p-2.5 rounded-xl flex justify-between items-center text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-blue-900">{wo.work_order_number || wo.id || `WO-${wIdx + 1}`}</span>
+                          <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-md text-[10px]">
+                            Open ({wo.openDays}天)
+                          </span>
+                        </div>
+
+                        <span className="text-blue-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5">
+                          檢視明細 &rarr;
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             );
@@ -261,7 +320,7 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* 📋 政府車輛保固展延對數報表 Modal */}
+      {/* 📋 保固展延對數報表 Modal */}
       {showReportModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
@@ -311,10 +370,7 @@ export default function WorkOrdersSummary({
                 <tbody className="divide-y divide-slate-100 font-semibold">
                   {lowAvailabilityVehicles.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={7}
-                        className="p-8 text-center text-gray-400 font-bold"
-                      >
+                      <td colSpan={7} className="p-8 text-center text-gray-400 font-bold">
                         🎉 目前所有政府車輛可用率均大於或等於 95%！
                       </td>
                     </tr>
