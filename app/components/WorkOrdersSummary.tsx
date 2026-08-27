@@ -27,15 +27,15 @@ export default function WorkOrdersSummary({
   const [editItems, setEditItems] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 🎯 核心精算：納入每台車專屬的保固年數 (warranty_period_years) 與展延上限 (max_extension_count)
+  // 🎯 核心精算：將每台車的保固年數、展延上限納入計算，並直接讀取 Database 修正後到期日
   const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
     const now = new Date();
 
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || '2022-07-28';
-    
-    // 🎯 讀取每台車專屬的保固年數與展延上限（帶預設值）
-    const projectWarrantyYears = Number(vehicle.warranty_period_years) > 0 ? Number(vehicle.warranty_period_years) : 3;
+
+    // 🎯 1. 包含每台車設定的保固年數與展延上限至算式內
+    const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
     const maxExtCount =
       vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null
         ? Number(vehicle.max_extension_count)
@@ -55,7 +55,7 @@ export default function WorkOrdersSummary({
       originalEndDate.setFullYear(originalEndDate.getFullYear() + projectWarrantyYears);
       origExpiryStr = originalEndDate.toISOString().split('T')[0];
 
-      // 1. 逐年檢視該車輛的標準保固期 (共 projectWarrantyYears 年)
+      // 逐年評估標準保固期 (帶入 projectWarrantyYears 與 maxExtCount)
       for (let yr = 0; yr < projectWarrantyYears; yr++) {
         const periodStart = new Date(startDate);
         periodStart.setFullYear(periodStart.getFullYear() + yr);
@@ -87,13 +87,12 @@ export default function WorkOrdersSummary({
           }
         });
 
-        // 當年停修 > 18.25 天 (可用率 < 95%) 且未達車輛展延上限
         if (yearRepairDays > 18.25 && extensionCount < maxExtCount) {
           extensionCount++;
         }
       }
 
-      // 2. 檢視展延期 (上限為 maxExtCount 次，每期 6 個月 / 182.5 天)
+      // 逐期評估展延期 (帶入 maxExtCount)
       let currentExtStart = new Date(originalEndDate);
       for (let ext = 0; ext < maxExtCount; ext++) {
         const periodStart = new Date(currentExtStart);
@@ -133,7 +132,7 @@ export default function WorkOrdersSummary({
       }
     }
 
-    // 3. 計算當期停修天數
+    // 當期停修天數計算
     let currentPeriodRepairDays = 0;
     let openCount = 0;
     const openOrders: any[] = [];
@@ -183,26 +182,33 @@ export default function WorkOrdersSummary({
       }
     });
 
-    // 4. 計算當期可用率
     const availability = Math.max(
       0,
       parseFloat((100 - (currentPeriodRepairDays / currentPeriodTotalDays) * 100).toFixed(2))
     );
 
-    // 當期可用率 < 95% 時觸發當期展延（受限於 maxExtCount）
     if (availability < 95 && extensionCount === 0 && maxExtCount > 0) {
       extensionCount = 1;
     }
 
-    // 不可超過該車輛設定的展延次數上限
-    extensionCount = Math.min(extensionCount, maxExtCount);
-
     const finalExtensionMonths = extensionCount * 6;
-    let computedFinalExpiryStr = origExpiryStr;
-    if (origExpiryStr !== '未設定' && finalExtensionMonths > 0) {
+
+    // 🎯 2. 修正後保固到期日：直接讀取 Database 欄位 (若 Database 無值再以原到期日為基準)
+    const dbFinalExpiryStr =
+      vehicle.extended_warranty_expiry ||
+      vehicle.final_warranty_expiry ||
+      vehicle.revised_warranty_expiry ||
+      vehicle.expiry_date;
+
+    let finalExpiryStr = '未設定';
+    if (dbFinalExpiryStr) {
+      finalExpiryStr = new Date(dbFinalExpiryStr).toISOString().split('T')[0];
+    } else if (origExpiryStr !== '未設定') {
       const d = new Date(origExpiryStr);
-      d.setMonth(d.getMonth() + finalExtensionMonths);
-      computedFinalExpiryStr = d.toISOString().split('T')[0];
+      if (finalExtensionMonths > 0) {
+        d.setMonth(d.getMonth() + finalExtensionMonths);
+      }
+      finalExpiryStr = d.toISOString().split('T')[0];
     }
 
     return {
@@ -212,7 +218,7 @@ export default function WorkOrdersSummary({
       openCount,
       openOrders,
       origExpiryStr,
-      finalExpiryStr: computedFinalExpiryStr,
+      finalExpiryStr, // 👈 直接讀取 Database
       extensionMonths: finalExtensionMonths,
     };
   };
@@ -250,7 +256,7 @@ export default function WorkOrdersSummary({
     })
     .sort((a: any, b: any) => b.stats.openCount - a.stats.openCount || b.stats.totalOpenDays - a.stats.totalOpenDays);
 
-  // 開啟工單明細
+  // 開啟工單明細 Modal
   const handleOpenDetailModal = (order: any) => {
     setSelectedOrder(order);
     setEditLocation(order.garage_location || order.location || '機電 - 九龍灣1/F');
@@ -298,7 +304,6 @@ export default function WorkOrdersSummary({
     }
   };
 
-  // 新增維修項目
   const handleAddItem = () => {
     setEditItems([
       ...editItems,
@@ -306,19 +311,16 @@ export default function WorkOrdersSummary({
     ]);
   };
 
-  // 刪除維修項目
   const handleRemoveItem = (index: number) => {
     setEditItems(editItems.filter((_, i) => i !== index));
   };
 
-  // 更新項目屬性
   const handleItemChange = (index: number, field: string, value: any) => {
     const updated = [...editItems];
     updated[index][field] = value;
     setEditItems(updated);
   };
 
-  // 儲存修改
   const handleSaveOrderEdit = async () => {
     if (!selectedOrder) return;
     try {
@@ -416,7 +418,6 @@ export default function WorkOrdersSummary({
                 key={vehicle.id || idx}
                 className={`bg-white border-2 rounded-2xl p-5 shadow-2xs space-y-4 hover:shadow-md transition-all ${cardBorderClass}`}
               >
-                {/* 1. 車牌與類別標籤 */}
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0 flex-1">
                     <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2 truncate">
@@ -434,7 +435,6 @@ export default function WorkOrdersSummary({
 
                 <hr className="border-slate-100" />
 
-                {/* 2. 停修天數與可用率 (當期精算) */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl min-w-0">
                     <span className="text-[11px] text-gray-400 font-bold block truncate">
@@ -466,7 +466,6 @@ export default function WorkOrdersSummary({
                   </div>
                 </div>
 
-                {/* 3. 專案名稱與 Open 工單數 */}
                 <div className="flex justify-between items-center text-xs pt-1 gap-2">
                   <span
                     className="text-slate-800 font-extrabold truncate flex-1"
@@ -481,7 +480,6 @@ export default function WorkOrdersSummary({
 
                 <hr className="border-slate-100" />
 
-                {/* 4. Open 工單清單區塊 */}
                 <div className="space-y-2 pt-1">
                   <span className="text-xs text-slate-800 font-bold block">Open 工單清單:</span>
 
@@ -525,7 +523,6 @@ export default function WorkOrdersSummary({
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
-            {/* Header 標題 Banner */}
             <div className="text-center space-y-1 pb-2">
               <h2 className="text-xl font-black text-slate-900 tracking-wide">
                 新力機械有限公司
@@ -542,7 +539,6 @@ export default function WorkOrdersSummary({
 
             <hr className="border-slate-800 border-t-2" />
 
-            {/* 單號列與工具列 */}
             <div className="flex flex-wrap justify-between items-center gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-lg font-black text-blue-900 flex items-center gap-1">
@@ -575,7 +571,6 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 車輛與合約基本資訊區塊 */}
             <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 space-y-3">
               <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5 border-b pb-2 border-slate-200">
                 🚘 車輛與合約基本資訊
@@ -669,7 +664,6 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 狀況與故障描述區塊 */}
             <div className="space-y-1.5">
               <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                 📝 狀況與故障描述
@@ -683,7 +677,6 @@ export default function WorkOrdersSummary({
               />
             </div>
 
-            {/* 維修與零件項目明細表格區塊 */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
@@ -766,7 +759,6 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 底部控制按鈕 */}
             <div className="flex justify-between items-center pt-3 border-t border-slate-200">
               <button
                 type="button"
