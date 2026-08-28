@@ -58,6 +58,10 @@ export async function PATCH(
 
     // 分離 items 與主工單欄位
     const { items, ...orderPayload } = body;
+    const maintenanceStartDate = Object.prototype.hasOwnProperty.call(orderPayload, 'maintenance_start_date') ? sanitizeDate(orderPayload.maintenance_start_date) : undefined;
+    const maintenanceExpiryDate = Object.prototype.hasOwnProperty.call(orderPayload, 'maintenance_expiry_date') ? sanitizeDate(orderPayload.maintenance_expiry_date) : undefined;
+    delete orderPayload.maintenance_start_date;
+    delete orderPayload.maintenance_expiry_date;
 
     // 🎯 核心修復：清理所有日期欄位，避免將 "" 傳給 DB date 型別
     if ('completed_date' in orderPayload) {
@@ -68,12 +72,6 @@ export async function PATCH(
     }
     if ('claim_form_date' in orderPayload) {
       orderPayload.claim_form_date = sanitizeDate(orderPayload.claim_form_date);
-    }
-    if ('maintenance_start_date' in orderPayload) {
-      orderPayload.maintenance_start_date = sanitizeDate(orderPayload.maintenance_start_date);
-    }
-    if ('maintenance_expiry_date' in orderPayload) {
-      orderPayload.maintenance_expiry_date = sanitizeDate(orderPayload.maintenance_expiry_date);
     }
     if (orderPayload.quote_status === 'confirmed' && !orderPayload.quote_reference && !orderPayload.oral_quote_confirmed) {
       return NextResponse.json({ error: '完成報價確認時，請填寫報價單號或選擇「已口頭報價」' }, { status: 400 });
@@ -139,8 +137,8 @@ export async function PATCH(
       const calculation = calculateAvailability(vehicle);
       const vehicleUpdate = isScattered
         ? {
-            maintenance_start_date: orderPayload.maintenance_start_date ?? vehicle.maintenance_start_date ?? vehicle.delivery_date,
-            maintenance_expiry_date: orderPayload.maintenance_expiry_date ?? vehicle.maintenance_expiry_date ?? vehicle.warranty_expiry_date,
+            maintenance_start_date: maintenanceStartDate ?? vehicle.maintenance_start_date ?? vehicle.delivery_date,
+            maintenance_expiry_date: maintenanceExpiryDate ?? vehicle.maintenance_expiry_date ?? vehicle.warranty_expiry_date,
             warranty_period_years: 1,
           }
         : {
