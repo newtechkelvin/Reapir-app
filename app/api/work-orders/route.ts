@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { calculateAvailability } from '@/lib/availability';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -215,6 +216,25 @@ export async function POST(request: NextRequest) {
       const { error } = await supabase.from('work_order_items').insert(itemsToInsert);
       if (error) return NextResponse.json({ error: `建立工單項目失敗: ${error.message}` }, { status: 500 });
     }
+
+    const { data: vehicleWithOrders, error: vehicleFetchError } = await supabase
+      .from('vehicles')
+      .select('*, work_orders(*)')
+      .eq('id', vehicle.id)
+      .single();
+    if (vehicleFetchError) throw vehicleFetchError;
+    const calculation = calculateAvailability(vehicleWithOrders);
+    const { error: statsError } = await supabase
+      .from('vehicles')
+      .update({
+        total_repair_days: calculation.repairDays,
+        availability_percentage: calculation.availability,
+        extension_count: Math.floor(calculation.extensionMonths / 6),
+        extension_months: calculation.extensionMonths,
+        warranty_expiry_date: calculation.finalExpiryDate,
+      })
+      .eq('id', vehicle.id);
+    if (statsError) throw statsError;
 
     return NextResponse.json({ success: true, order: { ...orderResult.data, order_number: orderNumber } });
   } catch (err: any) {

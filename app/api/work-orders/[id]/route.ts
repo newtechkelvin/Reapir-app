@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { calculateAvailability } from '@/lib/availability';
 
 // 輔助函數：將空字串 "" 或無效日期字串轉為 null，避免 PostgreSQL 日期型別崩潰
 const sanitizeDate = (val: any) => {
@@ -68,6 +69,12 @@ export async function PATCH(
     if ('claim_form_date' in orderPayload) {
       orderPayload.claim_form_date = sanitizeDate(orderPayload.claim_form_date);
     }
+    if (orderPayload.status === 'Completed' && !orderPayload.completed_date) {
+      return NextResponse.json({ error: 'Completed 工單必須填寫完成日期' }, { status: 400 });
+    }
+    if (orderPayload.completed_date && !orderPayload.status) {
+      orderPayload.status = 'Completed';
+    }
 
     // 1. 更新主工單資料
     const { data: updatedOrder, error: orderError } = await supabaseAdmin
@@ -106,9 +113,31 @@ export async function PATCH(
           .insert(formattedItems);
 
         if (itemsError) {
-          console.error('更新工單明細失敗:', itemsError);
+          return NextResponse.json({ error: `更新工單明細失敗: ${itemsError.message}` }, { status: 400 });
         }
       }
+    }
+
+    // 工單日期或狀態改變後，立即同步車輛的當期可用率及展延結果。
+    if (updatedOrder.vehicle_id) {
+      const { data: vehicle, error: vehicleError } = await supabaseAdmin
+        .from('vehicles')
+        .select('*, work_orders(*)')
+        .eq('id', updatedOrder.vehicle_id)
+        .single();
+      if (vehicleError) throw vehicleError;
+      const calculation = calculateAvailability(vehicle);
+      const { error: statsError } = await supabaseAdmin
+        .from('vehicles')
+        .update({
+          total_repair_days: calculation.repairDays,
+          availability_percentage: calculation.availability,
+          extension_count: Math.floor(calculation.extensionMonths / 6),
+          extension_months: calculation.extensionMonths,
+          warranty_expiry_date: calculation.finalExpiryDate,
+        })
+        .eq('id', updatedOrder.vehicle_id);
+      if (statsError) throw statsError;
     }
 
     return NextResponse.json({

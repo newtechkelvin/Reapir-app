@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { calculateAvailability } from '@/lib/availability';
 
 export interface WorkOrdersSummaryProps {
   vehicles?: any[];
@@ -28,7 +29,7 @@ export default function WorkOrdersSummary({
   const [isSaving, setIsSaving] = useState(false);
 
   // 🎯 核心精算：包含車輛保固年數與展延上限，並直接讀取 Database 的 warranty_expiry_date 欄位
-  const getVehicleStats = (vehicle: any) => {
+  const legacyGetVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
     const now = new Date();
 
@@ -221,6 +222,20 @@ export default function WorkOrdersSummary({
       origExpiryStr,
       finalExpiryStr, // 👈 直接讀取 Database 欄位 warranty_expiry_date
       extensionMonths: finalExtensionMonths,
+    };
+  };
+
+  const getVehicleStats = (vehicle: any) => {
+    const legacyStats = legacyGetVehicleStats(vehicle);
+    const calculation = calculateAvailability(vehicle);
+    return {
+      ...legacyStats,
+      totalOpenDays: calculation.repairDays,
+      availability: calculation.availability ?? legacyStats.availability,
+      extensionMonths: calculation.extensionMonths,
+      origExpiryStr: calculation.originalExpiryDate || legacyStats.origExpiryStr,
+      finalExpiryStr: calculation.finalExpiryDate || legacyStats.finalExpiryStr,
+      openCount: calculation.openCount,
     };
   };
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import { calculateAvailability } from '@/lib/availability';
 
 interface SearchVehiclesProps {
   searchQuery: string;
@@ -33,47 +34,18 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 計算政府車輛的保固年度與保固到期日
+  // 所有頁面共用同一套按 Claim Form 日期及有效保固期計算的結果。
   const getWarrantyInfo = (vehicle: any) => {
-    const startDateStr = vehicle.claim_form_date || vehicle.created_at;
-    if (!startDateStr) {
-      return { yearLabel: '未開始', endDateStr: '未設定', availability: '100%' };
-    }
-
-    const startDate = new Date(startDateStr);
-    const now = new Date();
-    
-    // 計算差距年份 (1st-Full-Year ~ 5th-Full-Year)
-    const diffYears = now.getFullYear() - startDate.getFullYear();
-    let yearLabel = '1st-Full-Year';
-    if (diffYears === 1) yearLabel = '2nd-Full-Year';
-    else if (diffYears === 2) yearLabel = '3rd-Full-Year';
-    else if (diffYears === 3) yearLabel = '4th-Full-Year';
-    else if (diffYears >= 4) yearLabel = '5th-Full-Year';
-
-    // 保固預設為 4 年
-    const endDate = new Date(startDate);
-    endDate.setFullYear(endDate.getFullYear() + 4);
-    const endDateStr = endDate.toISOString().split('T')[0];
-
-    // 計算這台車工單總 Open 日數
-    const orders = vehicle.workOrders || vehicle.work_orders || [];
-    let openDays = 0;
-    orders.forEach((wo: any) => {
-      if ((wo.status || 'Open').toLowerCase() === 'open') {
-        const s = new Date(wo.claim_form_date || wo.created_at || now);
-        const diff = Math.max(0, now.getTime() - s.getTime());
-        openDays += Math.ceil(diff / (1000 * 60 * 60 * 24));
-      }
-    });
-
-    const availVal = Math.max(0, 100 - (openDays / 18.25) * 5).toFixed(2);
-
+    const calculation = calculateAvailability(vehicle);
+    const currentPeriod = calculation.currentPeriod;
+    const yearLabel = currentPeriod
+      ? currentPeriod.kind === 'extension' ? `展延期 ${currentPeriod.index}` : `第 ${currentPeriod.index} 年`
+      : '未在有效保固期';
     return {
       yearLabel,
-      endDateStr: vehicle.warranty_end_date || endDateStr,
-      availability: `${availVal}%`,
-      openDays,
+      endDateStr: calculation.finalExpiryDate || vehicle.warranty_expiry_date || '未設定',
+      availability: calculation.availability === null ? '未計算' : `${calculation.availability.toFixed(2)}%`,
+      openDays: calculation.repairDays,
     };
   };
 
@@ -334,7 +306,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   ) : (
                     <div className="grid grid-cols-1 gap-3">
                       {orders.map((wo: any, oIdx: number) => {
-                        const isCompleted = (wo.status || '').toLowerCase() === 'completed';
+                        const status = String(wo.status || '').toLowerCase();
+                        const isCompleted = status === 'completed' || status === 'closed' || status === '已完成';
                         const isSanChe = isSanCheOrder(wo, vehicle);
 
                         const claimDateStr = wo.claim_form_date || vehicle.claim_form_date || '未設定';
