@@ -32,8 +32,10 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [smartText, setSmartText] = useState('');
   const currentWarrantyType = String(props.warrantyType ?? warrantyType).toLowerCase() === 'general' ? 'general' : 'government';
+  const currentItems = Array.isArray(props.items) ? props.items : items;
   const displayedOrderNumber = props.orderNumber || '產生中...';
   const [showSmartPasteModal, setShowSmartPasteModal] = useState(false);
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
 
   const GARAGE_OPTIONS = [
     '機電 - 九龍灣1/F',
@@ -93,39 +95,104 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     if (match) applyVehicleMatch(match);
   };
 
+  const updateItems = (nextItems: Array<{ type: string; item_name: string; notes?: string }>) => {
+    setItems(nextItems);
+    props.setItems?.(nextItems);
+  };
+
   const handleAddItem = () => {
-    setItems([...items, { type: '進廠維修', item_name: '', notes: '' }]);
+    updateItems([...currentItems, { type: '進廠維修', item_name: '', notes: '' }]);
   };
 
   const handleRemoveItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
+    updateItems(currentItems.filter((_, i) => i !== index));
   };
 
   const handleItemChange = (index: number, field: string, value: string) => {
-    const updated = [...items];
+    const updated = [...currentItems];
     (updated[index] as any)[field] = value;
-    setItems(updated);
+    updateItems(updated);
+  };
+
+  const setField = (setter: ((value: string) => void) | undefined, localSetter: (value: string) => void, value: unknown) => {
+    const text = String(value || '').trim();
+    if (!text) return;
+    localSetter(text);
+    setter?.(text);
+  };
+
+  const applyExtractedData = (data: any) => {
+    const vehicle = data?.vehicle || data || {};
+    if (vehicle.plate_number) handlePlateChange(String(vehicle.plate_number));
+    if (vehicle.vin) handleVinChange(String(vehicle.vin));
+    setField(props.setProject, setProject, vehicle.project);
+    setField(props.setBrand, setBrand, vehicle.brand);
+    setField(props.setModel, setModel, vehicle.model);
+    setField(props.setClaimFormDate, setClaimFormDate, vehicle.claim_form_date);
+    setField(props.setDescription, setDescription, vehicle.description);
+    if (Array.isArray(data?.items)) {
+      const extractedItems = data.items
+        .map((item: any) => ({
+          type: String(item.type || '進廠維修'),
+          item_name: String(item.item_name || '').trim(),
+          notes: String(item.notes || '').trim(),
+        }))
+        .filter((item: any) => item.item_name);
+      if (extractedItems.length > 0) updateItems(extractedItems);
+    }
   };
 
   const handleParseSmartText = () => {
-    if (!smartText.trim()) return;
-
-    const plateMatch = smartText.match(/([A-Z]{1,2}\s?\d{1,4})/i);
+    const text = smartText.trim();
+    if (!text) return;
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const plateMatch = text.match(/(?:車牌(?:號碼)?|牌照|plate(?:\s*number)?)\s*[:：-]?\s*([A-Z]{1,2}\s?\d{1,4})/i) || text.match(/\b([A-Z]{1,2}\s?\d{1,4})\b/i);
+    const vinMatch = text.match(/(?:VIN|車身號碼)\s*[:：-]?\s*([A-HJ-NPR-Z0-9]{17})/i) || text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
+    const dateMatch = text.match(/(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
+    const projectMatch = text.match(/(?:專案|project)\s*[:：-]?\s*(.+)/i);
+    const brandMatch = text.match(/(?:品牌|brand)\s*[:：-]?\s*(.+)/i);
+    const modelMatch = text.match(/(?:型號|model)\s*[:：-]?\s*(.+)/i);
     if (plateMatch) handlePlateChange(plateMatch[1].replace(/\s+/g, ''));
-
-    const vinMatch = smartText.match(/([A-HJ-NPR-Z0-9]{17})/i);
-    if (vinMatch) setVin(vinMatch[1].toUpperCase());
-
-    const dateMatch = smartText.match(/(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
+    if (vinMatch) handleVinChange(vinMatch[1]);
+    setField(props.setProject, setProject, projectMatch?.[1]);
+    setField(props.setBrand, setBrand, brandMatch?.[1]);
+    setField(props.setModel, setModel, modelMatch?.[1]);
     if (dateMatch) {
       const formattedDate = dateMatch[1].replace(/[/.]/g, '-');
-      setPickupReturnDate(formattedDate);
-      setClaimFormDate(formattedDate);
+      setField(props.setPickupReturnDate, setPickupReturnDate, formattedDate);
+      setField(props.setClaimFormDate, setClaimFormDate, formattedDate);
     }
-
-    setDescription(smartText.trim());
+    const itemLines = lines
+      .filter((line) => /^(?:[-*•]|\d+[.)])/.test(line) || /(?:維修項目|維修內容|更換|檢查|修理|replacement|repair|service)/i.test(line))
+      .map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim())
+      .filter((line) => line.length > 1 && !/^(車牌|牌照|vin|車身號碼|專案|project|品牌|brand|型號|model|日期|date)\s*[:：]/i.test(line));
+    if (itemLines.length > 0) {
+      setItems(itemLines.map((item_name) => ({ type: '進廠維修', item_name, notes: '' })));
+    }
+    setField(props.setDescription, setDescription, text);
     setShowSmartPasteModal(false);
     setSmartText('');
+  };
+
+  const handleOcrFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      setIsOcrProcessing(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch('/api/ocr-translate', { method: 'POST', body: formData });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || 'OCR 處理失敗');
+      applyExtractedData(data);
+      alert('已完成 OCR、中文翻譯及表格回填，請核對後再建立工單。');
+    } catch (error: any) {
+      console.error('Warranty Claim Form OCR 失敗:', error);
+      alert(error.message || 'OCR 處理失敗，請稍後再試');
+    } finally {
+      setIsOcrProcessing(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -154,7 +221,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         pickup_return_date: pickupReturnDate,
         claim_form_date: claimFormDate,
         description: description.trim(),
-        items: items.filter((it) => it.item_name.trim() !== ''),
+        items: currentItems.filter((it: any) => it.item_name?.trim() !== ''),
       };
 
       const res = await fetch('/api/work-orders', {
@@ -408,8 +475,14 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         </div>
 
         <div className="space-y-3">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
             <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h3>
+            <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg cursor-pointer text-center">
+              {isOcrProcessing ? 'OCR 處理中...' : '📷 上傳 Claim Form 截圖 OCR'}
+              <input type="file" accept="image/*" onChange={handleOcrFileChange} disabled={isOcrProcessing} className="hidden" />
+            </label>
+          </div>
+          <div className="flex justify-between items-center">
             <button
               type="button"
               onClick={handleAddItem}
@@ -430,7 +503,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {items.map((item, idx) => (
+                {currentItems.map((item: any, idx: number) => (
                   <tr key={idx}>
                     <td className="p-2">
                       <select
