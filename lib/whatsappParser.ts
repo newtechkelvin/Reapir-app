@@ -31,7 +31,7 @@ function labelPattern(labels: string[]) {
 }
 
 function fieldValue(text: string, labels: string[]) {
-  const pattern = new RegExp(`(?:^|\\n)\\s*(?:${labelPattern(labels)})\\s*[:：-]?\\s*([^\\n]*)`, 'im');
+  const pattern = new RegExp(`(?:^|\\n)[ \\t]*(?:${labelPattern(labels)})[ \\t]*[:：-]?[ \\t]*([^\\n]*)`, 'im');
   return text.match(pattern)?.[1]?.trim() || '';
 }
 
