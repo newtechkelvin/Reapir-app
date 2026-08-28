@@ -60,6 +60,7 @@ export default function WorkOrdersSummary({
       availability: currentPeriod?.availability ?? null,
       periodStart: currentPeriod?.start ?? null,
       periodEnd: currentPeriod?.end ?? null,
+      periodTriggered: currentPeriod?.triggered === true,
       orderCount: orders.length,
       openCount: calculation.openCount,
       openOrders,
@@ -81,12 +82,13 @@ export default function WorkOrdersSummary({
     0
   );
 
-  // 對數報表（當期可用率 < 95%）
+  // 對數報表：只顯示目前有效期間本身觸發展延的政府車輛。
+  // 只曾在過往期間觸發、但目前期間未觸發的車輛，不列入當期報表。
   const lowAvailabilityVehicles = (vehicles || [])
     .filter((v: any) => (v.warranty_type || 'government').toLowerCase() === 'government')
     .map((v: any) => ({ ...v, stats: getVehicleStats(v) }))
-    .filter((v: any) => v.stats.availability < 95)
-    .sort((a: any, b: any) => b.stats.totalOpenDays - a.stats.totalOpenDays);
+    .filter((v: any) => v.stats.periodTriggered && v.stats.availability !== null && v.stats.availability < 95)
+    .sort((a: any, b: any) => (b.stats.totalOpenDays ?? 0) - (a.stats.totalOpenDays ?? 0));
 
   const exportPenaltyReport = () => {
     const headers = ['報表日期', '車牌號碼', 'VIN', '專案', '當期停修日', '當期可用率', '原保固到期日', '展延月份', '修正後保固到期日'];
@@ -666,7 +668,7 @@ export default function WorkOrdersSummary({
                 </p>
                 <div className="mt-2 text-center">
                   <span className="bg-red-50 text-red-700 font-black text-sm px-4 py-1 rounded-full border border-red-200">
-                    🏛️ 政府車輛保固展延對數報表 (當期可用率低於 95%)
+                    🏛️                     政府車輛保固展延對數報表 (現行期間已觸發展延)
                   </span>
                 </div>
               </div>

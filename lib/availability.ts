@@ -154,7 +154,8 @@ export function calculateAvailability(vehicle: AvailabilityVehicle, now = new Da
   for (let extensionIndex = 0; extensionIndex < extensionPeriods; extensionIndex += 1) {
     const extensionStart = addMonths(originalExpiry, extensionIndex * 6);
     if (extensionStart > now) break;
-    // 沒有前一個展延期時，不應直接評估更後面的區段。
+    // 沒有任何既有／已觸發展延時，不應虛構第一個展延期；更後面的區段也必須先有前一期展延紀錄。
+    if (extensionIndex === 0 && extensionMonths < 6) break;
     if (extensionIndex > 0 && extensionMonths < extensionIndex * 6) break;
     const end = addMonths(extensionStart, 6);
     const period = makePeriod('extension', extensionIndex + 1, extensionStart, end, orders, now);
