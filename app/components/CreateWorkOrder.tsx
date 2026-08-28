@@ -129,6 +129,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     setField(props.setBrand, setBrand, vehicle.brand);
     setField(props.setModel, setModel, vehicle.model);
     setField(props.setClaimFormDate, setClaimFormDate, vehicle.claim_form_date);
+    setField(props.setPickupReturnDate, setPickupReturnDate, vehicle.pickup_return_date);
+    setField(props.setGarageLocation, setGarageLocation, vehicle.garage_location);
     setField(props.setDescription, setDescription, vehicle.description);
     if (Array.isArray(data?.items)) {
       const extractedItems = data.items
@@ -593,7 +595,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 text-black">
             <h3 className="text-base font-black text-slate-900">✨ 貼上報修訊息自動解析</h3>
-            <p className="text-xs text-gray-500">直接貼上 WhatsApp 或訊息，系統將自動辨識車牌、VIN 及日期：</p>
+            <p className="text-xs text-gray-500">直接貼上 WhatsApp 訊息，系統會按欄位標籤自動辨識車輛、日期、維修位置及所有維修項目：</p>
             <textarea
               rows={6}
               value={smartText}
