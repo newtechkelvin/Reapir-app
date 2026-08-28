@@ -28,8 +28,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const payload = Array.isArray(body) ? body : [body];
 
-    const formattedPayload = payload.map((v) => ({
-      warranty_type: v.warranty_type || 'government', // government 或 general
+    const formattedPayload = payload.map((v) => {
+      const warrantyType = String(v.warranty_type || 'government').toLowerCase() === 'general' ? 'general' : 'government';
+      const maintenanceStartDate = v.maintenance_start_date || (warrantyType === 'general' ? v.delivery_date || null : null);
+      let maintenanceExpiryDate = v.maintenance_expiry_date || (warrantyType === 'general' ? v.warranty_expiry_date || null : null);
+      if (warrantyType === 'general' && !maintenanceExpiryDate && maintenanceStartDate) {
+        const date = new Date(`${maintenanceStartDate}T00:00:00Z`);
+        date.setUTCFullYear(date.getUTCFullYear() + 1);
+        maintenanceExpiryDate = date.toISOString().slice(0, 10);
+      }
+      return {
+      warranty_type: warrantyType,
       project: v.project?.trim() || null,
       vin: v.vin?.trim() || null,
       plate_number: v.plate_number?.trim().toUpperCase(),
@@ -39,9 +48,13 @@ export async function POST(request: NextRequest) {
       warranty_period_years: v.warranty_period_years ? Number(v.warranty_period_years) : 3,
       max_extension_count: v.max_extension_count !== undefined ? Number(v.max_extension_count) : 3,
       max_extension_months: v.max_extension_months !== undefined ? Number(v.max_extension_months) : 18,
-      warranty_expiry_date: v.warranty_expiry_date || null,
+      warranty_expiry_date: warrantyType === 'general' ? maintenanceExpiryDate : (v.warranty_expiry_date || null),
+      maintenance_start_date: maintenanceStartDate,
+      maintenance_expiry_date: maintenanceExpiryDate,
+      maintenance_period_source: warrantyType === 'general' ? (v.maintenance_start_date ? 'manual' : 'default_1_year') : null,
       created_at: new Date().toISOString(),
-    }));
+      };
+    });
 
     // 檢查車牌號碼必填
     if (formattedPayload.some((v) => !v.plate_number)) {

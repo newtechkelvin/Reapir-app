@@ -69,6 +69,15 @@ export async function PATCH(
     if ('claim_form_date' in orderPayload) {
       orderPayload.claim_form_date = sanitizeDate(orderPayload.claim_form_date);
     }
+    if ('maintenance_start_date' in orderPayload) {
+      orderPayload.maintenance_start_date = sanitizeDate(orderPayload.maintenance_start_date);
+    }
+    if ('maintenance_expiry_date' in orderPayload) {
+      orderPayload.maintenance_expiry_date = sanitizeDate(orderPayload.maintenance_expiry_date);
+    }
+    if (orderPayload.quote_status === 'confirmed' && !orderPayload.quote_reference && !orderPayload.oral_quote_confirmed) {
+      return NextResponse.json({ error: '完成報價確認時，請填寫報價單號或選擇「已口頭報價」' }, { status: 400 });
+    }
     if (orderPayload.status === 'Completed' && !orderPayload.completed_date) {
       return NextResponse.json({ error: 'Completed 工單必須填寫完成日期' }, { status: 400 });
     }
@@ -126,16 +135,24 @@ export async function PATCH(
         .eq('id', updatedOrder.vehicle_id)
         .single();
       if (vehicleError) throw vehicleError;
+      const isScattered = String(vehicle.warranty_type || '').toLowerCase() === 'general';
       const calculation = calculateAvailability(vehicle);
+      const vehicleUpdate = isScattered
+        ? {
+            maintenance_start_date: orderPayload.maintenance_start_date ?? vehicle.maintenance_start_date ?? vehicle.delivery_date,
+            maintenance_expiry_date: orderPayload.maintenance_expiry_date ?? vehicle.maintenance_expiry_date ?? vehicle.warranty_expiry_date,
+            warranty_period_years: 1,
+          }
+        : {
+            total_repair_days: calculation.repairDays,
+            availability_percentage: calculation.availability,
+            extension_count: Math.floor(calculation.extensionMonths / 6),
+            extension_months: calculation.extensionMonths,
+            warranty_expiry_date: calculation.finalExpiryDate,
+          };
       const { error: statsError } = await supabaseAdmin
         .from('vehicles')
-        .update({
-          total_repair_days: calculation.repairDays,
-          availability_percentage: calculation.availability,
-          extension_count: Math.floor(calculation.extensionMonths / 6),
-          extension_months: calculation.extensionMonths,
-          warranty_expiry_date: calculation.finalExpiryDate,
-        })
+        .update(vehicleUpdate)
         .eq('id', updatedOrder.vehicle_id);
       if (statsError) throw statsError;
     }

@@ -86,6 +86,11 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   const [vehicleLocation, setVehicleLocation] = useState('');
   const [pickupReturnDate, setPickupReturnDate] = useState('');
   const [claimFormDate, setClaimFormDate] = useState('');
+  const [maintenanceStartDate, setMaintenanceStartDate] = useState('');
+  const [maintenanceExpiryDate, setMaintenanceExpiryDate] = useState('');
+  const [quoteStatus, setQuoteStatus] = useState<'pending' | 'confirmed'>('pending');
+  const [quoteReference, setQuoteReference] = useState('');
+  const [oralQuoteConfirmed, setOralQuoteConfirmed] = useState(false);
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<Array<{ type: string; item_name: string; notes?: string }>>([
     { type: '進廠維修', item_name: '', notes: '' },
@@ -97,6 +102,12 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   const currentWarrantyType = currentWarrantyValue === 'general' ? 'general' : currentWarrantyValue === 'government' ? 'government' : '';
   const currentItems = Array.isArray(props.items) ? props.items : items;
   const displayedOrderNumber = props.orderNumber || '產生中...';
+  const isScatteredVehicle = currentWarrantyType === 'general';
+  const effectiveMaintenanceStartDate = props.maintenanceStartDate ?? maintenanceStartDate;
+  const effectiveMaintenanceExpiryDate = props.maintenanceExpiryDate ?? maintenanceExpiryDate;
+  const effectiveQuoteStatus = props.quoteStatus ?? quoteStatus;
+  const effectiveQuoteReference = props.quoteReference ?? quoteReference;
+  const effectiveOralQuoteConfirmed = props.oralQuoteConfirmed ?? oralQuoteConfirmed;
   const [showSmartPasteModal, setShowSmartPasteModal] = useState(false);
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
 
@@ -125,6 +136,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     if (match.project) { setProject(match.project); props.setProject?.(match.project); }
     if (match.brand) { setBrand(match.brand); props.setBrand?.(match.brand); }
     if (match.model) { setModel(match.model); props.setModel?.(match.model); }
+    if (match.maintenance_start_date) setMaintenanceStartDate(String(match.maintenance_start_date));
+    if (match.maintenance_expiry_date) setMaintenanceExpiryDate(String(match.maintenance_expiry_date));
     if (match.garage_location) {
       if (GARAGE_OPTIONS.includes(match.garage_location)) {
         setGarageLocation(match.garage_location);
@@ -341,17 +354,27 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     try {
       setIsSubmitting(true);
 
+      if (isScatteredVehicle && effectiveQuoteStatus === 'confirmed' && !effectiveQuoteReference.trim() && !effectiveOralQuoteConfirmed) {
+        alert('完成報價確認時，請填寫報價單號或選擇「已口頭報價」');
+        return;
+      }
+
       const payload = {
-        warranty_type: warrantyType,
+        warranty_type: currentWarrantyType,
         plate_number: plateNumber.trim(),
         vin: vin.trim(),
         project: project.trim(),
         brand: brand.trim(),
         model: model.trim(),
-        garage_location: garageLocation.trim(),
+        garage_location: isScatteredVehicle ? '' : garageLocation.trim(),
         vehicle_location: vehicleLocation.trim(),
         pickup_return_date: pickupReturnDate,
         claim_form_date: claimFormDate,
+        maintenance_start_date: isScatteredVehicle ? effectiveMaintenanceStartDate : null,
+        maintenance_expiry_date: isScatteredVehicle ? effectiveMaintenanceExpiryDate : null,
+        quote_status: isScatteredVehicle ? effectiveQuoteStatus : 'not_required',
+        quote_reference: isScatteredVehicle ? (effectiveQuoteReference.trim() || null) : null,
+        oral_quote_confirmed: isScatteredVehicle ? effectiveOralQuoteConfirmed : false,
         description: description.trim(),
         items: currentItems.filter((it: any) => it.item_name?.trim() !== ''),
       };
@@ -374,6 +397,11 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         setVehicleLocation('');
         setPickupReturnDate('');
         setClaimFormDate('');
+        setMaintenanceStartDate('');
+        setMaintenanceExpiryDate('');
+        setQuoteStatus('pending');
+        setQuoteReference('');
+        setOralQuoteConfirmed(false);
         setDescription('');
         setItems([{ type: '進廠維修', item_name: '', notes: '' }]);
 
@@ -511,7 +539,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
               />
             </div>
 
-            <div>
+            {!isScatteredVehicle && <div>
               <label className="block font-bold text-gray-700 mb-1">車房位置</label>
               <select
                 value={isCustomGarage ? 'CUSTOM' : (props.garageLocation ?? garageLocation)}
@@ -549,7 +577,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
                   className="mt-2 w-full p-2.5 border border-blue-400 rounded-lg bg-blue-50/50 text-black font-bold focus:ring-2 focus:ring-blue-500 text-xs"
                 />
               )}
-            </div>
+            </div>}
 
             <div>
               <label className="block font-bold text-gray-700 mb-1">車輛位置</label>
@@ -579,7 +607,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             </div>
 
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Claim Form 日期</label>
+              <label className="block font-bold text-gray-700 mb-1">維修通知日期</label>
               <input
                 type="date"
                 value={props.claimFormDate ?? claimFormDate}
@@ -592,6 +620,40 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             </div>
           </div>
         </div>
+
+        {isScatteredVehicle && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl space-y-4 text-xs">
+            <h3 className="font-extrabold text-amber-900">🚗 散車保養期及報價資料</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">保養期開始日 *</label>
+                <input type="date" required value={effectiveMaintenanceStartDate} onChange={(e) => { setMaintenanceStartDate(e.target.value); props.setMaintenanceStartDate?.(e.target.value); if (e.target.value && !effectiveMaintenanceExpiryDate) { const d = new Date(`${e.target.value}T00:00:00`); d.setFullYear(d.getFullYear() + 1); const expiry = d.toISOString().slice(0, 10); setMaintenanceExpiryDate(expiry); props.setMaintenanceExpiryDate?.(expiry); } }} className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">保養期到期日 *</label>
+                <input type="date" required value={effectiveMaintenanceExpiryDate} onChange={(e) => { setMaintenanceExpiryDate(e.target.value); props.setMaintenanceExpiryDate?.(e.target.value); }} className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">是否在保養期內</label>
+                <div className="p-2.5 rounded-lg bg-white border font-bold">{effectiveMaintenanceStartDate && effectiveMaintenanceExpiryDate && new Date(`${effectiveMaintenanceStartDate}T00:00:00`) <= new Date() && new Date(`${effectiveMaintenanceExpiryDate}T23:59:59`) >= new Date() ? '✅ 是，在保養期內' : '⚠️ 否，請先報價收費'}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">報價狀態</label>
+                <select value={effectiveQuoteStatus} onChange={(e) => { const value = e.target.value as 'pending' | 'confirmed'; setQuoteStatus(value); props.setQuoteStatus?.(value); }} className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold">
+                  <option value="pending">待報價</option><option value="confirmed">已完成報價確認</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">報價單號</label>
+                <input type="text" value={effectiveQuoteReference} onChange={(e) => { setQuoteReference(e.target.value); props.setQuoteReference?.(e.target.value); }} placeholder="如：QT-2026-001" className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold" />
+              </div>
+              <label className="flex items-center gap-2 p-2.5 font-bold text-gray-700"><input type="checkbox" checked={effectiveOralQuoteConfirmed} onChange={(e) => { setOralQuoteConfirmed(e.target.checked); props.setOralQuoteConfirmed?.(e.target.checked); }} /> 已口頭報價</label>
+            </div>
+            <p className="text-amber-800">不在保養期內仍可建立工單；完成報價確認時，必須填寫報價單號或選擇「已口頭報價」。</p>
+          </div>
+        )}
 
         <div className="space-y-1 text-xs">
           <label className="block font-bold text-gray-700">狀況與故障描述</label>

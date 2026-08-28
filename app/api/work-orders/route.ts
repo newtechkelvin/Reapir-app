@@ -20,6 +20,19 @@ function normalizeVin(value: unknown) {
   return normalizeText(value).toUpperCase();
 }
 
+function normalizeDate(value: unknown) {
+  const text = normalizeText(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function addOneYear(dateText: string | null) {
+  if (!dateText) return null;
+  const date = new Date(`${dateText}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCFullYear(date.getUTCFullYear() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
 function normalizeWarrantyType(value: unknown) {
   const normalized = normalizeText(value).toLowerCase();
   return normalized === 'general' || normalized === '散車' || normalized === '散車保固'
@@ -109,6 +122,15 @@ export async function POST(request: NextRequest) {
     const brand = normalizeText(body.brand);
     const model = normalizeText(body.model);
     const warrantyType = normalizeWarrantyType(body.warranty_type);
+    const maintenanceStartDate = normalizeDate(body.maintenance_start_date || (warrantyType === 'General' ? body.delivery_date : null));
+    const maintenanceExpiryDate = normalizeDate(body.maintenance_expiry_date) || (warrantyType === 'General' ? addOneYear(maintenanceStartDate) : null);
+    const quoteStatus = normalizeText(body.quote_status) || (warrantyType === 'General' ? 'pending' : 'not_required');
+    const quoteReference = normalizeText(body.quote_reference);
+    const oralQuoteConfirmed = Boolean(body.oral_quote_confirmed);
+    const quoteConfirmed = quoteStatus === 'confirmed';
+    if (warrantyType === 'General' && quoteConfirmed && !quoteReference && !oralQuoteConfirmed) {
+      return NextResponse.json({ error: '完成報價確認時，請填寫報價單號或選擇「已口頭報價」' }, { status: 400 });
+    }
     const requestedOrderNumber = normalizeText(body.order_number).toUpperCase();
 
     if (!plateNumber) return NextResponse.json({ error: '請輸入車牌號碼' }, { status: 400 });
@@ -150,7 +172,12 @@ export async function POST(request: NextRequest) {
         claim_form_date: body.claim_form_date || null,
         pickup_return_date: body.pickup_return_date || null,
         warranty_type: warrantyType,
+        warranty_period_years: warrantyType === 'General' ? 1 : 3,
+        maintenance_start_date: warrantyType === 'General' ? maintenanceStartDate : null,
+        maintenance_expiry_date: warrantyType === 'General' ? maintenanceExpiryDate : null,
+        maintenance_period_source: warrantyType === 'General' ? (body.maintenance_start_date ? 'manual' : 'default_1_year') : null,
       };
+      if (warrantyType === 'General') insertPayload.warranty_expiry_date = maintenanceExpiryDate;
       let insertResult = await supabase.from('vehicles').insert([insertPayload]).select().single();
       if (insertResult.error?.message?.includes('warranty_type')) {
         delete insertPayload.warranty_type;
@@ -162,6 +189,15 @@ export async function POST(request: NextRequest) {
       vehicle = insertResult.data;
     } else {
       const updateData: Vehicle = { warranty_type: warrantyType };
+      if (warrantyType === 'General') {
+        if (maintenanceStartDate) updateData.maintenance_start_date = maintenanceStartDate;
+        if (maintenanceExpiryDate) {
+          updateData.maintenance_expiry_date = maintenanceExpiryDate;
+          updateData.warranty_expiry_date = maintenanceExpiryDate;
+        }
+        updateData.warranty_period_years = 1;
+        updateData.maintenance_period_source = body.maintenance_start_date ? 'manual' : (vehicle.maintenance_period_source || 'default_1_year');
+      }
       if (vin && !normalizeVin(vehicle.vin)) updateData.vin = vin;
       if (plateNumber !== normalizePlate(vehicle.plate_number)) updateData.plate_number = plateNumber;
       if (brand) updateData.brand = brand;
@@ -192,6 +228,10 @@ export async function POST(request: NextRequest) {
       pickup_return_date: body.pickup_return_date || null,
       status: 'Open',
       warranty_type: warrantyType,
+      quote_status: warrantyType === 'General' ? quoteStatus : 'not_required',
+      quote_reference: warrantyType === 'General' ? (quoteReference || null) : null,
+      oral_quote_confirmed: warrantyType === 'General' ? oralQuoteConfirmed : false,
+      quote_confirmed_at: warrantyType === 'General' && quoteConfirmed ? new Date().toISOString() : null,
     };
 
     let orderResult = await supabase.from('work_orders').insert([orderPayload]).select().single();
@@ -224,15 +264,23 @@ export async function POST(request: NextRequest) {
       .single();
     if (vehicleFetchError) throw vehicleFetchError;
     const calculation = calculateAvailability(vehicleWithOrders);
+    const vehicleStatsUpdate = warrantyType === 'General'
+      ? {
+          warranty_period_years: 1,
+          maintenance_start_date: maintenanceStartDate,
+          maintenance_expiry_date: maintenanceExpiryDate,
+          warranty_expiry_date: maintenanceExpiryDate,
+        }
+      : {
+          total_repair_days: calculation.repairDays,
+          availability_percentage: calculation.availability,
+          extension_count: Math.floor(calculation.extensionMonths / 6),
+          extension_months: calculation.extensionMonths,
+          warranty_expiry_date: calculation.finalExpiryDate,
+        };
     const { error: statsError } = await supabase
       .from('vehicles')
-      .update({
-        total_repair_days: calculation.repairDays,
-        availability_percentage: calculation.availability,
-        extension_count: Math.floor(calculation.extensionMonths / 6),
-        extension_months: calculation.extensionMonths,
-        warranty_expiry_date: calculation.finalExpiryDate,
-      })
+      .update(vehicleStatsUpdate)
       .eq('id', vehicle.id);
     if (statsError) throw statsError;
 

@@ -30,6 +30,11 @@ export default function Home() {
   const [pickupReturnDate, setPickupReturnDate] = useState('');
   const [description, setDescription] = useState('');
   const [warrantyType, setWarrantyType] = useState<string>('');
+  const [maintenanceStartDate, setMaintenanceStartDate] = useState('');
+  const [maintenanceExpiryDate, setMaintenanceExpiryDate] = useState('');
+  const [quoteStatus, setQuoteStatus] = useState<'pending' | 'confirmed'>('pending');
+  const [quoteReference, setQuoteReference] = useState('');
+  const [oralQuoteConfirmed, setOralQuoteConfirmed] = useState(false);
   const [orderNumber, setOrderNumber] = useState('');
   const [items, setItems] = useState<any[]>([{ type: '進廠維修', item_name: '' }]);
   const [showPasteModal, setShowPasteModal] = useState(false);
@@ -121,6 +126,14 @@ export default function Home() {
     }
 
     const validItems = items.filter((i) => i.item_name && i.item_name.trim() !== '');
+    if (warrantyType === 'General' && (!maintenanceStartDate || !maintenanceExpiryDate)) {
+      alert('散車必須輸入保養期開始日及到期日');
+      return;
+    }
+    if (warrantyType === 'General' && quoteStatus === 'confirmed' && !quoteReference.trim() && !oralQuoteConfirmed) {
+      alert('完成報價確認時，請填寫報價單號或選擇「已口頭報價」');
+      return;
+    }
     if (validItems.length === 0) {
       alert('請至少新增一項維修或零件項目');
       return;
@@ -143,6 +156,11 @@ export default function Home() {
           description,
           items: validItems,
           warranty_type: warrantyType,
+          maintenance_start_date: warrantyType === 'General' ? maintenanceStartDate : null,
+          maintenance_expiry_date: warrantyType === 'General' ? maintenanceExpiryDate : null,
+          quote_status: warrantyType === 'General' ? quoteStatus : 'not_required',
+          quote_reference: warrantyType === 'General' ? (quoteReference.trim() || null) : null,
+          oral_quote_confirmed: warrantyType === 'General' ? oralQuoteConfirmed : false,
           order_number: orderNumber || undefined
         }),
       });
@@ -159,6 +177,11 @@ export default function Home() {
         setLocation('');
         setClaimFormDate('');
         setPickupReturnDate('');
+        setMaintenanceStartDate('');
+        setMaintenanceExpiryDate('');
+        setQuoteStatus('pending');
+        setQuoteReference('');
+        setOralQuoteConfirmed(false);
         setDescription('');
         setItems([{ type: '進廠維修', item_name: '' }]);
         setOrderNumber('');
@@ -429,6 +452,16 @@ export default function Home() {
               isSubmitting={isSubmitting}
               warrantyType={warrantyType}
               setWarrantyType={setWarrantyType}
+              maintenanceStartDate={maintenanceStartDate}
+              setMaintenanceStartDate={setMaintenanceStartDate}
+              maintenanceExpiryDate={maintenanceExpiryDate}
+              setMaintenanceExpiryDate={setMaintenanceExpiryDate}
+              quoteStatus={quoteStatus}
+              setQuoteStatus={setQuoteStatus}
+              quoteReference={quoteReference}
+              setQuoteReference={setQuoteReference}
+              oralQuoteConfirmed={oralQuoteConfirmed}
+              setOralQuoteConfirmed={setOralQuoteConfirmed}
             />
           </div>
         )}

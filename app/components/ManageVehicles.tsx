@@ -27,6 +27,7 @@ export default function ManageVehicles({
   const [editModel, setEditModel] = useState('');
   const [editWarrantyType, setEditWarrantyType] = useState('government');
   const [editDeliveryDate, setEditDeliveryDate] = useState('');
+  const [editMaintenanceExpiryDate, setEditMaintenanceExpiryDate] = useState('');
   const [editWarrantyPeriodYears, setEditWarrantyPeriodYears] = useState('3');
   const [editMaxExtensionCount, setEditMaxExtensionCount] = useState('3');
   const [editMaxExtensionMonths, setEditMaxExtensionMonths] = useState('18');
@@ -124,7 +125,8 @@ export default function ManageVehicles({
     setEditBrand(vehicle.brand || '');
     setEditModel(vehicle.model || '');
     setEditWarrantyType(vehicle.warranty_type || 'government');
-    setEditDeliveryDate(vehicle.delivery_date || '');
+    setEditDeliveryDate(vehicle.maintenance_start_date || vehicle.delivery_date || '');
+    setEditMaintenanceExpiryDate(vehicle.maintenance_expiry_date || vehicle.warranty_expiry_date || '');
     setEditWarrantyPeriodYears(String(vehicle.warranty_period_years || '3'));
     setEditMaxExtensionCount(String(vehicle.max_extension_count !== undefined ? vehicle.max_extension_count : '3'));
     setEditMaxExtensionMonths(String(vehicle.max_extension_months !== undefined ? vehicle.max_extension_months : '18'));
@@ -150,7 +152,9 @@ export default function ManageVehicles({
         model: editModel.trim(),
         warranty_type: editWarrantyType,
         delivery_date: editDeliveryDate,
-        warranty_period_years: Number(editWarrantyPeriodYears),
+        maintenance_start_date: editWarrantyType === 'general' ? editDeliveryDate : null,
+        maintenance_expiry_date: editWarrantyType === 'general' ? editMaintenanceExpiryDate : null,
+        warranty_period_years: editWarrantyType === 'general' ? 1 : Number(editWarrantyPeriodYears),
         max_extension_count: Number(editMaxExtensionCount),
         max_extension_months: Number(editMaxExtensionMonths) || 18,
         garage_location: editGarageLocation.trim(),
@@ -214,7 +218,9 @@ export default function ManageVehicles({
         brand: brand.trim(),
         model: model.trim(),
         delivery_date: deliveryDate,
-        warranty_period_years: Number(warrantyPeriodYears),
+        maintenance_start_date: warrantyType === 'general' ? deliveryDate : null,
+        maintenance_expiry_date: warrantyType === 'general' ? warrantyExpiryDate : null,
+        warranty_period_years: warrantyType === 'general' ? 1 : Number(warrantyPeriodYears),
         max_extension_count: Number(maxExtensionCount),
         max_extension_months: Number(maxExtensionMonths) || 18,
         warranty_expiry_date: warrantyExpiryDate,
@@ -590,16 +596,17 @@ export default function ManageVehicles({
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block font-bold text-gray-700 mb-1">交車日期 (Delivery)</label>
+                  <label className="block font-bold text-gray-700 mb-1">{editWarrantyType === 'general' ? '保養期開始日' : '交車日期 (Delivery)'}</label>
                   <input
                     type="date"
                     value={editDeliveryDate}
-                    onChange={(e) => setEditDeliveryDate(e.target.value)}
-                    className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                                            onChange={(e) => setEditDeliveryDate(e.target.value)}
+                        className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    {editWarrantyType === 'general' && <div className="col-span-2"><label className="block font-bold text-gray-700 mb-1">保養期到期日</label><input type="date" value={editMaintenanceExpiryDate} onChange={(e) => setEditMaintenanceExpiryDate(e.target.value)} className="w-full p-2 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500" /></div>}
 
-                {/* 🎯 專案與保固條款設定欄位 */}
+                    {/* 🎯 專案與保固條款設定欄位 */}
                 <div className="col-span-2 bg-amber-50 p-3 rounded-xl border border-amber-300 space-y-2">
                   <h4 className="font-extrabold text-amber-900 text-xs flex items-center gap-1">
                     🏛️ 專案與保固條款設定
@@ -767,7 +774,7 @@ export default function ManageVehicles({
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block font-bold text-gray-700 mb-1">交車日期 (Delivery)</label>
+                  <label className="block font-bold text-gray-700 mb-1">{warrantyType === 'general' ? '保養期開始日' : '交車日期 (Delivery)'}</label>
                   <input
                     type="date"
                     value={deliveryDate}
@@ -809,7 +816,7 @@ export default function ManageVehicles({
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block font-bold text-gray-700 mb-1">保固到期日 (可自動推算或手動填寫)</label>
+                  <label className="block font-bold text-gray-700 mb-1">{warrantyType === 'general' ? '保養期到期日 (可自動推算或手動填寫)' : '保固到期日 (可自動推算或手動填寫)'}</label>
                   <input
                     type="date"
                     value={warrantyExpiryDate}
