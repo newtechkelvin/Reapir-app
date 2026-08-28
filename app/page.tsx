@@ -6,9 +6,10 @@ import GeneralWarrantySummary from './components/GeneralWarrantySummary';
 import CreateWorkOrder from './components/CreateWorkOrder';
 import SearchVehicles from './components/SearchVehicles';
 import ManageVehicles from './components/ManageVehicles';
+import ProjectSettings from './components/ProjectSettings';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'summary' | 'general_summary' | 'create' | 'search' | 'vehicles'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'general_summary' | 'create' | 'search' | 'vehicles' | 'project_settings'>('summary');
 
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -343,6 +344,14 @@ export default function Home() {
               ➕ 開新工單
             </button>
             <button
+              onClick={() => setActiveTab('project_settings')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'project_settings' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              ⚙️ 專案設定
+            </button>
+            <button
               onClick={() => {
                 setActiveTab('search');
                 if (!hasSearched) handleSearch();
@@ -380,6 +389,8 @@ export default function Home() {
         )}
 
         {activeTab === 'general_summary' && <GeneralWarrantySummary />}
+
+        {activeTab === 'project_settings' && <ProjectSettings />}
 
         {activeTab === 'create' && (
           <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200">
