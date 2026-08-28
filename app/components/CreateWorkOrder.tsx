@@ -295,21 +295,25 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       const result = await worker.recognize(processedImage);
       const text = result.data.text?.trim();
       if (!text) throw new Error('圖片未能辨識出文字，請使用較清晰的 Claim Form 截圖');
-      const response = await fetch('/api/parse-work-order-text', {
+      const response = await fetch('/api/parse-repair-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || 'OCR 文字解析失敗');
-      applyExtractedData(data);
-      if (data.vehicle?.warranty_type === 'general' || data.vehicle?.warranty_type === 'government') {
-        updateWarrantyType(data.vehicle.warranty_type);
-      } else {
-        setWarrantyType('');
-        props.setWarrantyType?.('');
-      }
-      alert('已完成 Tesseract OCR 及欄位回填，請核對資料並手動選擇合約類別後再建立工單。');
+      if (!response.ok) throw new Error(data?.error || '維修項目 OCR 解析失敗');
+      const extractedItems = Array.isArray(data?.items)
+        ? data.items
+          .map((item: any) => ({
+            type: String(item.type || '進廠維修'),
+            item_name: String(item.item_name || '').trim(),
+            notes: String(item.notes || '').trim(),
+          }))
+          .filter((item: any) => item.item_name)
+        : [];
+      if (extractedItems.length === 0) throw new Error('未能辨識維修項目，請裁剪至項目明細或使用較清晰圖片');
+      updateItems(extractedItems);
+      alert(`已辨認 ${extractedItems.length} 項維修項目，並翻譯成繁體中文。車牌、VIN、日期及其他車輛資料不會由此圖片修改，請核對項目後再建立工單。`);
     } catch (error: any) {
       console.error('Warranty Claim Form Tesseract OCR 失敗:', error);
       alert(error.message || 'OCR 處理失敗，請稍後再試');
@@ -607,10 +611,11 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
             <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h3>
             <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg cursor-pointer text-center">
-              {isOcrProcessing ? 'Tesseract OCR 處理中...' : '📷 上傳 Claim Form 截圖 OCR'}
+              {isOcrProcessing ? '維修項目 OCR 處理中...' : '📷 上傳 Claim Form 維修項目 OCR'}
               <input type="file" accept="image/*" onChange={handleOcrFileChange} disabled={isOcrProcessing} className="hidden" />
             </label>
           </div>
+          <p className="text-[11px] text-slate-500">只辨認圖片中的維修項目，並自動翻譯成繁體中文；車牌、VIN、日期及其他資料請手動輸入或使用 WhatsApp 填表。</p>
           <div className="flex justify-between items-center">
             <button
               type="button"
