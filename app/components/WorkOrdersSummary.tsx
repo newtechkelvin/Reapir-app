@@ -90,6 +90,11 @@ export default function WorkOrdersSummary({
     .filter((v: any) => v.stats.periodTriggered && v.stats.availability !== null && v.stats.availability < 95)
     .sort((a: any, b: any) => (b.stats.totalOpenDays ?? 0) - (a.stats.totalOpenDays ?? 0));
 
+  const exportPenaltyPdf = () => {
+    if (lowAvailabilityVehicles.length === 0) return;
+    window.print();
+  };
+
   const exportPenaltyReport = () => {
     const headers = ['報表日期', '車牌號碼', 'VIN', '專案', '當期停修日', '當期可用率', '原保固到期日', '展延月份', '修正後保固到期日'];
     const today = new Date().toISOString().split('T')[0];
@@ -748,6 +753,14 @@ export default function WorkOrdersSummary({
               </button>
               <button
                 type="button"
+                onClick={exportPenaltyPdf}
+                disabled={lowAvailabilityVehicles.length === 0}
+                className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-xl cursor-pointer disabled:opacity-50"
+              >
+                ⬇️ 輸出正式 PDF
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowReportModal(false)}
                 className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl cursor-pointer"
               >
@@ -757,6 +770,107 @@ export default function WorkOrdersSummary({
           </div>
         </div>
       )}
+
+      {/* PDF 列印版：使用瀏覽器的「另存為 PDF」，採 A4 直身版面。thead 會在每頁重複。 */}
+      <div className="warranty-print-report" aria-hidden="true">
+        <table>
+          <thead>
+            <tr>
+              <th colSpan={7}>
+                <div className="print-company-name">新力機械有限公司</div>
+                <div className="print-company-name-en">NEW TECH MOTOR ENGINEERING LIMITED</div>
+                <div className="print-report-title">政府車輛保固展延對數報表</div>
+                <div className="print-report-subtitle">現行保固／展延期已觸發展延（可用率低於 95%）</div>
+                <div className="print-report-meta">
+                  <span>報表產生日期：{new Date().toISOString().split('T')[0]}</span>
+                  <span>符合車輛：{lowAvailabilityVehicles.length} 輛</span>
+                </div>
+              </th>
+            </tr>
+            <tr className="print-column-heading">
+              <th>車牌號碼</th>
+              <th>專案編號</th>
+              <th>當期停修日</th>
+              <th>當期可用率</th>
+              <th>原保固到期日</th>
+              <th>展延月份</th>
+              <th>修正後保固到期日</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lowAvailabilityVehicles.map((vehicle: any, idx: number) => (
+              <tr key={`print-${vehicle.id || idx}`}>
+                <td>{vehicle.plate_number || '未設定'}</td>
+                <td>{vehicle.project || '未指定'}</td>
+                <td>{vehicle.stats.totalOpenDays === null ? '—' : `${vehicle.stats.totalOpenDays} 天`}</td>
+                <td>{vehicle.stats.availability}%</td>
+                <td>{vehicle.stats.origExpiryStr}</td>
+                <td>+{vehicle.stats.extensionMonths} 個月</td>
+                <td>{vehicle.stats.finalExpiryStr}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="print-report-footer">第 <span className="print-page-number" /> 頁</div>
+      </div>
+
+      <style jsx global>{`
+        .warranty-print-report { display: none; }
+        @media print {
+          @page { size: A4 portrait; margin: 15mm 10mm 18mm; }
+          body * { visibility: hidden !important; }
+          .warranty-print-report,
+          .warranty-print-report * { visibility: visible !important; }
+          .warranty-print-report {
+            display: block !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            color: #111827;
+            background: #fff;
+            font-family: Arial, "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
+            font-size: 9pt;
+          }
+          .warranty-print-report table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+          .warranty-print-report thead { display: table-header-group; }
+          .warranty-print-report tfoot { display: table-footer-group; }
+          .warranty-print-report tr { break-inside: avoid; page-break-inside: avoid; }
+          .warranty-print-report th,
+          .warranty-print-report td {
+            border: 0.35mm solid #9ca3af;
+            padding: 2.4mm 1.8mm;
+            vertical-align: middle;
+            overflow-wrap: anywhere;
+          }
+          .warranty-print-report thead tr:first-child th {
+            border: 0;
+            padding: 0 0 5mm;
+          }
+          .print-company-name { font-size: 17pt; font-weight: 800; letter-spacing: 0.04em; }
+          .print-company-name-en { margin-top: 1mm; font-size: 8pt; letter-spacing: 0.16em; color: #4b5563; }
+          .print-report-title { margin-top: 5mm; font-size: 13pt; font-weight: 800; }
+          .print-report-subtitle { margin-top: 1.5mm; font-size: 9pt; color: #374151; }
+          .print-report-meta { display: flex; justify-content: space-between; margin-top: 4mm; font-size: 8.5pt; font-weight: 600; color: #374151; }
+          .print-column-heading th { background: #e5e7eb !important; font-weight: 800; text-align: center; }
+          .warranty-print-report td { text-align: center; }
+          .warranty-print-report td:nth-child(2) { text-align: left; }
+          .print-report-footer {
+            position: fixed;
+            right: 0;
+            bottom: -10mm;
+            width: 100%;
+            text-align: center;
+            font-size: 8.5pt;
+            color: #4b5563;
+          }
+          .print-page-number::after { content: counter(page); }
+        }
+      `}</style>
     </div>
   );
 }
