@@ -31,6 +31,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [smartText, setSmartText] = useState('');
+  const currentWarrantyType = String(props.warrantyType ?? warrantyType).toLowerCase() === 'general' ? 'general' : 'government';
+  const displayedOrderNumber = props.orderNumber || '產生中...';
   const [showSmartPasteModal, setShowSmartPasteModal] = useState(false);
 
   const GARAGE_OPTIONS = [
@@ -43,30 +45,52 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     '車行',
   ];
 
+  const updateWarrantyType = (type: 'government' | 'general') => {
+    setWarrantyType(type);
+    props.setWarrantyType?.(type === 'government' ? 'Government' : 'General');
+  };
+
+  const applyVehicleMatch = (match: any) => {
+    if (!match) return;
+    if (match.plate_number) {
+      setPlateNumber(String(match.plate_number).trim().toUpperCase());
+      props.setPlateNumber?.(String(match.plate_number).trim().toUpperCase());
+    }
+    if (match.vin) { setVin(match.vin); props.setVin?.(match.vin); }
+    if (match.project) { setProject(match.project); props.setProject?.(match.project); }
+    if (match.brand) { setBrand(match.brand); props.setBrand?.(match.brand); }
+    if (match.model) { setModel(match.model); props.setModel?.(match.model); }
+    if (match.garage_location) {
+      if (GARAGE_OPTIONS.includes(match.garage_location)) {
+        setGarageLocation(match.garage_location);
+        props.setGarageLocation?.(match.garage_location);
+        setIsCustomGarage(false);
+      } else {
+        setGarageLocation(match.garage_location);
+        props.setGarageLocation?.(match.garage_location);
+        setIsCustomGarage(true);
+      }
+    }
+  };
+
   const handlePlateChange = (val: string) => {
-    const upperVal = val.toUpperCase();
+    const upperVal = val.trim().toUpperCase();
     setPlateNumber(upperVal);
 
     if (vehicles && vehicles.length > 0) {
       const match = vehicles.find(
-        (v) => v.plate_number && v.plate_number.toUpperCase() === upperVal
+        (v) => v.plate_number && String(v.plate_number).trim().toUpperCase() === upperVal
       );
-      if (match) {
-        if (match.vin) setVin(match.vin);
-        if (match.project) setProject(match.project);
-        if (match.brand) setBrand(match.brand);
-        if (match.model) setModel(match.model);
-        if (match.garage_location) {
-          if (GARAGE_OPTIONS.includes(match.garage_location)) {
-            setGarageLocation(match.garage_location);
-            setIsCustomGarage(false);
-          } else {
-            setGarageLocation(match.garage_location);
-            setIsCustomGarage(true);
-          }
-        }
-      }
+      if (match) applyVehicleMatch(match);
     }
+  };
+
+  const handleVinChange = (val: string) => {
+    const normalizedVin = val.trim().toUpperCase();
+    setVin(normalizedVin);
+    props.setVin?.(normalizedVin);
+    const match = vehicles.find((v) => v.vin && String(v.vin).trim().toUpperCase() === normalizedVin);
+    if (match) applyVehicleMatch(match);
   };
 
   const handleAddItem = () => {
@@ -173,6 +197,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         <div>
           <h2 className="text-xl font-black text-slate-900">➕ 開立車輛維修工單</h2>
           <p className="text-xs text-slate-500 mt-1">填寫維修內容與車輛資料以建立新工單</p>
+          <p className="text-xs text-blue-700 font-bold mt-2">預計工單編號：{displayedOrderNumber}</p>
         </div>
 
         <button
@@ -190,9 +215,9 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => setWarrantyType('government')}
+              onClick={() => updateWarrantyType('government')}
               className={`p-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                warrantyType === 'government'
+                currentWarrantyType === 'government'
                   ? 'bg-blue-50 border-blue-600 text-blue-900 ring-2 ring-blue-500/20'
                   : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
@@ -201,9 +226,9 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             </button>
             <button
               type="button"
-              onClick={() => setWarrantyType('general')}
+              onClick={() => updateWarrantyType('general')}
               className={`p-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                warrantyType === 'general'
+                currentWarrantyType === 'general'
                   ? 'bg-amber-50 border-amber-600 text-amber-900 ring-2 ring-amber-500/20'
                   : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
@@ -237,8 +262,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
                 type="text"
                 value={props.vin ?? vin}
                 onChange={(e) => {
-                  if (props.setVin) props.setVin(e.target.value);
-                  setVin(e.target.value);
+                  handleVinChange(e.target.value);
                 }}
                 placeholder="17 位 VIN 碼"
                 className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"

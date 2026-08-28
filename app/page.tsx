@@ -29,6 +29,7 @@ export default function Home() {
   const [pickupReturnDate, setPickupReturnDate] = useState('');
   const [description, setDescription] = useState('');
   const [warrantyType, setWarrantyType] = useState<string>('Government');
+  const [orderNumber, setOrderNumber] = useState('');
   const [items, setItems] = useState<any[]>([{ type: '進廠維修', item_name: '' }]);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
@@ -44,6 +45,24 @@ export default function Home() {
   useEffect(() => {
     fetchAllVehicles();
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'create') return;
+    let cancelled = false;
+    const fetchNextOrderNumber = async () => {
+      try {
+        const res = await fetch('/api/work-orders/next-number');
+        const data = await res.json().catch(() => null);
+        if (!cancelled && res.ok && data?.order_number) setOrderNumber(data.order_number);
+      } catch (error) {
+        console.error('取得下一個工單編號失敗:', error);
+      }
+    };
+    fetchNextOrderNumber();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
 
   const fetchAllVehicles = async () => {
     try {
@@ -118,7 +137,8 @@ export default function Home() {
           pickup_return_date: pickupReturnDate,
           description,
           items: validItems,
-          warranty_type: warrantyType
+          warranty_type: warrantyType,
+          order_number: orderNumber || undefined
         }),
       });
 
@@ -136,6 +156,7 @@ export default function Home() {
         setPickupReturnDate('');
         setDescription('');
         setItems([{ type: '進廠維修', item_name: '' }]);
+        setOrderNumber('');
 
         await fetchAllVehicles();
         if (warrantyType === 'General') {
@@ -362,8 +383,10 @@ export default function Home() {
 
         {activeTab === 'create' && (
           <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200">
-            <CreateWorkOrder
-              handleCreateOrder={handleCreateOrder}
+              <CreateWorkOrder
+                vehicles={vehicles}
+                orderNumber={orderNumber}
+                handleCreateOrder={handleCreateOrder}
               plateNumber={plateNumber}
               setPlateNumber={setPlateNumber}
               vin={vin}
