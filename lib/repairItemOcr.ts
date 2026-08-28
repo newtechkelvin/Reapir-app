@@ -14,6 +14,7 @@ function stripItemPrefix(value: string) {
     .replace(/^\s*(?:[-*•▪◦]|\d+[.)、,])\s*/, '')
     .replace(/^\s*[|¦]+\s*/, '')
     .replace(/\s*[|¦]+.*$/, '')
+    .replace(/^[^A-Za-z\u4e00-\u9fff]+/, '')
     .trim();
 }
 
@@ -21,12 +22,12 @@ function stripItemPrefix(value: string) {
 export function extractRepairItemsFromOcrText(text: string) {
   const lines = text.split(/\r?\n/).map(cleanLine).filter(Boolean);
   const headerIndex = lines.findIndex((line) => ITEM_HEADER_PATTERN.test(line));
-  const candidateLines = headerIndex >= 0
-    ? lines.slice(headerIndex + 1)
-    : lines.filter((line) => ITEM_LINE_PATTERN.test(line));
+  const afterHeader = headerIndex >= 0 ? lines.slice(headerIndex + 1) : lines;
+  const candidateLines = afterHeader
+    .map(stripItemPrefix)
+    .filter((line) => ITEM_LINE_PATTERN.test(line) || /[\u4e00-\u9fff]/.test(line));
 
   return candidateLines
-    .map(stripItemPrefix)
     .map((line) => line.replace(/^N\/\$\/F\b/i, 'N/S/F'))
     .filter((line) => line.length > 1)
     .filter((line) => !/^\[?tam\]?$/i.test(line))
@@ -35,11 +36,11 @@ export function extractRepairItemsFromOcrText(text: string) {
 }
 
 const EXACT_TRANSLATIONS: Array<[RegExp, string]> = [
-  [/^REPAIR ENGINE OIL LEAKAGE$/i, '維修：引擎機油滲漏'],
-  [/^REPAIR INTAKE HOSE DAMAGE$/i, '維修：引擎進氣喉損壞'],
-  [/^REPAIR LEFT TOP SPOTLIGHTS NOT WORK$/i, '維修：左側頂部射燈不亮'],
-  [/^REPAIR N\/S\/F TOP BLUE FLASHING LIGHT NOT WORK$/i, '維修：N/S/F 頂部藍色閃燈不亮'],
-  [/^REPAIR N\/S\/F PASSENGER READING LIGHT BLINKING$/i, '維修：N/S/F 乘客閱讀燈閃爍'],
+  [/^REPAIR ENGINE O(?:IL|RL) LEAKAGE\b/i, '維修：引擎機油滲漏'],
+  [/^REPAIR INTAKE HOSE DAMAGE\b/i, '維修：引擎進氣喉損壞'],
+  [/^REPAIR LEFT TOP SPOTLIGHTS? NOT WORK(?:ING)?\b/i, '維修：左側頂部射燈不亮'],
+  [/^REPAIR N\/S\/F TOP BLUE FLASHING LIGHT NOT WORK(?:ING)?\b/i, '維修：N/S/F 頂部藍色閃燈不亮'],
+  [/^REPAIR N\/S\/F PASSENGER READING LIGHT BLINKING\b/i, '維修：N/S/F 乘客閱讀燈閃爍'],
 ];
 
 const PHRASE_TRANSLATIONS: Array<[RegExp, string]> = [
