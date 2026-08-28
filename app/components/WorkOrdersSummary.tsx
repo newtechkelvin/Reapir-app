@@ -258,6 +258,31 @@ export default function WorkOrdersSummary({
     .filter((v: any) => v.stats.availability < 95)
     .sort((a: any, b: any) => b.stats.totalOpenDays - a.stats.totalOpenDays);
 
+  const exportPenaltyReport = () => {
+    const headers = ['報表日期', '車牌號碼', 'VIN', '專案', '當期停修日', '當期可用率', '原保固到期日', '展延月份', '修正後保固到期日'];
+    const today = new Date().toISOString().split('T')[0];
+    const escapeCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = lowAvailabilityVehicles.map((vehicle: any) => [
+      today,
+      vehicle.plate_number,
+      vehicle.vin,
+      vehicle.project,
+      vehicle.stats.totalOpenDays,
+      `${vehicle.stats.availability}%`,
+      vehicle.stats.origExpiryStr,
+      vehicle.stats.extensionMonths,
+      vehicle.stats.finalExpiryStr,
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\r\n');
+    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `政府合約罰則對數報表-${today}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   // 搜尋過濾
   const filteredVehicles = governmentVehiclesWithOpenOrders
     .filter((v: any) => {
@@ -880,7 +905,15 @@ export default function WorkOrdersSummary({
               </table>
             </div>
 
-            <div className="flex justify-end pt-3">
+            <div className="flex justify-between pt-3 gap-3">
+              <button
+                type="button"
+                onClick={exportPenaltyReport}
+                disabled={lowAvailabilityVehicles.length === 0}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl cursor-pointer disabled:opacity-50"
+              >
+                ⬇️ 匯出即時對數 CSV
+              </button>
               <button
                 type="button"
                 onClick={() => setShowReportModal(false)}

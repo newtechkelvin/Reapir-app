@@ -28,6 +28,7 @@ export default function ManageVehicles({
   const [editDeliveryDate, setEditDeliveryDate] = useState('');
   const [editWarrantyPeriodYears, setEditWarrantyPeriodYears] = useState('3');
   const [editMaxExtensionCount, setEditMaxExtensionCount] = useState('3');
+  const [editMaxExtensionMonths, setEditMaxExtensionMonths] = useState('18');
   const [editGarageLocation, setEditGarageLocation] = useState('');
   const [editVehicleLocation, setEditVehicleLocation] = useState('');
 
@@ -42,6 +43,7 @@ export default function ManageVehicles({
   const [deliveryDate, setDeliveryDate] = useState('');
   const [warrantyPeriodYears, setWarrantyPeriodYears] = useState('3');
   const [maxExtensionCount, setMaxExtensionCount] = useState('3');
+  const [maxExtensionMonths, setMaxExtensionMonths] = useState('18');
   const [warrantyExpiryDate, setWarrantyExpiryDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -144,6 +146,7 @@ export default function ManageVehicles({
     setEditDeliveryDate(vehicle.delivery_date || '');
     setEditWarrantyPeriodYears(String(vehicle.warranty_period_years || '3'));
     setEditMaxExtensionCount(String(vehicle.max_extension_count !== undefined ? vehicle.max_extension_count : '3'));
+    setEditMaxExtensionMonths(String(vehicle.max_extension_months !== undefined ? vehicle.max_extension_months : '18'));
     setEditGarageLocation(vehicle.garage_location || vehicle.location || '');
     setEditVehicleLocation(vehicle.vehicle_location || '');
 
@@ -168,6 +171,7 @@ export default function ManageVehicles({
         delivery_date: editDeliveryDate,
         warranty_period_years: Number(editWarrantyPeriodYears),
         max_extension_count: Number(editMaxExtensionCount),
+        max_extension_months: Number(editMaxExtensionMonths) || 18,
         garage_location: editGarageLocation.trim(),
         vehicle_location: editVehicleLocation.trim(),
       };
@@ -231,6 +235,7 @@ export default function ManageVehicles({
         delivery_date: deliveryDate,
         warranty_period_years: Number(warrantyPeriodYears),
         max_extension_count: Number(maxExtensionCount),
+        max_extension_months: Number(maxExtensionMonths) || 18,
         warranty_expiry_date: warrantyExpiryDate,
       };
 
@@ -632,7 +637,19 @@ export default function ManageVehicles({
                     </div>
 
                     <div>
-                      <label className="block font-bold text-gray-800 mb-1">展延上限次數 (0=不展延)</label>
+                      <label className="block font-bold text-gray-800 mb-1">總展延月數上限</label>
+                      <input
+                        type="number"
+                        value={editMaxExtensionMonths}
+                        onChange={(e) => setEditMaxExtensionMonths(e.target.value)}
+                        min="0"
+                        max="120"
+                        step="6"
+                        className="w-full p-2 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">展延上限次數（相容舊資料）</label>
                       <input
                         type="number"
                         value={editMaxExtensionCount}
