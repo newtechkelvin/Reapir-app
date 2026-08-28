@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { createWorker } from 'tesseract.js';
 
 export interface CreateWorkOrderProps {
   onSuccess?: () => void;
@@ -211,19 +212,47 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('請選擇圖片格式的 Warranty Claim Form');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('圖片不可大於 10MB');
+      return;
+    }
+    let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
     try {
       setIsOcrProcessing(true);
-      const formData = new FormData();
-      formData.append('file', file);
-      const response = await fetch('/api/ocr-translate', { method: 'POST', body: formData });
+      worker = await createWorker('eng+chi_tra', 1, {
+        logger: (message) => {
+          if (message.status === 'recognizing text' && typeof message.progress === 'number') {
+            console.info(`Tesseract OCR ${(message.progress * 100).toFixed(0)}%`);
+          }
+        },
+      });
+      const result = await worker.recognize(file);
+      const text = result.data.text?.trim();
+      if (!text) throw new Error('圖片未能辨識出文字，請使用較清晰的 Claim Form 截圖');
+      const response = await fetch('/api/parse-work-order-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || 'OCR 處理失敗');
+      if (!response.ok) throw new Error(data?.error || 'OCR 文字解析失敗');
       applyExtractedData(data);
-      alert('已完成 OCR、中文翻譯及表格回填，請核對後再建立工單。');
+      if (data.vehicle?.warranty_type === 'general' || data.vehicle?.warranty_type === 'government') {
+        updateWarrantyType(data.vehicle.warranty_type);
+      } else {
+        setWarrantyType('');
+        props.setWarrantyType?.('');
+      }
+      alert('已完成 Tesseract OCR 及欄位回填，請核對資料並手動選擇合約類別後再建立工單。');
     } catch (error: any) {
-      console.error('Warranty Claim Form OCR 失敗:', error);
+      console.error('Warranty Claim Form Tesseract OCR 失敗:', error);
       alert(error.message || 'OCR 處理失敗，請稍後再試');
     } finally {
+      if (worker) await worker.terminate();
       setIsOcrProcessing(false);
     }
   };
@@ -516,7 +545,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
             <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h3>
             <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg cursor-pointer text-center">
-              {isOcrProcessing ? 'OCR 處理中...' : '📷 上傳 Claim Form 截圖 OCR'}
+              {isOcrProcessing ? 'Tesseract OCR 處理中...' : '📷 上傳 Claim Form 截圖 OCR'}
               <input type="file" accept="image/*" onChange={handleOcrFileChange} disabled={isOcrProcessing} className="hidden" />
             </label>
           </div>
