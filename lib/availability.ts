@@ -160,7 +160,7 @@ export function calculateAvailability(vehicle: AvailabilityVehicle, now = new Da
     const period = makePeriod('extension', extensionIndex + 1, extensionStart, end, orders, now);
     periods.push(period);
     if (period.triggered) {
-      extensionMonths = Math.min(maxExtensionMonths, Math.max(extensionMonths, (extensionIndex + 2) * 6));
+      extensionMonths = Math.min(maxExtensionMonths, extensionMonths + 6);
     }
   }
 
