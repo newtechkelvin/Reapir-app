@@ -817,15 +817,17 @@ export default function WorkOrdersSummary({
         .warranty-print-report { display: none; }
         @media print {
           @page { size: A4 portrait; margin: 15mm 10mm 18mm; }
+          html, body { height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
           body * { visibility: hidden !important; }
+          body *:not(.warranty-print-report):not(.warranty-print-report *) { max-height: 0 !important; min-height: 0 !important; height: 0 !important; overflow: hidden !important; }
           .warranty-print-report,
           .warranty-print-report * { visibility: visible !important; }
           .warranty-print-report {
             display: block !important;
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
             color: #111827;
             background: #fff;
             font-family: Arial, "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
