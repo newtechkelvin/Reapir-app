@@ -515,7 +515,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   />
                   <div className="hidden print:block">
                     <span className="text-gray-600">完成維修/交車日期：</span>
-                    <strong className="text-emerald-700">{completedDateInput || '未設定'}</strong>
+                    <strong className="text-emerald-700">{completedDateInput || '____________________'}</strong>
                   </div>
                 </div>
               </div>
@@ -657,7 +657,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
             )}
 
             {/* 列印專屬簽名欄 */}
-            <div className="hidden print:grid grid-cols-2 gap-x-6 gap-y-3 pt-4 text-xs print:text-sm font-bold border-t-2 border-slate-500">
+            <div className="hidden print:grid grid-cols-2 gap-x-6 gap-y-4 pt-5 print:pt-5 text-xs print:text-sm font-bold border-t-2 border-slate-500 min-h-[132px] print:min-h-[158px]">
               <div>完工日期：____________________</div>
               <div>維修主管簽署：____________________</div>
               <div>交車日期：____________________</div>
