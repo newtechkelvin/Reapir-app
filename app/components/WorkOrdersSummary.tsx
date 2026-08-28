@@ -811,7 +811,6 @@ export default function WorkOrdersSummary({
             ))}
           </tbody>
         </table>
-        <div className="print-report-footer">第 <span className="print-page-number" /> 頁</div>
       </div>
 
       <style jsx global>{`
@@ -859,16 +858,6 @@ export default function WorkOrdersSummary({
           .print-column-heading th { background: #e5e7eb !important; font-weight: 800; text-align: center; }
           .warranty-print-report td { text-align: center; }
           .warranty-print-report td:nth-child(2) { text-align: left; }
-          .print-report-footer {
-            position: fixed;
-            right: 0;
-            bottom: -10mm;
-            width: 100%;
-            text-align: center;
-            font-size: 8.5pt;
-            color: #4b5563;
-          }
-          .print-page-number::after { content: counter(page); }
         }
       `}</style>
     </div>
