@@ -142,9 +142,34 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     }
   };
 
-  const handleParseSmartText = () => {
+  const handleParseSmartText = async () => {
     const text = smartText.trim();
-    if (!text) return;
+    if (!text) {
+      alert('請先貼上 WhatsApp 報修訊息');
+      return;
+    }
+    try {
+      setIsOcrProcessing(true);
+      const response = await fetch('/api/parse-work-order-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || 'WhatsApp 訊息解析失敗');
+      applyExtractedData(data);
+      if (data.vehicle?.warranty_type) updateWarrantyType(String(data.vehicle.warranty_type).toLowerCase().includes('general') ? 'general' : 'government');
+      alert(`已完成 WhatsApp 訊息解析，並回填 ${Array.isArray(data.items) ? data.items.length : 0} 項維修資料，請核對後再建立工單。`);
+      setShowSmartPasteModal(false);
+      setSmartText('');
+      return;
+    } catch (error: any) {
+      console.error('WhatsApp 訊息解析失敗:', error);
+      alert(error.message || 'WhatsApp 訊息解析失敗，請稍後再試');
+    } finally {
+      setIsOcrProcessing(false);
+    }
+
     const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const plateMatch = text.match(/(?:車牌(?:號碼)?|牌照|plate(?:\s*number)?)\s*[:：-]?\s*([A-Z]{1,2}\s?\d{1,4})/i) || text.match(/\b([A-Z]{1,2}\s?\d{1,4})\b/i);
     const vinMatch = text.match(/(?:VIN|車身號碼)\s*[:：-]?\s*([A-HJ-NPR-Z0-9]{17})/i) || text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
@@ -587,9 +612,10 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
               <button
                 type="button"
                 onClick={handleParseSmartText}
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+                disabled={isOcrProcessing}
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl cursor-pointer disabled:opacity-50"
               >
-                ⚡ 開始解析並帶入
+                {isOcrProcessing ? '解析中...' : '⚡ 開始解析並帶入'}
               </button>
             </div>
           </div>
