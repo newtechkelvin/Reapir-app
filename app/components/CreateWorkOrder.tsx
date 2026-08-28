@@ -11,7 +11,7 @@ export interface CreateWorkOrderProps {
 export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   const { onSuccess, vehicles = [] } = props;
 
-  const [warrantyType, setWarrantyType] = useState<'government' | 'general'>('government');
+  const [warrantyType, setWarrantyType] = useState<'government' | 'general' | ''>('');
   const [plateNumber, setPlateNumber] = useState('');
   const [vin, setVin] = useState('');
   const [project, setProject] = useState('');
@@ -31,7 +31,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [smartText, setSmartText] = useState('');
-  const currentWarrantyType = String(props.warrantyType ?? warrantyType).toLowerCase() === 'general' ? 'general' : 'government';
+  const currentWarrantyValue = String(props.warrantyType ?? warrantyType).toLowerCase();
+  const currentWarrantyType = currentWarrantyValue === 'general' ? 'general' : currentWarrantyValue === 'government' ? 'government' : '';
   const currentItems = Array.isArray(props.items) ? props.items : items;
   const displayedOrderNumber = props.orderNumber || '產生中...';
   const [showSmartPasteModal, setShowSmartPasteModal] = useState(false);
@@ -160,7 +161,12 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || 'WhatsApp 訊息解析失敗');
       applyExtractedData(data);
-      if (data.vehicle?.warranty_type) updateWarrantyType(String(data.vehicle.warranty_type).toLowerCase().includes('general') ? 'general' : 'government');
+      if (data.vehicle?.warranty_type === 'general' || data.vehicle?.warranty_type === 'government') {
+        updateWarrantyType(data.vehicle.warranty_type);
+      } else {
+        setWarrantyType('');
+        props.setWarrantyType?.('');
+      }
       alert(`已完成 WhatsApp 訊息解析，並回填 ${Array.isArray(data.items) ? data.items.length : 0} 項維修資料，請核對後再建立工單。`);
       setShowSmartPasteModal(false);
       setSmartText('');
@@ -224,6 +230,10 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentWarrantyType) {
+      alert('請先選擇政府合約或散車類別');
+      return;
+    }
     if (props.handleCreateOrder) {
       return props.handleCreateOrder(e);
     }
@@ -306,6 +316,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">
           <label className="block text-xs font-bold text-slate-700">合約 / 保固類別 *</label>
+          {!currentWarrantyType && <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">此訊息沒有指定合約類別，請手動選擇政府合約或散車後才可建立工單。</p>}
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"

@@ -65,13 +65,19 @@ export function parseWhatsAppWorkOrder(text: string): ParsedWorkOrderText {
       .filter((line) => line.length > 0)
     : [];
   const description = fieldValue(text, LABELS.description);
+  const categoryText = `${fieldValue(text, ['合約類別', '類別', 'contract type', 'warranty type'])} ${text}`;
+  const warrantyType = /政府合約|政府車|EMSD|government/i.test(categoryText)
+    ? 'government'
+    : /散車|一般維修|一般保固|general/i.test(categoryText)
+      ? 'general'
+      : '';
   const vehicle = {
     plate_number: plate,
     vin,
     project,
     brand: fieldValue(text, LABELS.brand),
     model: fieldValue(text, LABELS.model),
-    warranty_type: /散車|一般|general/i.test(`${project} ${text}`) ? 'general' : 'government',
+    warranty_type: warrantyType,
     claim_form_date: noticeDate,
     pickup_return_date: repairDate,
     garage_location: fieldValue(text, LABELS.location),

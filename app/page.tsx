@@ -29,7 +29,7 @@ export default function Home() {
   const [claimFormDate, setClaimFormDate] = useState('');
   const [pickupReturnDate, setPickupReturnDate] = useState('');
   const [description, setDescription] = useState('');
-  const [warrantyType, setWarrantyType] = useState<string>('Government');
+  const [warrantyType, setWarrantyType] = useState<string>('');
   const [orderNumber, setOrderNumber] = useState('');
   const [items, setItems] = useState<any[]>([{ type: '進廠維修', item_name: '' }]);
   const [showPasteModal, setShowPasteModal] = useState(false);
@@ -111,6 +111,10 @@ export default function Home() {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!warrantyType) {
+      alert('請先選擇政府合約或散車類別');
+      return;
+    }
     if (!plateNumber.trim()) {
       alert('請輸入車牌號碼');
       return;
