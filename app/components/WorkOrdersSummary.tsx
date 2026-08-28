@@ -28,214 +28,44 @@ export default function WorkOrdersSummary({
   const [editItems, setEditItems] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 🎯 核心精算：包含車輛保固年數與展延上限，並直接讀取 Database 的 warranty_expiry_date 欄位
-  const legacyGetVehicleStats = (vehicle: any) => {
+  // 所有報表統計均直接使用統一 availability 計算，不再使用舊版 fallback。
+  const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
+    const calculation = calculateAvailability(vehicle);
     const now = new Date();
-
-    const deliveryDateStr = vehicle.delivery_date || vehicle.created_at || '2022-07-28';
-
-    // 1. 包含每台車設定的保固年數與展延上限至算式內
-    const projectWarrantyYears = Number(vehicle.warranty_period_years) || 3;
-    const maxExtCount =
-      vehicle.max_extension_count !== undefined && vehicle.max_extension_count !== null
-        ? Number(vehicle.max_extension_count)
-        : 3;
-
-    let origExpiryStr = '未設定';
-    let extensionCount = 0;
-
-    let currentPeriodStart = new Date(deliveryDateStr);
-    let currentPeriodEnd = new Date(currentPeriodStart);
-    currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 1);
-    let currentPeriodTotalDays = 365;
-
-    if (deliveryDateStr) {
-      const startDate = new Date(deliveryDateStr);
-      const originalEndDate = new Date(startDate);
-      originalEndDate.setFullYear(originalEndDate.getFullYear() + projectWarrantyYears);
-      origExpiryStr = originalEndDate.toISOString().split('T')[0];
-
-      // 逐年評估標準保固期 (帶入 projectWarrantyYears 與 maxExtCount)
-      for (let yr = 0; yr < projectWarrantyYears; yr++) {
-        const periodStart = new Date(startDate);
-        periodStart.setFullYear(periodStart.getFullYear() + yr);
-        const periodEnd = new Date(periodStart);
-        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-
-        if (now >= periodStart && now < periodEnd) {
-          currentPeriodStart = periodStart;
-          currentPeriodEnd = periodEnd;
-          currentPeriodTotalDays = 365;
-        }
-
-        let yearRepairDays = 0;
-        orders.forEach((wo: any) => {
-          const sStr = wo.claim_form_date || wo.created_at;
-          if (!sStr) return;
-          const oStart = new Date(sStr);
-          const statusLower = (wo.status || 'open').toLowerCase();
-          const isCompleted = statusLower === 'completed' || statusLower === 'closed';
-          const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
-
-          if (oStart < periodEnd && oEnd >= periodStart) {
-            const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
-            const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
-            yearRepairDays += Math.max(
-              0,
-              Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
-            );
-          }
-        });
-
-        if (yearRepairDays > 18.25 && extensionCount < maxExtCount) {
-          extensionCount++;
-        }
-      }
-
-      // 逐期評估展延期 (帶入 maxExtCount)
-      let currentExtStart = new Date(originalEndDate);
-      for (let ext = 0; ext < maxExtCount; ext++) {
-        const periodStart = new Date(currentExtStart);
-        const periodEnd = new Date(periodStart);
-        periodEnd.setMonth(periodEnd.getMonth() + 6);
-
-        if (now >= periodStart && now < periodEnd) {
-          currentPeriodStart = periodStart;
-          currentPeriodEnd = periodEnd;
-          currentPeriodTotalDays = 182.5;
-        }
-
-        let extRepairDays = 0;
-        orders.forEach((wo: any) => {
-          const sStr = wo.claim_form_date || wo.created_at;
-          if (!sStr) return;
-          const oStart = new Date(sStr);
-          const statusLower = (wo.status || 'open').toLowerCase();
-          const isCompleted = statusLower === 'completed' || statusLower === 'closed';
-          const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
-
-          if (oStart < periodEnd && oEnd >= periodStart) {
-            const overlapStart = new Date(Math.max(oStart.getTime(), periodStart.getTime()));
-            const overlapEnd = new Date(Math.min(oEnd.getTime(), periodEnd.getTime()));
-            extRepairDays += Math.max(
-              0,
-              Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
-            );
-          }
-        });
-
-        if (extRepairDays > 9.125 && extensionCount < maxExtCount && ext <= extensionCount) {
-          extensionCount++;
-        }
-
-        currentExtStart = periodEnd;
-      }
-    }
-
-    // 當期停修天數計算
-    let currentPeriodRepairDays = 0;
-    let openCount = 0;
-    const openOrders: any[] = [];
-
-    orders.forEach((wo: any) => {
-      const statusLower = (wo.status || 'open').toLowerCase();
-      const isCompleted = statusLower === 'completed' || statusLower === 'closed';
-
-      const sStr = wo.claim_form_date || wo.created_at || wo.date;
-      if (!sStr) return;
-      const oStart = new Date(sStr);
-      const oEnd = isCompleted && wo.completed_date ? new Date(wo.completed_date) : now;
-
-      if (oStart < currentPeriodEnd && oEnd >= currentPeriodStart) {
-        const overlapStart = new Date(Math.max(oStart.getTime(), currentPeriodStart.getTime()));
-        const overlapEnd = new Date(Math.min(oEnd.getTime(), currentPeriodEnd.getTime()));
-        const overlapDays = Math.max(
-          0,
-          Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24))
-        );
-        currentPeriodRepairDays += overlapDays;
-      }
-
-      if (!isCompleted) {
-        openCount++;
-        const diffTime = Math.max(0, now.getTime() - oStart.getTime());
-        const openDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        const woNum =
-          wo.order_number ||
-          wo.work_order_number ||
-          wo.form_number ||
-          wo.claim_form_number ||
-          (typeof wo.id === 'string' && wo.id.startsWith('WO-') ? wo.id : null) ||
-          'WO-PENDING';
-
-        openOrders.push({
+    const openOrders = orders
+      .filter((wo: any) => {
+        const status = String(wo.status || 'open').toLowerCase();
+        return status !== 'completed' && status !== 'closed';
+      })
+      .map((wo: any) => {
+        const startValue = wo.claim_form_date || wo.created_at || wo.date;
+        const start = startValue ? new Date(startValue) : now;
+        return {
           ...wo,
-          woNum,
-          openDays,
+          woNum: wo.order_number || wo.work_order_number || wo.form_number || wo.claim_form_number || 'WO-PENDING',
+          openDays: Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))),
           vehiclePlate: vehicle.plate_number,
           vehicleBrand: vehicle.brand || '未設定',
           vehicleModel: vehicle.model || '未設定',
           vehicleVin: vehicle.vin || '未設定',
           vehicleProject: vehicle.project || '未設定',
-        });
-      }
-    });
+        };
+      });
 
-    const availability = Math.max(
-      0,
-      parseFloat((100 - (currentPeriodRepairDays / currentPeriodTotalDays) * 100).toFixed(2))
-    );
-
-    if (availability < 95 && extensionCount === 0 && maxExtCount > 0) {
-      extensionCount = 1;
-    }
-
-    const finalExtensionMonths = extensionCount * 6;
-
-    // 🎯 2. 修正後保固到期日：直接讀取 Database 的 warranty_expiry_date 欄位
-    const dbFinalExpiryStr =
-      vehicle.warranty_expiry_date ||
-      vehicle.extended_warranty_expiry ||
-      vehicle.final_warranty_expiry ||
-      vehicle.revised_warranty_expiry ||
-      vehicle.expiry_date;
-
-    let finalExpiryStr = '未設定';
-    if (dbFinalExpiryStr) {
-      finalExpiryStr = new Date(dbFinalExpiryStr).toISOString().split('T')[0];
-    } else if (origExpiryStr !== '未設定') {
-      const d = new Date(origExpiryStr);
-      if (finalExtensionMonths > 0) {
-        d.setMonth(d.getMonth() + finalExtensionMonths);
-      }
-      finalExpiryStr = d.toISOString().split('T')[0];
-    }
-
+    const currentPeriod = calculation.currentPeriod;
     return {
-      totalOpenDays: currentPeriodRepairDays,
-      availability,
+      // 停修日及可用率必須同時來自同一個 currentPeriod。
+      totalOpenDays: currentPeriod?.repairDays ?? null,
+      availability: currentPeriod?.availability ?? null,
+      periodStart: currentPeriod?.start ?? null,
+      periodEnd: currentPeriod?.end ?? null,
       orderCount: orders.length,
-      openCount,
-      openOrders,
-      origExpiryStr,
-      finalExpiryStr, // 👈 直接讀取 Database 欄位 warranty_expiry_date
-      extensionMonths: finalExtensionMonths,
-    };
-  };
-
-  const getVehicleStats = (vehicle: any) => {
-    const legacyStats = legacyGetVehicleStats(vehicle);
-    const calculation = calculateAvailability(vehicle);
-    return {
-      ...legacyStats,
-      totalOpenDays: calculation.repairDays,
-      availability: calculation.availability ?? legacyStats.availability,
-      extensionMonths: calculation.extensionMonths,
-      origExpiryStr: calculation.originalExpiryDate || legacyStats.origExpiryStr,
-      finalExpiryStr: calculation.finalExpiryDate || legacyStats.finalExpiryStr,
       openCount: calculation.openCount,
+      openOrders,
+      origExpiryStr: calculation.originalExpiryDate || '未設定',
+      finalExpiryStr: calculation.finalExpiryDate || '未設定',
+      extensionMonths: calculation.extensionMonths,
     };
   };
 
@@ -267,8 +97,8 @@ export default function WorkOrdersSummary({
       vehicle.plate_number,
       vehicle.vin,
       vehicle.project,
-      vehicle.stats.totalOpenDays,
-      `${vehicle.stats.availability}%`,
+          vehicle.stats.totalOpenDays === null ? '' : vehicle.stats.totalOpenDays,
+      vehicle.stats.availability === null ? '' : `${vehicle.stats.availability}%`,
       vehicle.stats.origExpiryStr,
       vehicle.stats.extensionMonths,
       vehicle.stats.finalExpiryStr,
@@ -884,7 +714,7 @@ export default function WorkOrdersSummary({
                         </td>
                         <td className="p-3 text-slate-700">{vehicle.project || '未指定'}</td>
                         <td className="p-3 text-center font-bold text-red-600">
-                          {vehicle.stats.totalOpenDays} 天
+                          {vehicle.stats.totalOpenDays === null ? '—' : `${vehicle.stats.totalOpenDays} 天`}
                         </td>
                         <td className="p-3 text-center font-black text-red-600">
                           {vehicle.stats.availability}%
