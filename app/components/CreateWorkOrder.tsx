@@ -3,6 +3,67 @@
 import React, { useState } from 'react';
 import { createWorker } from 'tesseract.js';
 
+async function preprocessClaimFormImage(file: File) {
+  const image = await createImageBitmap(file);
+  const scale = 3;
+  const canvas = document.createElement('canvas');
+  canvas.width = image.width * scale;
+  canvas.height = image.height * scale;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) throw new Error('瀏覽器不支援圖片處理');
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  image.close();
+
+  const source = context.getImageData(0, 0, canvas.width, canvas.height);
+  const { width, height, data } = source;
+  const gray = new Uint8Array(width * height);
+  for (let i = 0, pixel = 0; i < data.length; i += 4, pixel += 1) {
+    const luminance = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    gray[pixel] = Math.max(0, Math.min(255, Math.round((luminance - 128) * 1.8 + 128)));
+  }
+
+  // 表格框線通常是長而連續的黑線；移除長線，保留短文字筆畫。
+  const cleaned = gray.slice();
+  const markHorizontalLines = (y: number) => {
+    let start = -1;
+    for (let x = 0; x <= width; x += 1) {
+      const dark = x < width && gray[y * width + x] < 165;
+      if (dark && start < 0) start = x;
+      if ((!dark || x === width) && start >= 0) {
+        if (x - start >= Math.max(80, width * 0.08)) {
+          for (let mark = start; mark < x; mark += 1) cleaned[y * width + mark] = 255;
+        }
+        start = -1;
+      }
+    }
+  };
+  const markVerticalLines = (x: number) => {
+    let start = -1;
+    for (let y = 0; y <= height; y += 1) {
+      const dark = y < height && gray[y * width + x] < 165;
+      if (dark && start < 0) start = y;
+      if ((!dark || y === height) && start >= 0) {
+        if (y - start >= Math.max(80, height * 0.12)) {
+          for (let mark = start; mark < y; mark += 1) cleaned[mark * width + x] = 255;
+        }
+        start = -1;
+      }
+    }
+  };
+  for (let y = 0; y < height; y += 1) markHorizontalLines(y);
+  for (let x = 0; x < width; x += 1) markVerticalLines(x);
+  for (let i = 0; i < cleaned.length; i += 1) {
+    const value = cleaned[i] < 190 ? 0 : 255;
+    const offset = i * 4;
+    data[offset] = value;
+    data[offset + 1] = value;
+    data[offset + 2] = value;
+    data[offset + 3] = 255;
+  }
+  context.putImageData(source, 0, 0);
+  return canvas;
+}
+
 export interface CreateWorkOrderProps {
   onSuccess?: () => void;
   vehicles?: any[];
@@ -223,6 +284,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
     try {
       setIsOcrProcessing(true);
+      const processedImage = await preprocessClaimFormImage(file);
       worker = await createWorker('eng+chi_tra', 1, {
         logger: (message) => {
           if (message.status === 'recognizing text' && typeof message.progress === 'number') {
@@ -230,7 +292,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           }
         },
       });
-      const result = await worker.recognize(file);
+      const result = await worker.recognize(processedImage);
       const text = result.data.text?.trim();
       if (!text) throw new Error('圖片未能辨識出文字，請使用較清晰的 Claim Form 截圖');
       const response = await fetch('/api/parse-work-order-text', {
