@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { calculateAvailability } from '@/lib/availability';
 
 interface ManageVehiclesProps {
   vehicles: any[];
@@ -84,7 +85,7 @@ export default function ManageVehicles({
     };
   };
 
-  // 2. 資訊計算與資料庫讀取
+  // 2. 資訊計算與資料庫讀取：保固展延必須使用統一的即時計算結果，不能只讀舊的 DB expiry 欄位。
   const getWarrantyYearInfo = (vehicle: any) => {
     const deliveryDateStr = vehicle.delivery_date || vehicle.created_at;
     if (!deliveryDateStr) {
@@ -92,43 +93,23 @@ export default function ManageVehicles({
         yearText: '第 1 年',
         startDateText: '未設定',
         endDateText: vehicle.warranty_expiry_date || '未設定',
-        extensionMonths: vehicle.extension_months || 0,
+        extensionMonths: Number(vehicle.extension_months) || 0,
       };
     }
 
     const startDate = new Date(deliveryDateStr);
     const now = new Date();
-    
     let diffYears = now.getFullYear() - startDate.getFullYear();
     const monthDiff = now.getMonth() - startDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < startDate.getDate())) {
-      diffYears--;
-    }
-
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < startDate.getDate())) diffYears--;
     const yearNum = Math.max(1, diffYears + 1);
-
-    const originalYears = Number(vehicle.warranty_period_years) || 3;
-    const originalEndDate = new Date(startDate);
-    originalEndDate.setFullYear(originalEndDate.getFullYear() + originalYears);
-
-    let dbExpiryDateStr = vehicle.warranty_expiry_date;
-    let extMonths = vehicle.extension_months || 0;
-
-    if (dbExpiryDateStr) {
-      const dbExpiry = new Date(dbExpiryDateStr);
-      const diffMs = dbExpiry.getTime() - originalEndDate.getTime();
-      if (diffMs > 0) {
-        extMonths = Math.round(diffMs / (1000 * 60 * 60 * 24 * 30.4375));
-      }
-    } else {
-      dbExpiryDateStr = originalEndDate.toISOString().split('T')[0];
-    }
+    const calculation = calculateAvailability(vehicle, now);
 
     return {
       yearText: `第 ${yearNum} 年`,
-      startDateText: startDate.toISOString().split('T')[0],
-      endDateText: dbExpiryDateStr,
-      extensionMonths: extMonths > 0 ? extMonths : 0,
+      startDateText: calculation.currentPeriod?.start || startDate.toISOString().split('T')[0],
+      endDateText: calculation.finalExpiryDate || vehicle.warranty_expiry_date || '未設定',
+      extensionMonths: calculation.extensionMonths,
     };
   };
 

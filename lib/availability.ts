@@ -10,6 +10,8 @@ export type AvailabilityVehicle = {
   created_at?: string | null;
   warranty_period_years?: number | string | null;
   max_extension_months?: number | string | null;
+  extension_months?: number | string | null;
+  extension_count?: number | string | null;
   max_extension_count?: number | string | null;
   workOrders?: AvailabilityOrder[];
   work_orders?: AvailabilityOrder[];
@@ -134,7 +136,9 @@ export function calculateAvailability(vehicle: AvailabilityVehicle, now = new Da
   const maxExtensionMonths = Math.max(0, configuredMaxMonths || legacyMaxMonths || 18);
   const originalExpiry = addYears(delivery, warrantyYears);
   const periods: AvailabilityPeriod[] = [];
-  let extensionMonths = 0;
+  // 既有資料可能已記錄歷史展延；保留它，再按後續展延期重新檢查是否需要再加 6 個月。
+  const persistedExtensionMonths = Math.max(0, Number(vehicle.extension_months) || 0);
+  let extensionMonths = Math.min(maxExtensionMonths, persistedExtensionMonths);
 
   for (let index = 0; index < warrantyYears; index += 1) {
     const start = addYears(delivery, index);
@@ -145,18 +149,19 @@ export function calculateAvailability(vehicle: AvailabilityVehicle, now = new Da
     if (period.triggered) extensionMonths = Math.min(maxExtensionMonths, extensionMonths + 6);
   }
 
-  let extensionStart = originalExpiry;
-  let extensionIndex = 0;
-  while (extensionMonths > 0 && extensionMonths < maxExtensionMonths && extensionStart <= now) {
+  // 展延期按六個月順序檢查。已存在的展延月份代表前面區段已啟用，下一個區段如低於 95% 就再加 6 個月。
+  const extensionPeriods = Math.ceil(maxExtensionMonths / 6);
+  for (let extensionIndex = 0; extensionIndex < extensionPeriods; extensionIndex += 1) {
+    const extensionStart = addMonths(originalExpiry, extensionIndex * 6);
+    if (extensionStart > now) break;
+    // 沒有前一個展延期時，不應直接評估更後面的區段。
+    if (extensionIndex > 0 && extensionMonths < extensionIndex * 6) break;
     const end = addMonths(extensionStart, 6);
     const period = makePeriod('extension', extensionIndex + 1, extensionStart, end, orders, now);
-    const previousExtensionMonths = extensionMonths;
     periods.push(period);
-    if (period.triggered) extensionMonths = Math.min(maxExtensionMonths, extensionMonths + 6);
-    extensionStart = end;
-    extensionIndex += 1;
-    if (extensionMonths === previousExtensionMonths && end <= now) break;
-    if (extensionIndex > Math.ceil(maxExtensionMonths / 6) + 1) break;
+    if (period.triggered) {
+      extensionMonths = Math.min(maxExtensionMonths, Math.max(extensionMonths, (extensionIndex + 2) * 6));
+    }
   }
 
   const currentPeriod = periods.find((period) => {
