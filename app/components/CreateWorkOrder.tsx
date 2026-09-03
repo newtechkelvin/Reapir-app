@@ -94,7 +94,7 @@ const REPAIR_TRANSLATION_MAP: Array<[RegExp, string]> = [
   [/LOOSEN\b/gi, '鬆脫'],
   [/INNER AIR INTAKE\b/gi, '內側進氣管'],
   [/AIR-CONDITIONING\b/gi, '冷氣系統'],
-  [/ENGINE BELT\gi, '引擎皮帶'],
+  [/ENGINE BELT\b/gi, '引擎皮帶'],
   [/NOISY\b/gi, '異響'],
   [/DRIVER SEAT\b/gi, '駕駛座'],
   [/MONITOR\b/gi, '顯示器'],
