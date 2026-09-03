@@ -11,18 +11,21 @@ export async function POST(request: NextRequest) {
     if (!text) return NextResponse.json({ error: '未能讀取 Claim Form 維修項目文字' }, { status: 400 });
     if (text.length > 30000) return NextResponse.json({ error: 'OCR 文字不可大於 30,000 個字元' }, { status: 413 });
 
-const sourceItems = extractRepairItemsFromOcrText(text);
+    const sourceItems = extractRepairItemsFromOcrText(text);
 
-// 併發處理所有項目的 AI 翻譯
-const items = (
-  await Promise.all(
-    sourceItems.map(async (sourceText) => ({
-      type: '進廠維修',
-      item_name: await translateRepairItemToTraditionalChinese(sourceText),
-      notes: '', // 備註保持空白
-    }))
-  )
-).filter((item) => item.item_name && item.item_name.length > 1);
+    // 等待所有項目的 AI 翻譯完成
+    const mappedItems = await Promise.all(
+      sourceItems.map(async (sourceText) => {
+        const translatedName = await translateRepairItemToTraditionalChinese(sourceText);
+        return {
+          type: '進廠維修',
+          item_name: translatedName,
+          notes: '', // 備註保持空白
+        };
+      })
+    );
+
+    const items = mappedItems.filter((item) => item.item_name && item.item_name.length > 1);
 
     if (items.length === 0) {
       return NextResponse.json({ error: '未能辨識維修項目，請裁剪至項目明細或使用較清晰圖片' }, { status: 422 });
