@@ -1,56 +1,16 @@
-
 /**
  * 從 OCR 文字中提取維修項目
  */
 export function extractRepairItemsFromOcrText(text: string): string[] {
   if (!text) return [];
-  
+
   // 按行分割並過濾空行
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-import { NextRequest, NextResponse } from 'next/server';
-import {
-  extractRepairItemsFromOcrText,
-  translateRepairItemToTraditionalChinese,
-} from '@/lib/repairItemOcr';
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const text = String(body?.text || '').trim();
-    if (!text) return NextResponse.json({ error: '未能讀取 Claim Form 維修項目文字' }, { status: 400 });
-    if (text.length > 30000) return NextResponse.json({ error: 'OCR 文字不可大於 30,000 個字元' }, { status: 413 });
-
-    const sourceItems = extractRepairItemsFromOcrText(text);
-
-    // 使用 Promise.all 等待所有項目的 async 翻譯完成
-    const mappedItems = await Promise.all(
-      sourceItems.map(async (sourceText) => {
-        const translatedName = await translateRepairItemToTraditionalChinese(sourceText);
-        return {
-          type: '進廠維修',
-          item_name: translatedName,
-          notes: '', // 備註保持空白，不填英文
-        };
-      })
-    );
-
-    // 翻譯解開成字串後，再做長度檢查與過濾
-    const items = mappedItems.filter((item) => item.item_name && item.item_name.length > 1);
-
-    if (items.length === 0) {
-      return NextResponse.json({ error: '未能辨識維修項目，請裁剪至項目明細或使用較清晰圖片' }, { status: 422 });
-    }
-
-    return NextResponse.json({ success: true, items });
-  } catch (error: any) {
-    console.error('Claim Form 維修項目 OCR 解析失敗:', error);
-    return NextResponse.json({ error: error.message || 'Claim Form 維修項目解析失敗' }, { status: 422 });
-  }
-}
-  // 簡單過濾掉標頭或非維修項目的雜訊（可依實際表格格式微調）
+  // 過濾標頭與非維修項目
   return lines.filter((line) => {
     const isHeader = /^(claim|form|page|date|vehicle|vin|plate|no|item|description|remarks)/i.test(line);
     return !isHeader && line.length > 2;
@@ -110,13 +70,11 @@ function buildPrompt(sourceText: string): string {
 
 /**
  * 呼叫 AI 模型將英文維修項目翻譯為繁體中文
- * (此處以 OpenAI API 為例，若使用 Gemini / Claude 可適當更換 API 呼叫)
  */
 export async function translateRepairItemToTraditionalChinese(sourceText: string): Promise<string> {
   if (!sourceText || !sourceText.trim()) return '';
 
   try {
-    // 假設您在環境變數中有設定 OPENAI_API_KEY
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -124,11 +82,9 @@ export async function translateRepairItemToTraditionalChinese(sourceText: string
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // 建議使用 gpt-4o 或 gpt-4o-mini 確保高精準度
-        temperature: 0.1,    // 低溫度確保輸出穩定不天馬行空
-        messages: [
-          { role: 'user', content: buildPrompt(sourceText) }
-        ],
+        model: 'gpt-4o-mini',
+        temperature: 0.1,
+        messages: [{ role: 'user', content: buildPrompt(sourceText) }],
       }),
     });
 
@@ -139,16 +95,13 @@ export async function translateRepairItemToTraditionalChinese(sourceText: string
     const data = await response.json();
     const resultText = data.choices?.[0]?.message?.content?.trim() || sourceText;
 
-    // 後處理：若翻譯結果仍殘留常見未翻譯英文單字，做最後一層清理
     return resultText
       .replace(/\bREPAIR\b/gi, '維修')
       .replace(/\bOFF-SIDE\b/gi, '右側')
       .replace(/\bNEAR-SIDE\b/gi, '左側')
       .replace(/\s+/g, ' ');
-
   } catch (error) {
     console.error('AI 翻譯執行失敗，啟用退回機制:', error);
-    // 發生例外時的降級處理（Fallback）
     return sourceText;
   }
 }
