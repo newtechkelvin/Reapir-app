@@ -164,10 +164,10 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   };
 
   const handleVinChange = (val: string) => {
-    const normalizedVin = val.trim().toUpperCase();
+    const normalizedVin = val.replace(/\s+/g, '').toUpperCase();
     setVin(normalizedVin);
     props.setVin?.(normalizedVin);
-    const match = vehicles.find((v) => v.vin && String(v.vin).trim().toUpperCase() === normalizedVin);
+    const match = vehicles.find((v) => v.vin && String(v.vin).replace(/\s+/g, '').toUpperCase() === normalizedVin);
     if (match) applyVehicleMatch(match);
   };
 
@@ -255,7 +255,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
 
     const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const plateMatch = text.match(/(?:車牌(?:號碼)?|牌照|plate(?:\s*number)?)\s*[:：-]?\s*([A-Z]{1,2}\s?\d{1,4})/i) || text.match(/\b([A-Z]{1,2}\s?\d{1,4})\b/i);
-    const vinMatch = text.match(/(?:VIN|車身號碼)\s*[:：-]?\s*([A-HJ-NPR-Z0-9]{17})/i) || text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
+    const vinMatch = text.match(/(?:VIN|車身號碼)\s*[:：-]?\s*([A-Z0-9]+)/i) || text.match(/\b([A-Z0-9]{5,20})\b/i);
     const dateMatch = text.match(/(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
     const projectMatch = text.match(/(?:專案|project)\s*[:：-]?\s*(.+)/i);
     const brandMatch = text.match(/(?:品牌|brand)\s*[:：-]?\s*(.+)/i);
@@ -359,10 +359,13 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         return;
       }
 
+      const rawVin = props.vin ?? vin;
+      const normalizedVin = rawVin ? String(rawVin).replace(/\s+/g, '').toUpperCase() : '';
+
       const payload = {
         warranty_type: currentWarrantyType,
         plate_number: plateNumber.trim(),
-        vin: vin.trim(),
+        vin: normalizedVin || null,
         project: project.trim(),
         brand: brand.trim(),
         model: model.trim(),
@@ -492,7 +495,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
                 onChange={(e) => {
                   handleVinChange(e.target.value);
                 }}
-                placeholder="17 位 VIN 碼"
+                placeholder="VIN 碼"
                 className="w-full p-2.5 border rounded-lg bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500"
               />
             </div>
