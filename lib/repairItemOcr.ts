@@ -1,4 +1,3 @@
-// src/lib/repairItemOcr.ts
 
 /**
  * 從 OCR 文字中提取維修項目
@@ -11,7 +10,46 @@ export function extractRepairItemsFromOcrText(text: string): string[] {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+import { NextRequest, NextResponse } from 'next/server';
+import {
+  extractRepairItemsFromOcrText,
+  translateRepairItemToTraditionalChinese,
+} from '@/lib/repairItemOcr';
 
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const text = String(body?.text || '').trim();
+    if (!text) return NextResponse.json({ error: '未能讀取 Claim Form 維修項目文字' }, { status: 400 });
+    if (text.length > 30000) return NextResponse.json({ error: 'OCR 文字不可大於 30,000 個字元' }, { status: 413 });
+
+    const sourceItems = extractRepairItemsFromOcrText(text);
+
+    // 使用 Promise.all 等待所有項目的 async 翻譯完成
+    const mappedItems = await Promise.all(
+      sourceItems.map(async (sourceText) => {
+        const translatedName = await translateRepairItemToTraditionalChinese(sourceText);
+        return {
+          type: '進廠維修',
+          item_name: translatedName,
+          notes: '', // 備註保持空白，不填英文
+        };
+      })
+    );
+
+    // 翻譯解開成字串後，再做長度檢查與過濾
+    const items = mappedItems.filter((item) => item.item_name && item.item_name.length > 1);
+
+    if (items.length === 0) {
+      return NextResponse.json({ error: '未能辨識維修項目，請裁剪至項目明細或使用較清晰圖片' }, { status: 422 });
+    }
+
+    return NextResponse.json({ success: true, items });
+  } catch (error: any) {
+    console.error('Claim Form 維修項目 OCR 解析失敗:', error);
+    return NextResponse.json({ error: error.message || 'Claim Form 維修項目解析失敗' }, { status: 422 });
+  }
+}
   // 簡單過濾掉標頭或非維修項目的雜訊（可依實際表格格式微調）
   return lines.filter((line) => {
     const isHeader = /^(claim|form|page|date|vehicle|vin|plate|no|item|description|remarks)/i.test(line);
