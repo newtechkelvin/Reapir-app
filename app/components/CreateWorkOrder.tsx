@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createWorker } from 'tesseract.js';
 
 async function preprocessClaimFormImage(file: File) {
@@ -62,6 +62,51 @@ async function preprocessClaimFormImage(file: File) {
   }
   context.putImageData(source, 0, 0);
   return canvas;
+}
+
+// 常用汽車與維修英文術語翻譯字典
+const REPAIR_TRANSLATION_MAP: Array<[RegExp, string]> = [
+  [/REPAIR\b/gi, '維修'],
+  [/OFF-SIDE\b/gi, '右側(駕駛側)'],
+  [/NEAR-SIDE\b/gi, '左側(副駕側)'],
+  [/BOTH-SIDE\b/gi, '雙側'],
+  [/FRONT\b/gi, '前方'],
+  [/REAR\b/gi, '後方'],
+  [/UPSIDE\b/gi, '頂部'],
+  [/COMPARTMENT\b/gi, '車廂'],
+  [/DOCR\b/gi, '車門'],
+  [/DOOR\b/gi, '車門'],
+  [/RUBBER SEAL\b/gi, '膠條'],
+  [/DEFECT\b/gi, '缺陷/破損'],
+  [/CCTV\b/gi, '閉路電視/監控'],
+  [/SOMETIMES NO DISPLAY\b/gi, '偶爾無顯示'],
+  [/ALL VEHICLE BODY\b/gi, '全車身'],
+  [/VENTILATOR\b/gi, '通風口'],
+  [/VENTIL\b/gi, '通風口'],
+  [/EMERGENCY\b/gi, '緊急'],
+  [/HINGE\b/gi, '鉸鏈'],
+  [/TOO TIGHT\b/gi, '過緊'],
+  [/GRILLE\b/gi, '水箱護罩/格柵'],
+  [/FLASHING LIGHT\b/gi, '閃爍燈'],
+  [/MALFUNCTION\b/gi, '故障'],
+  [/FOOT STEP\b/gi, '腳踏板'],
+  [/STEERING TRACK ROD\b/gi, '轉向拉桿'],
+  [/LOOSEN\b/gi, '鬆脫'],
+  [/INNER AIR INTAKE\b/gi, '內側進氣管'],
+  [/AIR-CONDITIONING\b/gi, '冷氣系統'],
+  [/ENGINE BELT\gi, '引擎皮帶'],
+  [/NOISY\b/gi, '異響'],
+  [/DRIVER SEAT\b/gi, '駕駛座'],
+  [/MONITOR\b/gi, '顯示器'],
+  [/SUPPORT\b/gi, '支架'],
+];
+
+function translateRepairText(text: string): string {
+  let translated = text;
+  for (const [regex, replacement] of REPAIR_TRANSLATION_MAP) {
+    translated = translated.replace(regex, replacement);
+  }
+  return translated.replace(/\s+/g, ' ').trim();
 }
 
 export interface CreateWorkOrderProps {
@@ -212,8 +257,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       const extractedItems = data.items
         .map((item: any) => ({
           type: String(item.type || '進廠維修'),
-          item_name: String(item.item_name || '').trim(),
-          notes: String(item.notes || '').trim(),
+          item_name: translateRepairText(String(item.item_name || '').trim()),
+          notes: '',
         }))
         .filter((item: any) => item.item_name);
       if (extractedItems.length > 0) updateItems(extractedItems);
@@ -275,17 +320,14 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       .map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim())
       .filter((line) => line.length > 1 && !/^(車牌|牌照|vin|車身號碼|專案|project|品牌|brand|型號|model|日期|date)\s*[:：]/i.test(line));
     if (itemLines.length > 0) {
-      setItems(itemLines.map((item_name) => ({ type: '進廠維修', item_name, notes: '' })));
+      setItems(itemLines.map((item_name) => ({ type: '進廠維修', item_name: translateRepairText(item_name), notes: '' })));
     }
     setField(props.setDescription, setDescription, text);
     setShowSmartPasteModal(false);
     setSmartText('');
   };
 
-  const handleOcrFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+  const processOcrImageFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('請選擇圖片格式的 Warranty Claim Form');
       return;
@@ -319,8 +361,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         ? data.items
           .map((item: any) => ({
             type: String(item.type || '進廠維修'),
-            item_name: String(item.item_name || '').trim(),
-            notes: String(item.notes || '').trim(),
+            item_name: translateRepairText(String(item.item_name || '').trim()),
+            notes: '',
           }))
           .filter((item: any) => item.item_name)
         : [];
@@ -334,7 +376,43 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       if (worker) await worker.terminate();
       setIsOcrProcessing(false);
     }
+  }, []);
+
+  const handleOcrFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    await processOcrImageFile(file);
   };
+
+  // 監聽 Ctrl+V 全域貼上圖片功能
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      // 避免在輸入框內進行純文字複製貼上時觸發 OCR 圖片辨識
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        if (!e.clipboardData?.files || e.clipboardData.files.length === 0) {
+          return;
+        }
+      }
+
+      const files = e.clipboardData?.files;
+      if (files && files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+          if (files[i].type.startsWith('image/')) {
+            e.preventDefault();
+            processOcrImageFile(files[i]);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [processOcrImageFile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -676,11 +754,11 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
           <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
             <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h3>
             <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg cursor-pointer text-center">
-              {isOcrProcessing ? '維修項目 OCR 處理中...' : '📷 上傳 Claim Form 維修項目 OCR'}
+              {isOcrProcessing ? '維修項目 OCR 處理中...' : '📷 上傳/貼上 Claim Form 維修項目 OCR (支持 Ctrl+V)'}
               <input type="file" accept="image/*" onChange={handleOcrFileChange} disabled={isOcrProcessing} className="hidden" />
             </label>
           </div>
-          <p className="text-[11px] text-slate-500">只辨認圖片中的維修項目，並自動翻譯成繁體中文；車牌、VIN、日期及其他資料請手動輸入或使用 WhatsApp 填表。</p>
+          <p className="text-[11px] text-slate-500">只辨認圖片中的維修項目，並自動翻譯成繁體中文（可點擊按鈕選擇圖片，或直接按 Ctrl+V 貼上截圖）；車牌、VIN、日期及其他資料請手動輸入或使用 WhatsApp 填表。</p>
           <div className="flex justify-between items-center">
             <button
               type="button"
