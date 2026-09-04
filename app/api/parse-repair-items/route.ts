@@ -69,7 +69,6 @@ export async function POST(request: NextRequest) {
     const aiData = await response.json();
     const rawResult = aiData.result?.response || '';
 
-    // 清洗並抓取 JSON 陣列
     let cleanJsonStr = rawResult
       .replace(/```json/gi, '')
       .replace(/```/g, '')

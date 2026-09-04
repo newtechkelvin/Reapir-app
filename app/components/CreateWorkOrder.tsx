@@ -22,7 +22,6 @@ async function preprocessClaimFormImage(file: File) {
     gray[pixel] = Math.max(0, Math.min(255, Math.round((luminance - 128) * 1.8 + 128)));
   }
 
-  // 表格框線通常是長而連續的黑線；移除長線，保留短文字筆畫。
   const cleaned = gray.slice();
   const markHorizontalLines = (y: number) => {
     let start = -1;
@@ -64,7 +63,6 @@ async function preprocessClaimFormImage(file: File) {
   return canvas;
 }
 
-// 常用汽車與維修英文術語翻譯字典
 const REPAIR_TRANSLATION_MAP: Array<[RegExp, string]> = [
   [/REPAIR\b/gi, '維修'],
   [/OFF-SIDE\b/gi, '右側(駕駛側)'],
@@ -112,7 +110,7 @@ function translateRepairText(text: string): string {
 export interface CreateWorkOrderProps {
   onSuccess?: () => void;
   vehicles?: any[];
-  [key: string]: any; // 支援 app/page.tsx 傳入的其他 state 與 handler
+  [key: string]: any;
 }
 
 export default function CreateWorkOrder(props: CreateWorkOrderProps) {
@@ -341,28 +339,19 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     try {
       setIsOcrProcessing(true);
 
-      // 1. 先經由前端畫布裁切預處理
       const canvas = await preprocessClaimFormImage(file);
-      // 將 Canvas 轉換為標準 Base64 Data URL 字串，避免 Tesseract 內部 .replace 報錯
       const imageDataUrl = canvas.toDataURL('image/png');
 
-      // 2. 啟動 Tesseract.js 進行辨識
-      worker = await createWorker('eng+chi_tra', 1, {
-        logger: (message) => {
-          if (message.status === 'recognizing text' && typeof message.progress === 'number') {
-            console.info(`Tesseract OCR ${(message.progress * 100).toFixed(0)}%`);
-          }
-        },
-      });
+      // 相容 Tesseract.js v5+ 的傳參方式
+      worker = await createWorker(['eng', 'chi_tra']);
 
       const result = await worker.recognize(imageDataUrl);
-      const extractedText = String(result.data.text || '').trim();
+      const extractedText = String(result?.data?.text || '').trim();
 
       if (!extractedText) {
         throw new Error('圖片未能辨識出文字，請使用較清晰的 Claim Form 截圖');
       }
 
-      // 3. 將辨識出來的純文字傳給 Cloudflare AI 進行翻譯與結構化 JSON 轉換
       const response = await fetch('/api/parse-repair-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -377,7 +366,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             .map((item: any) => ({
               type: String(item.type || '進廠維修'),
               item_name: String(item.item_name || '').trim(),
-              notes: '', // 備註保持空白
+              notes: '',
             }))
             .filter((item: any) => item.item_name)
         : [];
@@ -404,10 +393,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     await processOcrImageFile(file);
   };
 
-  // 監聽 Ctrl+V 全域貼上圖片功能
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
-      // 避免在輸入框內進行純文字複製貼上時觸發 OCR 圖片辨識
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
         if (!e.clipboardData?.files || e.clipboardData.files.length === 0) {
