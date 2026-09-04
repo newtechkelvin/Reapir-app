@@ -327,7 +327,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     setSmartText('');
   };
 
-const processOcrImageFile = useCallback(async (file: File) => {
+  const processOcrImageFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('請選擇圖片格式的 Warranty Claim Form');
       return;
@@ -337,19 +337,36 @@ const processOcrImageFile = useCallback(async (file: File) => {
       return;
     }
 
+    let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
     try {
       setIsOcrProcessing(true);
 
-      const formData = new FormData();
-      formData.append('file', file);
+      // 1. 先經由前端畫布裁切預處理與 Tesseract.js 本地文字辨識
+      const processedImage = await preprocessClaimFormImage(file);
+      worker = await createWorker('eng+chi_tra', 1, {
+        logger: (message) => {
+          if (message.status === 'recognizing text' && typeof message.progress === 'number') {
+            console.info(`Tesseract OCR ${(message.progress * 100).toFixed(0)}%`);
+          }
+        },
+      });
 
+      const result = await worker.recognize(processedImage);
+      const extractedText = result.data.text?.trim();
+
+      if (!extractedText) {
+        throw new Error('圖片未能辨識出文字，請使用較清晰的 Claim Form 截圖');
+      }
+
+      // 2. 將辨識出來的純文字傳給 Cloudflare AI 進行翻譯與結構化 JSON 轉換
       const response = await fetch('/api/parse-repair-items', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: extractedText }),
       });
 
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || '維修項目 OCR 解析失敗');
+      if (!response.ok) throw new Error(data?.error || '維修項目翻譯失敗');
 
       const extractedItems = Array.isArray(data?.items)
         ? data.items
@@ -368,9 +385,10 @@ const processOcrImageFile = useCallback(async (file: File) => {
       updateItems(extractedItems);
       alert(`已辨認 ${extractedItems.length} 項維修項目，並翻譯成繁體中文。`);
     } catch (error: any) {
-      console.error('Hugging Face OCR 失敗:', error);
+      console.error('維修項目 OCR/翻譯失敗:', error);
       alert(error.message || 'OCR 處理失敗，請稍後再試');
     } finally {
+      if (worker) await worker.terminate();
       setIsOcrProcessing(false);
     }
   }, []);
