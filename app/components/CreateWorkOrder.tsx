@@ -102,7 +102,7 @@ const REPAIR_TRANSLATION_MAP: Array<[RegExp, string]> = [
 ];
 
 function translateRepairText(text: string): string {
-  let translated = text;
+  let translated = String(text || '');
   for (const [regex, replacement] of REPAIR_TRANSLATION_MAP) {
     translated = translated.replace(regex, replacement);
   }
@@ -341,8 +341,12 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     try {
       setIsOcrProcessing(true);
 
-      // 1. 先經由前端畫布裁切預處理與 Tesseract.js 本地文字辨識
-      const processedImage = await preprocessClaimFormImage(file);
+      // 1. 先經由前端畫布裁切預處理
+      const canvas = await preprocessClaimFormImage(file);
+      // 將 Canvas 轉換為標準 Base64 Data URL 字串，避免 Tesseract 內部 .replace 報錯
+      const imageDataUrl = canvas.toDataURL('image/png');
+
+      // 2. 啟動 Tesseract.js 進行辨識
       worker = await createWorker('eng+chi_tra', 1, {
         logger: (message) => {
           if (message.status === 'recognizing text' && typeof message.progress === 'number') {
@@ -351,14 +355,14 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         },
       });
 
-      const result = await worker.recognize(processedImage);
-      const extractedText = result.data.text?.trim();
+      const result = await worker.recognize(imageDataUrl);
+      const extractedText = String(result.data.text || '').trim();
 
       if (!extractedText) {
         throw new Error('圖片未能辨識出文字，請使用較清晰的 Claim Form 截圖');
       }
 
-      // 2. 將辨識出來的純文字傳給 Cloudflare AI 進行翻譯與結構化 JSON 轉換
+      // 3. 將辨識出來的純文字傳給 Cloudflare AI 進行翻譯與結構化 JSON 轉換
       const response = await fetch('/api/parse-repair-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
