@@ -327,7 +327,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     setSmartText('');
   };
 
-  const processOcrImageFile = useCallback(async (file: File) => {
+const processOcrImageFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('請選擇圖片格式的 Warranty Claim Form');
       return;
@@ -336,44 +336,41 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       alert('圖片不可大於 10MB');
       return;
     }
-    let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
+
     try {
       setIsOcrProcessing(true);
-      const processedImage = await preprocessClaimFormImage(file);
-      worker = await createWorker('eng+chi_tra', 1, {
-        logger: (message) => {
-          if (message.status === 'recognizing text' && typeof message.progress === 'number') {
-            console.info(`Tesseract OCR ${(message.progress * 100).toFixed(0)}%`);
-          }
-        },
-      });
-      const result = await worker.recognize(processedImage);
-      const text = result.data.text?.trim();
-      if (!text) throw new Error('圖片未能辨識出文字，請使用較清晰的 Claim Form 截圖');
+
+      const formData = new FormData();
+      formData.append('file', file);
+
       const response = await fetch('/api/parse-repair-items', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: formData,
       });
+
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || '維修項目 OCR 解析失敗');
+
       const extractedItems = Array.isArray(data?.items)
         ? data.items
-          .map((item: any) => ({
-            type: String(item.type || '進廠維修'),
-            item_name: translateRepairText(String(item.item_name || '').trim()),
-            notes: '',
-          }))
-          .filter((item: any) => item.item_name)
+            .map((item: any) => ({
+              type: String(item.type || '進廠維修'),
+              item_name: String(item.item_name || '').trim(),
+              notes: '', // 備註保持空白
+            }))
+            .filter((item: any) => item.item_name)
         : [];
-      if (extractedItems.length === 0) throw new Error('未能辨識維修項目，請裁剪至項目明細或使用較清晰圖片');
+
+      if (extractedItems.length === 0) {
+        throw new Error('未能辨識維修項目，請裁剪至項目明細或使用較清晰圖片');
+      }
+
       updateItems(extractedItems);
-      alert(`已辨認 ${extractedItems.length} 項維修項目，並翻譯成繁體中文。車牌、VIN、日期及其他車輛資料不會由此圖片修改，請核對項目後再建立工單。`);
+      alert(`已辨認 ${extractedItems.length} 項維修項目，並翻譯成繁體中文。`);
     } catch (error: any) {
-      console.error('Warranty Claim Form Tesseract OCR 失敗:', error);
+      console.error('Hugging Face OCR 失敗:', error);
       alert(error.message || 'OCR 處理失敗，請稍後再試');
     } finally {
-      if (worker) await worker.terminate();
       setIsOcrProcessing(false);
     }
   }, []);
