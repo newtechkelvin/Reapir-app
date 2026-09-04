@@ -36,29 +36,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '未接收到有效圖片資料' }, { status: 400 });
     }
 
-    const hfToken = process.env.HF_TOKEN || process.env.NEXT_PUBLIC_HF_TOKEN;
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 
-    if (!hfToken) {
+    if (!accountId || !apiToken) {
       return NextResponse.json(
-        { error: 'Vercel 環境變數未設定 HF_TOKEN，請填寫有效的 Hugging Face Access Token' },
+        { error: 'Vercel 未設定 Cloudflare 帳戶憑證' },
         { status: 401 }
       );
     }
 
-    // 呼叫 Hugging Face Qwen2-VL 視覺模型
-    const hfResponse = await fetch(
-      'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct/v1/chat/completions',
+    // 呼叫 Cloudflare Workers AI 香港節點直連的 Llama 3.2 Vision 模型
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${hfToken.trim()}`,
+          'Authorization': `Bearer ${apiToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages: [
-            {
-              role: 'system',
-              content: `你是一位精通香港汽車維修（EMSD工程）的專業助手。請讀取維修單圖片：
+          prompt: `你是一位精通香港汽車維修（EMSD工程）的專業助手。請讀取維修單圖片：
 1. 提取所有維修與更換零件項目。
 2. 100% 翻譯成「香港習慣使用的繁體中文」，嚴禁在 item_name 中留有英文單字（除 ABS, CCTV 等標準縮寫外）。
 3. 備註 (notes) 欄位請保持空字串 ""。
@@ -67,55 +65,22 @@ export async function POST(request: NextRequest) {
   {"type": "更換零件", "item_name": "更換引擎機油濾芯", "notes": ""},
   {"type": "進廠維修", "item_name": "維修右前門防水膠條損壞", "notes": ""}
 ]`,
-            },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: '請辨識圖片中的維修項目並翻譯為繁體中文 JSON。' },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:${mimeType};base64,${base64Image}`,
-                  },
-                },
-              ],
-            },
-          ],
-          max_tokens: 1000,
-          temperature: 0.1,
+          image: Array.from(Buffer.from(base64Image, 'base64')),
         }),
       }
-    ).catch((err) => {
-      console.error('Fetch 至 Hugging Face 網路連線失敗:', err);
-      return null;
-    });
+    );
 
-    if (!hfResponse) {
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      console.error(`Cloudflare AI 錯誤 (${response.status}):`, errText);
       return NextResponse.json(
-        { error: '無法連線至 Hugging Face 模型伺服器，請檢查網路狀態或重試' },
+        { error: `AI 視覺模型服務回應異常 (${response.status})` },
         { status: 502 }
       );
     }
 
-    if (!hfResponse.ok) {
-      const errText = await hfResponse.text().catch(() => '');
-      console.error(`Hugging Face API 回傳錯誤 (${hfResponse.status}):`, errText);
-
-      if (hfResponse.status === 401) {
-        return NextResponse.json(
-          { error: 'Hugging Face Token 驗證失敗 (401)，請檢查 Vercel 的 HF_TOKEN 是否正確' },
-          { status: 401 }
-        );
-      }
-
-      return NextResponse.json(
-        { error: `Hugging Face 模型伺服器回應異常 (${hfResponse.status})` },
-        { status: 502 }
-      );
-    }
-
-    const aiData = await hfResponse.json();
-    const textResult = aiData.choices?.[0]?.message?.content || '';
+    const aiData = await response.json();
+    const textResult = aiData.result?.response || '';
 
     const jsonMatch = textResult.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
@@ -129,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: '無法解析相片內容，請確定拍攝清晰再試一次' }, { status: 422 });
   } catch (err: any) {
-    console.error('Hugging Face OCR 辨識失敗:', err);
+    console.error('OCR 辨識失敗:', err);
     return NextResponse.json({ error: err.message || '相片辨識失敗' }, { status: 500 });
   }
 }
