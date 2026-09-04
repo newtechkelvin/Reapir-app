@@ -49,19 +49,16 @@ export async function POST(request: NextRequest) {
     const imageBuffer = Buffer.from(base64Image, 'base64');
     const imageArray = Array.from(imageBuffer);
 
-    // 強化 Prompt：要求嚴格 JSON 格式
-    const promptText = `agree
+    // 強烈格式約束 Prompt
+    const systemPrompt = `你是一個只會輸出純 JSON 的 API 系統。請讀取維修單/Claim Form圖片並提取所有維修項目。
+規範：
+1. 100% 翻譯成香港繁體中文，嚴禁保留英文單字（除 ABS, CCTV 等常見縮寫）。
+2. 備註 (notes) 統一保持空字串 ""。
+3. 嚴禁輸出任何 Markdown 語法（如 \`\`\`json）、開場白或結語，只能直接輸出 JSON 陣列。
+格式範例：
+[{"type":"進廠維修","item_name":"維修右前門防水膠條損壞","notes":""},{"type":"更換零件","item_name":"更換轉向橫拉桿","notes":""}]`;
 
-請讀取這張車輛維修單/Claim Form圖片，並將裡面的維修與更換零件項目提取並翻譯成繁體中文。
-
-【嚴格輸出格式規律】：
-1. 必須 100% 翻譯為繁體中文，禁止保留英文單字（除 ABS, CCTV 等常見縮寫）。
-2. 備註 (notes) 統一設為 ""。
-3. 直接輸出標準 JSON 陣列，不要加入任何引言或多餘解釋。格式範例：
-[
-  {"type": "進廠維修", "item_name": "維修右前門防水膠條損壞", "notes": ""},
-  {"type": "更換零件", "item_name": "更換轉向橫拉桿", "notes": ""}
-]`;
+    const userPrompt = "agree\n請辨識圖片中的維修項目，並嚴格按照範例回傳純 JSON 陣列。";
 
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
@@ -72,9 +69,13 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          prompt: promptText,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
           image: imageArray,
-          max_tokens: 1500,
+          max_tokens: 2048,
+          temperature: 0.01,
         }),
       }
     );
@@ -89,28 +90,39 @@ export async function POST(request: NextRequest) {
     }
 
     const aiData = await response.json();
-    const textResult = aiData.result?.response || '';
+    const rawResult = aiData.result?.response || aiData.result?.description || '';
 
-    // 寬鬆抓取 JSON 陣列 (涵蓋以 ```json ... ``` 包裹的情況)
-    const cleanText = textResult.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
+    // 強力清洗文字，提取 JSON 陣列
+    let cleanJsonStr = rawResult
+      .replace(/```json/gi, '')
+      .replace(/```/g, '')
+      .trim();
 
-    if (jsonMatch) {
+    const jsonStartIndex = cleanJsonStr.indexOf('[');
+    const jsonEndIndex = cleanJsonStr.lastIndexOf(']');
+
+    if (jsonStartIndex !== -1 && jsonEndIndex !== -1 && jsonEndIndex > jsonStartIndex) {
+      cleanJsonStr = cleanJsonStr.substring(jsonStartIndex, jsonEndIndex + 1);
+
       try {
-        const parsedItems = JSON.parse(jsonMatch[0]).map((item: any) => ({
+        const parsedItems = JSON.parse(cleanJsonStr).map((item: any) => ({
           type: item.type || '進廠維修',
           item_name: String(item.item_name || '').trim(),
           notes: '',
-        }));
+        })).filter((item: any) => item.item_name.length > 0);
+
         if (parsedItems.length > 0) {
           return NextResponse.json({ success: true, items: parsedItems });
         }
       } catch (e) {
-        console.error('JSON 解析失敗:', e);
+        console.error('JSON 清洗解析失敗:', e, '原始文字:', rawResult);
       }
     }
 
-    return NextResponse.json({ error: '無法解析相片內容，請確定拍攝清晰或裁剪至項目明細區域後再試一次' }, { status: 422 });
+    return NextResponse.json(
+      { error: '圖片解析失敗，建議剪裁圖片只保留維修項目明細區域後再試一次。' },
+      { status: 422 }
+    );
   } catch (err: any) {
     console.error('OCR 辨識失敗:', err);
     return NextResponse.json({ error: err.message || '相片辨識失敗' }, { status: 500 });
