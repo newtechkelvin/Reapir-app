@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import Tesseract from 'tesseract.js';
 
 async function preprocessClaimFormImage(file: File) {
   const image = await createImageBitmap(file);
-  const scale = 3;
+  const scale = 2;
   const canvas = document.createElement('canvas');
   canvas.width = image.width * scale;
   canvas.height = image.height * scale;
@@ -13,53 +12,6 @@ async function preprocessClaimFormImage(file: File) {
   if (!context) throw new Error('瀏覽器不支援圖片處理');
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
   image.close();
-
-  const source = context.getImageData(0, 0, canvas.width, canvas.height);
-  const { width, height, data } = source;
-  const gray = new Uint8Array(width * height);
-  for (let i = 0, pixel = 0; i < data.length; i += 4, pixel += 1) {
-    const luminance = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    gray[pixel] = Math.max(0, Math.min(255, Math.round((luminance - 128) * 1.8 + 128)));
-  }
-
-  const cleaned = gray.slice();
-  const markHorizontalLines = (y: number) => {
-    let start = -1;
-    for (let x = 0; x <= width; x += 1) {
-      const dark = x < width && gray[y * width + x] < 165;
-      if (dark && start < 0) start = x;
-      if ((!dark || x === width) && start >= 0) {
-        if (x - start >= Math.max(80, width * 0.08)) {
-          for (let mark = start; mark < x; mark += 1) cleaned[y * width + mark] = 255;
-        }
-        start = -1;
-      }
-    }
-  };
-  const markVerticalLines = (x: number) => {
-    let start = -1;
-    for (let y = 0; y <= height; y += 1) {
-      const dark = y < height && gray[y * width + x] < 165;
-      if (dark && start < 0) start = y;
-      if ((!dark || y === height) && start >= 0) {
-        if (y - start >= Math.max(80, height * 0.12)) {
-          for (let mark = start; mark < y; mark += 1) cleaned[mark * width + x] = 255;
-        }
-        start = -1;
-      }
-    }
-  };
-  for (let y = 0; y < height; y += 1) markHorizontalLines(y);
-  for (let x = 0; x < width; x += 1) markVerticalLines(x);
-  for (let i = 0; i < cleaned.length; i += 1) {
-    const value = cleaned[i] < 190 ? 0 : 255;
-    const offset = i * 4;
-    data[offset] = value;
-    data[offset + 1] = value;
-    data[offset + 2] = value;
-    data[offset + 3] = 255;
-  }
-  context.putImageData(source, 0, 0);
   return canvas;
 }
 
@@ -295,34 +247,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     } finally {
       setIsOcrProcessing(false);
     }
-
-    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const plateMatch = text.match(/(?:車牌(?:號碼)?|牌照|plate(?:\s*number)?)\s*[:：-]?\s*([A-Z]{1,2}\s?\d{1,4})/i) || text.match(/\b([A-Z]{1,2}\s?\d{1,4})\b/i);
-    const vinMatch = text.match(/(?:VIN|車身號碼)\s*[:：-]?\s*([A-Z0-9]+)/i) || text.match(/\b([A-Z0-9]{5,20})\b/i);
-    const dateMatch = text.match(/(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
-    const projectMatch = text.match(/(?:專案|project)\s*[:：-]?\s*(.+)/i);
-    const brandMatch = text.match(/(?:品牌|brand)\s*[:：-]?\s*(.+)/i);
-    const modelMatch = text.match(/(?:型號|model)\s*[:：-]?\s*(.+)/i);
-    if (plateMatch) handlePlateChange(plateMatch[1].replace(/\s+/g, ''));
-    if (vinMatch) handleVinChange(vinMatch[1]);
-    setField(props.setProject, setProject, projectMatch?.[1]);
-    setField(props.setBrand, setBrand, brandMatch?.[1]);
-    setField(props.setModel, setModel, modelMatch?.[1]);
-    if (dateMatch) {
-      const formattedDate = dateMatch[1].replace(/[/.]/g, '-');
-      setField(props.setPickupReturnDate, setPickupReturnDate, formattedDate);
-      setField(props.setClaimFormDate, setClaimFormDate, formattedDate);
-    }
-    const itemLines = lines
-      .filter((line) => /^(?:[-*•]|\d+[.)])/.test(line) || /(?:維修項目|維修內容|更換|檢查|修理|replacement|repair|service)/i.test(line))
-      .map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim())
-      .filter((line) => line.length > 1 && !/^(車牌|牌照|vin|車身號碼|專案|project|品牌|brand|型號|model|日期|date)\s*[:：]/i.test(line));
-    if (itemLines.length > 0) {
-      setItems(itemLines.map((item_name) => ({ type: '進廠維修', item_name: translateRepairText(item_name), notes: '' })));
-    }
-    setField(props.setDescription, setDescription, text);
-    setShowSmartPasteModal(false);
-    setSmartText('');
   };
 
   const processOcrImageFile = useCallback(async (file: File) => {
@@ -338,32 +262,16 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     try {
       setIsOcrProcessing(true);
 
-      const canvas = await preprocessClaimFormImage(file);
-      const imageDataUrl = canvas.toDataURL('image/png');
-
-      // 使用 100% 穩定的單一 Tesseract.recognize 靜態方法，擺脫 worker 例外
-      const result = await Tesseract.recognize(imageDataUrl, 'eng+chi_tra', {
-        logger: (message) => {
-          if (message.status === 'recognizing text' && typeof message.progress === 'number') {
-            console.info(`Tesseract OCR ${(message.progress * 100).toFixed(0)}%`);
-          }
-        },
-      });
-
-      const extractedText = String(result?.data?.text || '').trim();
-
-      if (!extractedText) {
-        throw new Error('圖片未能辨識出文字，請使用較清晰的 Claim Form 截圖');
-      }
+      const formData = new FormData();
+      formData.append('file', file);
 
       const response = await fetch('/api/parse-repair-items', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: extractedText }),
+        body: formData,
       });
 
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || '維修項目翻譯失敗');
+      if (!response.ok) throw new Error(data?.error || '維修項目辨識與翻譯失敗');
 
       const extractedItems = Array.isArray(data?.items)
         ? data.items
