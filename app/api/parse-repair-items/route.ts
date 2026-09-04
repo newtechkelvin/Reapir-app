@@ -39,31 +39,27 @@ export async function POST(request: NextRequest) {
     const hfToken = process.env.HF_TOKEN || process.env.NEXT_PUBLIC_HF_TOKEN;
 
     if (!hfToken) {
-      return NextResponse.json({
-        warning: '未設定 HF_TOKEN，以下為測試範例資料',
-        items: [
-          { type: '更換零件', item_name: '更換前煞車皮', notes: '' },
-          { type: '進廠維修', item_name: '檢查水箱漏水問題', notes: '' },
-        ],
-      });
+      return NextResponse.json(
+        { error: 'Vercel 環境變數未設定 HF_TOKEN，請填寫有效的 Hugging Face Access Token' },
+        { status: 401 }
+      );
     }
 
-    // 設定 15 秒 AbortController 避免無上限等待
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     try {
+      // 改用最新的微調標準 Hugging Face Inference API 網址
       const response = await fetch(
-        'https://router.huggingface.co/hf-inference/v1/chat/completions',
+        'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct/v1/chat/completions',
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${hfToken}`,
+            'Authorization': `Bearer ${hfToken.trim()}`,
             'Content-Type': 'application/json',
           },
           signal: controller.signal,
           body: JSON.stringify({
-            model: 'Qwen/Qwen2-VL-7B-Instruct',
             messages: [
               {
                 role: 'system',
@@ -101,6 +97,14 @@ export async function POST(request: NextRequest) {
       if (!response.ok) {
         const errText = await response.text().catch(() => '');
         console.error(`Hugging Face API 回傳錯誤 (${response.status}):`, errText);
+        
+        if (response.status === 401) {
+          return NextResponse.json(
+            { error: 'Hugging Face Token 驗證失敗 (401)，請檢查 Vercel 的 HF_TOKEN 是否正確。' },
+            { status: 401 }
+          );
+        }
+
         return NextResponse.json(
           { error: `Hugging Face 模型伺服器回應異常 (${response.status})，請稍後再試。` },
           { status: 502 }
