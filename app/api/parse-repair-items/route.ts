@@ -49,59 +49,35 @@ export async function POST(request: NextRequest) {
     const imageBuffer = Buffer.from(base64Image, 'base64');
     const imageArray = Array.from(imageBuffer);
 
-    // 1. 先嘗試呼叫 Llama 3.2 Vision，並附帶 agree 承諾
-    const runModelRequest = async (promptText: string) => {
-      return await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: promptText,
-            image: imageArray,
-          }),
-        }
-      );
-    };
-
+    // 強化 Prompt：要求嚴格 JSON 格式
     const promptText = `agree
 
-你是一位精通香港汽車維修（EMSD工程）的專業助手。請讀取維修單圖片：
-1. 提取所有維修與更換零件項目。
-2. 100% 翻譯成「香港習慣使用的繁體中文」，嚴禁在 item_name 中留有英文單字（除 ABS, CCTV 等標準縮寫外）。
-3. 備註 (notes) 欄位請保持空字串 ""。
-4. 請只回傳 JSON 陣列，格式如下：
+請讀取這張車輛維修單/Claim Form圖片，並將裡面的維修與更換零件項目提取並翻譯成繁體中文。
+
+【嚴格輸出格式規律】：
+1. 必須 100% 翻譯為繁體中文，禁止保留英文單字（除 ABS, CCTV 等常見縮寫）。
+2. 備註 (notes) 統一設為 ""。
+3. 直接輸出標準 JSON 陣列，不要加入任何引言或多餘解釋。格式範例：
 [
-  {"type": "更換零件", "item_name": "更換引擎機油濾芯", "notes": ""},
-  {"type": "進廠維修", "item_name": "維修右前門防水膠條損壞", "notes": ""}
+  {"type": "進廠維修", "item_name": "維修右前門防水膠條損壞", "notes": ""},
+  {"type": "更換零件", "item_name": "更換轉向橫拉桿", "notes": ""}
 ]`;
 
-    let response = await runModelRequest(promptText);
-
-    // 如果 Cloudflare 回傳需要先單獨提交 agree
-    if (!response.ok) {
-      const errJson = await response.json().catch(() => null);
-      if (errJson?.errors?.[0]?.code === 5016) {
-        // 先發送一次純 "agree" 激活模型權限
-        await fetch(
-          `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ prompt: 'agree' }),
-          }
-        );
-
-        // 重新呼叫一次真實 Prompt
-        response = await runModelRequest(promptText);
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: promptText,
+          image: imageArray,
+          max_tokens: 1500,
+        }),
       }
-    }
+    );
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
@@ -115,17 +91,26 @@ export async function POST(request: NextRequest) {
     const aiData = await response.json();
     const textResult = aiData.result?.response || '';
 
-    const jsonMatch = textResult.match(/\[[\s\S]*\]/);
+    // 寬鬆抓取 JSON 陣列 (涵蓋以 ```json ... ``` 包裹的情況)
+    const cleanText = textResult.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
+
     if (jsonMatch) {
-      const parsedItems = JSON.parse(jsonMatch[0]).map((item: any) => ({
-        type: item.type || '進廠維修',
-        item_name: String(item.item_name || '').trim(),
-        notes: '',
-      }));
-      return NextResponse.json({ success: true, items: parsedItems });
+      try {
+        const parsedItems = JSON.parse(jsonMatch[0]).map((item: any) => ({
+          type: item.type || '進廠維修',
+          item_name: String(item.item_name || '').trim(),
+          notes: '',
+        }));
+        if (parsedItems.length > 0) {
+          return NextResponse.json({ success: true, items: parsedItems });
+        }
+      } catch (e) {
+        console.error('JSON 解析失敗:', e);
+      }
     }
 
-    return NextResponse.json({ error: '無法解析相片內容，請確定拍攝清晰再試一次' }, { status: 422 });
+    return NextResponse.json({ error: '無法解析相片內容，請確定拍攝清晰或裁剪至項目明細區域後再試一次' }, { status: 422 });
   } catch (err: any) {
     console.error('OCR 辨識失敗:', err);
     return NextResponse.json({ error: err.message || '相片辨識失敗' }, { status: 500 });
