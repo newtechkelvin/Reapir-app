@@ -36,17 +36,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '未接收到有效圖片資料' }, { status: 400 });
     }
 
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim();
 
     if (!accountId || !apiToken) {
       return NextResponse.json(
-        { error: 'Vercel 未設定 Cloudflare 帳戶憑證' },
+        { error: 'Vercel 未正確設定 CLOUDFLARE_ACCOUNT_ID 或 CLOUDFLARE_API_TOKEN' },
         { status: 401 }
       );
     }
 
-    // 呼叫 Cloudflare Workers AI 香港節點直連的 Llama 3.2 Vision 模型
+    // 將 Base64 轉換為位元組陣列 (Cloudflare Workers AI 要求格式)
+    const imageBuffer = Buffer.from(base64Image, 'base64');
+    const imageArray = Array.from(imageBuffer);
+
+    // 呼叫 Cloudflare Workers AI (Llama 3.2 Vision)
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
       {
@@ -65,14 +69,22 @@ export async function POST(request: NextRequest) {
   {"type": "更換零件", "item_name": "更換引擎機油濾芯", "notes": ""},
   {"type": "進廠維修", "item_name": "維修右前門防水膠條損壞", "notes": ""}
 ]`,
-          image: Array.from(Buffer.from(base64Image, 'base64')),
+          image: imageArray,
         }),
       }
     );
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      console.error(`Cloudflare AI 錯誤 (${response.status}):`, errText);
+      console.error(`Cloudflare AI 失敗 (${response.status}):`, errText);
+
+      if (response.status === 403) {
+        return NextResponse.json(
+          { error: `Cloudflare API 權限不足 (403)，請確認 API Token 擁有 Workers AI Read/Edit 權限。詳情: ${errText}` },
+          { status: 403 }
+        );
+      }
+
       return NextResponse.json(
         { error: `AI 視覺模型服務回應異常 (${response.status})` },
         { status: 502 }
