@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { createWorker } from 'tesseract.js';
+import Tesseract from 'tesseract.js';
 
 async function preprocessClaimFormImage(file: File) {
   const image = await createImageBitmap(file);
@@ -335,17 +335,21 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       return;
     }
 
-    let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
     try {
       setIsOcrProcessing(true);
 
       const canvas = await preprocessClaimFormImage(file);
       const imageDataUrl = canvas.toDataURL('image/png');
 
-      // 相容 Tesseract.js v5+ 的傳參方式
-      worker = await createWorker(['eng', 'chi_tra']);
+      // 使用 100% 穩定的單一 Tesseract.recognize 靜態方法，擺脫 worker 例外
+      const result = await Tesseract.recognize(imageDataUrl, 'eng+chi_tra', {
+        logger: (message) => {
+          if (message.status === 'recognizing text' && typeof message.progress === 'number') {
+            console.info(`Tesseract OCR ${(message.progress * 100).toFixed(0)}%`);
+          }
+        },
+      });
 
-      const result = await worker.recognize(imageDataUrl);
       const extractedText = String(result?.data?.text || '').trim();
 
       if (!extractedText) {
@@ -381,7 +385,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       console.error('維修項目 OCR/翻譯失敗:', error);
       alert(error.message || 'OCR 處理失敗，請稍後再試');
     } finally {
-      if (worker) await worker.terminate();
       setIsOcrProcessing(false);
     }
   }, []);
