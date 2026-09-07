@@ -202,32 +202,34 @@ export default function WorkOrdersSummary({
   const handleSaveOrderEdit = async () => {
     if (!selectedOrder) return;
 
-    // 1. 確保拿到真正的資料庫 ID，若無 ID 則使用 work_order_number 作為備用查詢
+    // 1. 確保取得有效的工單識別碼
     const orderId = selectedOrder.id || selectedOrder.work_order_id || selectedOrder.woNum;
 
     if (!orderId) {
-      alert('無法取得此工單的無效識別碼 (ID)');
+      alert('無法取得此工單的有效識別碼 (ID)');
       return;
     }
 
     try {
       setIsSaving(true);
 
-      // 2. 清洗日期格式：將空字串 "" 轉為 null，避免 PostgreSQL DATE 格式化失敗
+      // 2. 將欄位對齊資料庫 schema：使用 vehicle_location 而非不存在的 vehicle_spot
       const payload = {
         garage_location: editLocation || null,
-        vehicle_spot: editSpot || null,
+        vehicle_location: editSpot || null, // 修正：對齊資料庫欄位名稱
         pickup_return_date: editPickupReturnDate.trim() ? editPickupReturnDate : null,
         claim_form_date: editClaimDate.trim() ? editClaimDate : null,
         completed_date: editCompletedDate.trim() ? editCompletedDate : null,
         status: editCompletedDate.trim() ? 'completed' : (selectedOrder.status || 'open'),
         description: editDescription || '',
-        items: editItems.map((item) => ({
-          completed: Boolean(item.completed),
-          type: item.type || '進廠維修',
-          item_name: String(item.item_name || '').trim(),
-          notes: String(item.notes || '').trim(),
-        })).filter((item) => item.item_name.length > 0),
+        items: editItems
+          .map((item) => ({
+            completed: Boolean(item.completed),
+            type: item.type || '進廠維修',
+            item_name: String(item.item_name || '').trim(),
+            notes: String(item.notes || '').trim(),
+          }))
+          .filter((item) => item.item_name.length > 0),
       };
 
       const res = await fetch(`/api/work-orders/${encodeURIComponent(orderId)}`, {
