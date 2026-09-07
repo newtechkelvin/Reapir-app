@@ -201,20 +201,39 @@ export default function WorkOrdersSummary({
 
   const handleSaveOrderEdit = async () => {
     if (!selectedOrder) return;
+
+    // 1. 確保拿到真正的資料庫 ID，若無 ID 則使用 work_order_number 作為備用查詢
+    const orderId = selectedOrder.id || selectedOrder.work_order_id || selectedOrder.woNum;
+
+    if (!orderId) {
+      alert('無法取得此工單的無效識別碼 (ID)');
+      return;
+    }
+
     try {
       setIsSaving(true);
-      const res = await fetch(`/api/work-orders/${selectedOrder.id || selectedOrder.woNum}`, {
+
+      // 2. 清洗日期格式：將空字串 "" 轉為 null，避免 PostgreSQL DATE 格式化失敗
+      const payload = {
+        garage_location: editLocation || null,
+        vehicle_spot: editSpot || null,
+        pickup_return_date: editPickupReturnDate.trim() ? editPickupReturnDate : null,
+        claim_form_date: editClaimDate.trim() ? editClaimDate : null,
+        completed_date: editCompletedDate.trim() ? editCompletedDate : null,
+        status: editCompletedDate.trim() ? 'completed' : (selectedOrder.status || 'open'),
+        description: editDescription || '',
+        items: editItems.map((item) => ({
+          completed: Boolean(item.completed),
+          type: item.type || '進廠維修',
+          item_name: String(item.item_name || '').trim(),
+          notes: String(item.notes || '').trim(),
+        })).filter((item) => item.item_name.length > 0),
+      };
+
+      const res = await fetch(`/api/work-orders/${encodeURIComponent(orderId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          garage_location: editLocation,
-          vehicle_spot: editSpot,
-          pickup_return_date: editPickupReturnDate,
-          claim_form_date: editClaimDate,
-          completed_date: editCompletedDate,
-          description: editDescription,
-          items: editItems,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -222,11 +241,13 @@ export default function WorkOrdersSummary({
         setSelectedOrder(null);
         onRefresh();
       } else {
-        alert('儲存失敗，請檢查資料格式');
+        const errorData = await res.json().catch(() => null);
+        console.error('後端儲存報錯詳情:', errorData);
+        alert(`儲存失敗: ${errorData?.error || errorData?.message || '請檢查資料格式'}`);
       }
     } catch (err) {
       console.error('儲存工單出錯:', err);
-      alert('網路連線失敗');
+      alert('網路連線失敗，請稍後再試');
     } finally {
       setIsSaving(false);
     }
