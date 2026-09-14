@@ -448,6 +448,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                       <option value="機電 - 屯門">機電 - 屯門</option>
                       <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
                       <option value="機電 - 柴灣">機電 - 柴灣</option>
+                      <option value="機電 - 芬園">機電 - 芬園</option>
                       <option value="車行">車行</option>
                     </select>
                     <div className="hidden print:block"><span className="text-gray-600">車房位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
