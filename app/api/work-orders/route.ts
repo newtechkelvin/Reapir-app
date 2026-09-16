@@ -134,9 +134,6 @@ export async function POST(request: NextRequest) {
     const requestedOrderNumber = normalizeText(body.order_number).toUpperCase();
 
     if (!plateNumber) return NextResponse.json({ error: '請輸入車牌號碼' }, { status: 400 });
-    if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) {
-      return NextResponse.json({ error: 'VIN 必須為 17 位有效字元' }, { status: 400 });
-    }
     if (requestedOrderNumber && !ORDER_NUMBER_PATTERN.test(requestedOrderNumber)) {
       return NextResponse.json({ error: '工單編號格式必須為 NTL-WO- 加 6 位數字' }, { status: 400 });
     }
