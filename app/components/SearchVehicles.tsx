@@ -263,7 +263,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           <p className="text-base font-bold">無對應的車輛與工單紀錄</p>
         </div>
       ) : (
-        /* 已移除 print:hidden，使列表可以正常列印 */
+        /* 移除 print:hidden，使列表可以正常列印 */
         <div className="space-y-6">
           {props.searchVehicles.map((vehicle, vIdx) => {
             const orders = vehicle.workOrders || vehicle.work_orders || [];
@@ -691,7 +691,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 列印專用 CSS 樣式修正 */}
+      {/* 列印專用 CSS 樣式 */}
       <style jsx global>{`
         @media print {
           @page {
