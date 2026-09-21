@@ -219,6 +219,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
   return (
     <div className="space-y-6">
+      {/* 搜尋欄與工具列（列印時隱藏） */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl print:hidden">
         <form onSubmit={props.handleSearch} className="flex-1 flex gap-2">
           <input
@@ -262,16 +263,17 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           <p className="text-base font-bold">無對應的車輛與工單紀錄</p>
         </div>
       ) : (
-        <div className="space-y-6 print:hidden">
+        /* 已移除 print:hidden，使列表可以正常列印 */
+        <div className="space-y-6">
           {props.searchVehicles.map((vehicle, vIdx) => {
             const orders = vehicle.workOrders || vehicle.work_orders || [];
             const isSanCheVehicle = vehicle.warranty_type === 'General' || vehicle.project?.includes('散車');
             const wInfo = getWarrantyInfo(vehicle);
 
             return (
-              <div key={vehicle.id || vIdx} className="bg-white border rounded-xl shadow-xs overflow-hidden border-slate-200">
-                {/* 車輛抬頭卡片（加入保固年度與可用率展現） */}
-                <div className="bg-slate-800 text-white p-4 flex flex-wrap justify-between items-center gap-2">
+              <div key={vehicle.id || vIdx} className="bg-white border rounded-xl shadow-xs overflow-hidden border-slate-200 print:border-slate-400 print:shadow-none print:break-inside-avoid">
+                {/* 車輛抬頭卡片 */}
+                <div className="bg-slate-800 text-white p-4 print:p-3 flex flex-wrap justify-between items-center gap-2 print:bg-slate-900">
                   <div className="flex items-center gap-3">
                     <span className="text-xl font-extrabold text-amber-400">🚘 {vehicle.plate_number}</span>
                     {vehicle.project && (
@@ -319,7 +321,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                           <div
                             key={wo.id || oIdx}
                             onClick={() => handleOpenDetailModal(vehicle, wo)}
-                            className="bg-slate-50 border rounded-lg p-3 hover:bg-blue-50/50 hover:border-blue-300 transition-all cursor-pointer flex flex-col md:flex-row justify-between items-start md:items-center gap-3 group"
+                            className="bg-slate-50 border rounded-lg p-3 hover:bg-blue-50/50 hover:border-blue-300 transition-all cursor-pointer flex flex-col md:flex-row justify-between items-start md:items-center gap-3 group print:border-slate-300 print:bg-white"
                           >
                             <div className="space-y-1 flex-1">
                               <div className="flex items-center gap-2">
@@ -341,7 +343,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                                 <span>{isSanChe ? '維修通知日期:' : 'Claim Form 日期:'} <strong className="text-gray-800">{claimDateStr}</strong></span>
                               </div>
                             </div>
-                            <span className="text-xs font-bold text-blue-600 group-hover:underline self-end md:self-center">
+                            <span className="text-xs font-bold text-blue-600 group-hover:underline self-end md:self-center print:hidden">
                               點擊檢視工單明細表 →
                             </span>
                           </div>
@@ -689,7 +691,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 列印專用 CSS 樣式 */}
+      {/* 列印專用 CSS 樣式修正 */}
       <style jsx global>{`
         @media print {
           @page {
