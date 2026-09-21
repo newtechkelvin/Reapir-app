@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { calculateAvailability } from '@/lib/availability';
+import BatchCompleteModal from './BatchCompleteModal'; // 引入批次結案 Modal
 
 interface SearchVehiclesProps {
   searchQuery: string;
@@ -31,6 +32,9 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const [staffNameInput, setStaffNameInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
+
+  // 批次結案 Modal 控制 State
+  const [showBatchCompleteModal, setShowBatchCompleteModal] = useState(false);
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -219,7 +223,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
   return (
     <div className="space-y-6">
-      {/* 搜尋欄與工具列（列印時隱藏） */}
+      {/* 搜尋欄與工具列 */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl print:hidden">
         <form onSubmit={props.handleSearch} className="flex-1 flex gap-2">
           <input
@@ -238,7 +242,15 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           </button>
         </form>
 
-        <div className="flex gap-2 justify-end">
+        <div className="flex gap-2 justify-end flex-wrap">
+          {/* 新增：快速批次結案按鈕 */}
+          <button
+            type="button"
+            onClick={() => setShowBatchCompleteModal(true)}
+            className="px-3.5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1"
+          >
+            ⚡ 快速批次結案
+          </button>
           <button
             type="button"
             onClick={props.exportToCSV}
@@ -263,7 +275,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           <p className="text-base font-bold">無對應的車輛與工單紀錄</p>
         </div>
       ) : (
-        /* 移除 print:hidden，使列表可以正常列印 */
         <div className="space-y-6">
           {props.searchVehicles.map((vehicle, vIdx) => {
             const orders = vehicle.workOrders || vehicle.work_orders || [];
@@ -690,6 +701,14 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           </div>
         </div>
       )}
+
+      {/* 批次結案 Modal 彈窗 */}
+      <BatchCompleteModal
+        isOpen={showBatchCompleteModal}
+        onClose={() => setShowBatchCompleteModal(false)}
+        vehicles={props.searchVehicles}
+        onSuccess={() => props.handleSearch()}
+      />
 
       {/* 列印專用 CSS 樣式 */}
       <style jsx global>{`
