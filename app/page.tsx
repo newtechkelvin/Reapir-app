@@ -327,9 +327,44 @@ export default function Home() {
     return { label: '正常', color: 'bg-emerald-100 text-emerald-800' };
   };
 
-  const exportToCSV = () => {
-    alert('正在匯出 CSV 報表...');
-  };
+const exportToCSV = async () => {
+  setIsExporting(true); // 設定正在匯出
+  try {
+    // 1. 取得資料或處理 CSV 字串
+    if (!searchVehicles || searchVehicles.length === 0) {
+      alert('目前沒有可匯出的資料');
+      return;
+    }
+
+    // 2. 轉換為 CSV 格式 (記得加上 UTF-8 BOM 避免 Excel 中文亂碼)
+    let csvContent = '\uFEFF';
+    csvContent += '車牌,VIN,專案,工單號碼,狀態,描述\n';
+
+    searchVehicles.forEach(vehicle => {
+      const orders = vehicle.workOrders || vehicle.work_orders || [];
+      orders.forEach((wo: any) => {
+        csvContent += `"${vehicle.plate_number}","${vehicle.vin}","${vehicle.project}","${wo.order_number}","${wo.status}","${wo.description}"\n`;
+      });
+    });
+
+    // 3. 建立下載連結
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `維修工單報表_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+  } catch (error) {
+    console.error('匯出 CSV 失敗:', error);
+    alert('匯出 CSV 失敗，請重試');
+  } finally {
+    // 確保無論成功或失敗都會關閉「正在匯出...」狀態
+    setIsExporting(false); 
+  }
+};
 
   const handlePrint = () => {
     window.print();
