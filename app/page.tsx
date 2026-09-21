@@ -18,6 +18,7 @@ export default function Home() {
   const [searchVehicles, setSearchVehicles] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [isExporting, setIsExporting] = useState(false); // 修正：新增 isExporting 狀態
 
   // 開單 State
   const [plateNumber, setPlateNumber] = useState('');
@@ -327,44 +328,72 @@ export default function Home() {
     return { label: '正常', color: 'bg-emerald-100 text-emerald-800' };
   };
 
-const exportToCSV = async () => {
-  setIsExporting(true); // 設定正在匯出
-  try {
-    // 1. 取得資料或處理 CSV 字串
-    if (!searchVehicles || searchVehicles.length === 0) {
-      alert('目前沒有可匯出的資料');
+  // 修正：完備的 CSV 匯出邏輯
+  const exportToCSV = async () => {
+    const listToExport = searchVehicles.length > 0 ? searchVehicles : vehicles;
+    
+    if (!listToExport || listToExport.length === 0) {
+      alert('目前沒有可匯出的車輛或工單資料');
       return;
     }
 
-    // 2. 轉換為 CSV 格式 (記得加上 UTF-8 BOM 避免 Excel 中文亂碼)
-    let csvContent = '\uFEFF';
-    csvContent += '車牌,VIN,專案,工單號碼,狀態,描述\n';
+    setIsExporting(true);
+    try {
+      // 標題列 + BOM 避免 Excel 亂碼
+      let csvContent = '\uFEFF';
+      csvContent += '車牌號碼,VIN碼,品牌,型號,專案,工單編號,工單狀態,車房位置,車輛位置,取車回廠日期,Claim Form/維修通知日期,完成日期,故障描述,維修項目明細\n';
 
-    searchVehicles.forEach(vehicle => {
-      const orders = vehicle.workOrders || vehicle.work_orders || [];
-      orders.forEach((wo: any) => {
-        csvContent += `"${vehicle.plate_number}","${vehicle.vin}","${vehicle.project}","${wo.order_number}","${wo.status}","${wo.description}"\n`;
+      listToExport.forEach((vehicle) => {
+        const orders = vehicle.workOrders || vehicle.work_orders || [];
+        const plate = (vehicle.plate_number || '').replace(/"/g, '""');
+        const vinStr = (vehicle.vin || '').replace(/"/g, '""');
+        const brandStr = (vehicle.brand || '').replace(/"/g, '""');
+        const modelStr = (vehicle.model || '').replace(/"/g, '""');
+        const projStr = (vehicle.project || '').replace(/"/g, '""');
+
+        if (orders.length === 0) {
+          // 若無工單，僅導出車輛基本資訊
+          csvContent += `"${plate}","${vinStr}","${brandStr}","${modelStr}","${projStr}","無工單","","","","","","","",""\n`;
+        } else {
+          orders.forEach((wo: any) => {
+            const woNum = (wo.order_number || wo.id || '').replace(/"/g, '""');
+            const woStatus = (wo.status || 'Open').replace(/"/g, '""');
+            const garageLoc = (wo.garage_location || wo.location || vehicle.garage_location || vehicle.location || '').replace(/"/g, '""');
+            const vehLoc = (wo.vehicle_location || vehicle.vehicle_location || '').replace(/"/g, '""');
+            const pickupDate = (wo.pickup_return_date || vehicle.pickup_return_date || '').replace(/"/g, '""');
+            const claimDate = (wo.claim_form_date || vehicle.claim_form_date || '').replace(/"/g, '""');
+            const compDate = (wo.completed_date || '').replace(/"/g, '""');
+            const desc = (wo.description || '').replace(/"/g, '""').replace(/\n/g, ' ');
+
+            // 格式化維修項目明細
+            const rawItems = wo.work_order_items || wo.items || [];
+            const itemsStr = rawItems
+              .map((item: any) => `[${item.type || '項目'}] ${item.item_name || ''}${item.notes ? ' (' + item.notes + ')' : ''}`)
+              .join('; ')
+              .replace(/"/g, '""');
+
+            csvContent += `"${plate}","${vinStr}","${brandStr}","${modelStr}","${projStr}","${woNum}","${woStatus}","${garageLoc}","${vehLoc}","${pickupDate}","${claimDate}","${compDate}","${desc}","${itemsStr}"\n`;
+          });
+        }
       });
-    });
 
-    // 3. 建立下載連結
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `維修工單報表_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-  } catch (error) {
-    console.error('匯出 CSV 失敗:', error);
-    alert('匯出 CSV 失敗，請重試');
-  } finally {
-    // 確保無論成功或失敗都會關閉「正在匯出...」狀態
-    setIsExporting(false); 
-  }
-};
+      // 建立並觸發 Blob 下載
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `車輛維修工單報表_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('匯出 CSV 失敗:', error);
+      alert('匯出 CSV 失敗，請再試一次');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -441,7 +470,7 @@ const exportToCSV = async () => {
           </nav>
         </header>
 
-        {/* 🎯 關鍵修正：傳入實時車輛資料 */}
+        {/* 傳入實時車輛資料 */}
         {activeTab === 'summary' && (
           <WorkOrdersSummary
             vehicles={vehicles}
@@ -456,10 +485,10 @@ const exportToCSV = async () => {
 
         {activeTab === 'create' && (
           <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200">
-              <CreateWorkOrder
-                vehicles={vehicles}
-                orderNumber={orderNumber}
-                handleCreateOrder={handleCreateOrder}
+            <CreateWorkOrder
+              vehicles={vehicles}
+              orderNumber={orderNumber}
+              handleCreateOrder={handleCreateOrder}
               plateNumber={plateNumber}
               setPlateNumber={setPlateNumber}
               vin={vin}
