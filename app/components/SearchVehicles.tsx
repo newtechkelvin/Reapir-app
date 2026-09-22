@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { calculateAvailability } from '@/lib/availability';
-import BatchCompleteModal from './BatchCompleteModal'; // 引入批次結案 Modal
+import BatchCompleteModal from './BatchCompleteModal';
 
 interface SearchVehiclesProps {
   searchQuery: string;
@@ -33,12 +33,10 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
 
-  // 批次結案 Modal 控制 State
   const [showBatchCompleteModal, setShowBatchCompleteModal] = useState(false);
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 所有頁面共用同一套按 Claim Form 日期及有效保固期計算的結果。
   const getWarrantyInfo = (vehicle: any) => {
     const calculation = calculateAvailability(vehicle);
     const currentPeriod = calculation.currentPeriod;
@@ -223,7 +221,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
   return (
     <div className="space-y-6">
-      {/* 搜尋欄與工具列 */}
+      {/* 搜尋欄與工具列 (列印時隱藏) */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-100 p-4 rounded-xl print:hidden">
         <form onSubmit={props.handleSearch} className="flex-1 flex gap-2">
           <input
@@ -243,7 +241,6 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </form>
 
         <div className="flex gap-2 justify-end flex-wrap">
-          {/* 新增：快速批次結案按鈕 */}
           <button
             type="button"
             onClick={() => setShowBatchCompleteModal(true)}
@@ -275,7 +272,8 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           <p className="text-base font-bold">無對應的車輛與工單紀錄</p>
         </div>
       ) : (
-        <div className="space-y-6">
+        /* 主車輛與工單列表卡片區：增加 print-main-content 標籤供媒體查詢調用 */
+        <div className="space-y-6 print-main-content">
           {props.searchVehicles.map((vehicle, vIdx) => {
             const orders = vehicle.workOrders || vehicle.work_orders || [];
             const isSanCheVehicle = vehicle.warranty_type === 'General' || vehicle.project?.includes('散車');
@@ -371,7 +369,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
       {/* 工單詳細明細 Modal 視窗 */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50">
+        <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50 print-modal-container">
           <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-3xl w-full p-6 print:p-0 space-y-5 print:space-y-3 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
             
             {/* 公司抬頭 */}
@@ -381,7 +379,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <p className="text-sm print:text-base font-extrabold text-blue-950 mt-1.5 bg-slate-100 print:bg-slate-200 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
             </div>
 
-            {/* Header 控制區 */}
+            {/* Header 控制區 (列印時隱藏) */}
             <div className="flex justify-between items-center border-b pb-2 print:hidden">
               <div className="flex items-center gap-3">
                 <span className="font-bold text-blue-900 text-lg">📋 {selectedOrder.order_number || 'WO-未知'}</span>
@@ -638,7 +636,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               )}
             </div>
 
-            {/* 4. 簽核與結案欄位 */}
+            {/* 4. 簽核與結案欄位 (列印時隱藏) */}
             {selectedOrder.status?.toLowerCase() !== 'completed' && (
               <div className="border-t pt-2 space-y-2 bg-slate-50 print:bg-white p-3 print:p-0 rounded-xl border-slate-200 print:hidden">
                 <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">✍️ 工單完工簽核與結案設定 (提交後正式結案)</h4>
@@ -678,7 +676,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <div>交車司機：____________________</div>
             </div>
 
-            {/* Footer 操作按鈕 */}
+            {/* Footer 操作按鈕 (列印時隱藏) */}
             <div className="flex justify-between items-center border-t pt-3 print:hidden">
               <button
                 type="button"
@@ -703,14 +701,16 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
       )}
 
       {/* 批次結案 Modal 彈窗 */}
-      <BatchCompleteModal
-        isOpen={showBatchCompleteModal}
-        onClose={() => setShowBatchCompleteModal(false)}
-        vehicles={props.searchVehicles}
-        onSuccess={() => props.handleSearch()}
-      />
+      {showBatchCompleteModal && (
+        <BatchCompleteModal
+          isOpen={showBatchCompleteModal}
+          onClose={() => setShowBatchCompleteModal(false)}
+          vehicles={props.searchVehicles}
+          onSuccess={() => props.handleSearch()}
+        />
+      )}
 
-      {/* 列印專用 CSS 樣式 */}
+      {/* 精確的列印媒體查詢設定 */}
       <style jsx global>{`
         @media print {
           @page {
@@ -725,6 +725,13 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           .print\\:hidden {
             display: none !important;
           }
+
+          /* 當開啟 Modal 視窗時：只顯示 Modal，將背景車輛列表隱藏，即可印出乾淨的工單 (圖3) */
+          body:has(.print-modal-container) .print-main-content {
+            display: none !important;
+          }
+
+          /* 隱藏輸入框的預設提示字 */
           input::placeholder,
           .note-input::placeholder {
             color: transparent !important;
