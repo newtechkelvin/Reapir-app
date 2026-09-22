@@ -367,41 +367,41 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </div>
       )}
 
-      {/* 工單詳細明細 Modal 視窗 (字體大幅放大版) */}
+      {/* 工單詳細明細 Modal 視窗 */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 print:bg-white print:static flex items-center justify-center p-4 print:p-0 z-50 print-modal-container">
-          <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-4xl w-full p-6 print:p-0 space-y-6 print:space-y-5 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
+          <div className="bg-white rounded-2xl print:rounded-none shadow-2xl print:shadow-none max-w-4xl w-full p-6 print:p-0 space-y-5 print:space-y-4 max-h-[90vh] print:max-h-none overflow-y-auto print:overflow-visible text-black">
             
-            {/* 公司抬頭 (加大字級: text-4xl / text-xl) */}
+            {/* 公司抬頭 (加大字體) */}
             <div className="text-center border-b-2 border-slate-900 pb-3 print:pb-3">
-              <h1 className="text-3xl print:text-4xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
-              <p className="text-base print:text-lg text-slate-800 font-bold tracking-widest mt-1">NEW TECH MOTOR ENGINEERING LIMITED</p>
-              <p className="text-lg print:text-xl font-extrabold text-blue-950 mt-2.5 bg-slate-100 print:bg-slate-200 py-1.5 rounded">車輛維修工單 (Repair Job Sheet)</p>
+              <h1 className="text-3xl print:text-3xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
+              <p className="text-sm print:text-base text-slate-800 font-bold tracking-widest mt-1">NEW TECH MOTOR ENGINEERING LIMITED</p>
+              <p className="text-base print:text-lg font-extrabold text-blue-950 mt-2 bg-slate-100 print:bg-slate-200 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
             </div>
 
             {/* Header 控制區 */}
             <div className="flex justify-between items-center border-b pb-2 print:hidden">
               <div className="flex items-center gap-3">
-                <span className="font-bold text-blue-900 text-2xl">📋 {selectedOrder.order_number || 'WO-未知'}</span>
-                <span className={`text-base px-3 py-1 rounded-full font-bold ${selectedOrder.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                <span className="font-bold text-blue-900 text-xl">📋 {selectedOrder.order_number || 'WO-未知'}</span>
+                <span className={`text-sm px-3 py-1 rounded-full font-bold ${selectedOrder.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                   狀態: {selectedOrder.status || 'Open'}
                 </span>
                 {isSanCheOrder(selectedOrder, selectedVehicle) && (
-                  <span className="text-base px-3 py-1 rounded-full font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                  <span className="text-sm px-3 py-1 rounded-full font-bold bg-amber-50 text-amber-800 border border-amber-200">
                     🚗 散車工單
                   </span>
                 )}
                 {isAutoSaving ? (
                   <span className="text-sm text-blue-600 font-bold animate-pulse">💾 正在保存更新...</span>
                 ) : (
-                  <span className="text-sm text-gray-500">最後更新時間: <strong>{lastModifiedStr}</strong></span>
+                  <span className="text-xs text-gray-500">最後更新時間: <strong>{lastModifiedStr}</strong></span>
                 )}
               </div>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={handlePrintModal}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-lg cursor-pointer shadow-sm"
+                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-lg cursor-pointer shadow-sm"
                 >
                   🖨️ 列印此工單
                 </button>
@@ -415,20 +415,20 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             </div>
 
-            {/* 1. 車輛與合約資訊欄 (字級提升為 text-base / text-lg) */}
-            <div className="border-2 border-slate-400 rounded-xl print:rounded-lg p-4 print:p-4 bg-slate-50/50 print:bg-white space-y-3">
-              <h4 className="text-base print:text-lg font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1.5">🚘 車輛與合約基本資訊</h4>
-              <div className="grid grid-cols-2 print:grid-cols-3 gap-3.5 text-base print:text-lg">
-                <div><span className="text-gray-600 block text-sm print:text-base">工單編號：</span><strong className="text-blue-900 font-black text-lg print:text-xl">{selectedOrder.order_number || 'WO-未知'}</strong></div>
-                <div><span className="text-gray-600 block text-sm print:text-base">車牌號碼：</span><strong className="text-blue-900 font-black text-lg print:text-xl">{selectedVehicle?.plate_number || selectedOrder.plate_number || '未設定'}</strong></div>
-                <div><span className="text-gray-600 block text-sm print:text-base">車輛品牌：</span><strong className="text-slate-900">{selectedVehicle?.brand || selectedOrder.brand || '未設定'}</strong></div>
-                <div><span className="text-gray-600 block text-sm print:text-base">車輛型號：</span><strong className="text-slate-900">{selectedVehicle?.model || selectedOrder.model || '未設定'}</strong></div>
-                <div><span className="text-gray-600 block text-sm print:text-base">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
-                <div><span className="text-gray-600 block text-sm print:text-base">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
+            {/* 1. 車輛與合約資訊欄 (放大字體) */}
+            <div className="border-2 border-slate-400 rounded-xl print:rounded-lg p-4 print:p-3 bg-slate-50/50 print:bg-white space-y-2">
+              <h4 className="text-sm print:text-base font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1">🚘 車輛與合約基本資訊</h4>
+              <div className="grid grid-cols-2 print:grid-cols-3 gap-3 text-sm print:text-base">
+                <div><span className="text-gray-600 block">工單編號：</span><strong className="text-blue-900 font-black text-base print:text-lg">{selectedOrder.order_number || 'WO-未知'}</strong></div>
+                <div><span className="text-gray-600 block">車牌號碼：</span><strong className="text-blue-900 font-black text-base print:text-lg">{selectedVehicle?.plate_number || selectedOrder.plate_number || '未設定'}</strong></div>
+                <div><span className="text-gray-600 block">車輛品牌：</span><strong className="text-slate-900">{selectedVehicle?.brand || selectedOrder.brand || '未設定'}</strong></div>
+                <div><span className="text-gray-600 block">車輛型號：</span><strong className="text-slate-900">{selectedVehicle?.model || selectedOrder.model || '未設定'}</strong></div>
+                <div><span className="text-gray-600 block">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vin || '無'}</strong></div>
+                <div><span className="text-gray-600 block">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.project || '未設定'}</strong></div>
 
                 {isSanCheOrder(selectedOrder, selectedVehicle) ? (
                   <div>
-                    <label className="text-gray-600 block font-semibold print:hidden text-sm">取車位置：</label>
+                    <label className="text-gray-600 block font-semibold print:hidden">取車位置：</label>
                     <input
                       type="text"
                       value={garageLocationInput}
@@ -437,20 +437,20 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                         triggerAutoSave({ garage_location: e.target.value });
                       }}
                       placeholder="院舍 / 客人自行送廠"
-                      className="w-full p-1.5 border border-slate-300 rounded text-base print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                      className="w-full p-1.5 border border-slate-300 rounded text-sm print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
                     />
-                    <div className="hidden print:block"><span className="text-gray-600 text-sm">取車位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
+                    <div className="hidden print:block"><span className="text-gray-600">取車位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
                   </div>
                 ) : (
                   <div>
-                    <label className="text-gray-600 block font-semibold print:hidden text-sm">車房位置：</label>
+                    <label className="text-gray-600 block font-semibold print:hidden">車房位置：</label>
                     <select
                       value={garageLocationInput}
                       onChange={(e) => {
                         setGarageLocationInput(e.target.value);
                         triggerAutoSave({ garage_location: e.target.value });
                       }}
-                      className="w-full p-1.5 border border-slate-300 rounded text-base print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                      className="w-full p-1.5 border border-slate-300 rounded text-sm print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
                     >
                       <option value="">-- 請選擇車房位置 --</option>
                       <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
@@ -461,12 +461,12 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                       <option value="機電 - 芬園">機電 - 芬園</option>
                       <option value="車行">車行</option>
                     </select>
-                    <div className="hidden print:block"><span className="text-gray-600 text-sm">車房位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
+                    <div className="hidden print:block"><span className="text-gray-600">車房位置：</span><strong className="text-slate-900">{garageLocationInput || '未設定'}</strong></div>
                   </div>
                 )}
 
                 <div>
-                  <label className="text-gray-600 block font-semibold print:hidden text-sm">車輛位置：</label>
+                  <label className="text-gray-600 block font-semibold print:hidden">車輛位置：</label>
                   <input
                     type="text"
                     value={vehicleLocationInput}
@@ -475,13 +475,13 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                       triggerAutoSave({ vehicle_location: e.target.value });
                     }}
                     placeholder="例如：停泊位 B2"
-                    className="w-full p-1.5 border border-slate-300 rounded text-base print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                    className="w-full p-1.5 border border-slate-300 rounded text-sm print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
                   />
-                  <div className="hidden print:block"><span className="text-gray-600 text-sm">車輛位置：</span><strong className="text-slate-900">{vehicleLocationInput || '未設定'}</strong></div>
+                  <div className="hidden print:block"><span className="text-gray-600">車輛位置：</span><strong className="text-slate-900">{vehicleLocationInput || '未設定'}</strong></div>
                 </div>
 
                 <div>
-                  <label className="text-gray-600 block font-semibold print:hidden text-sm">取車/回廠日期：</label>
+                  <label className="text-gray-600 block font-semibold print:hidden">取車/回廠日期：</label>
                   <input
                     type="date"
                     value={pickupReturnDateInput}
@@ -489,13 +489,13 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                       setPickupReturnDateInput(e.target.value);
                       triggerAutoSave({ pickup_return_date: e.target.value });
                     }}
-                    className="w-full p-1.5 border border-slate-300 rounded text-base print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                    className="w-full p-1.5 border border-slate-300 rounded text-sm print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
                   />
-                  <div className="hidden print:block"><span className="text-gray-600 text-sm">取車/回廠日期：</span><strong className="text-slate-900">{pickupReturnDateInput || '未設定'}</strong></div>
+                  <div className="hidden print:block"><span className="text-gray-600">取車/回廠日期：</span><strong className="text-slate-900">{pickupReturnDateInput || '未設定'}</strong></div>
                 </div>
 
                 <div>
-                  <label className="text-gray-600 block font-semibold print:hidden text-sm">
+                  <label className="text-gray-600 block font-semibold print:hidden">
                     {isSanCheOrder(selectedOrder, selectedVehicle) ? '維修通知日期：' : 'Claim Form 日期：'}
                   </label>
                   <input
@@ -505,16 +505,16 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                       setClaimFormDateInput(e.target.value);
                       triggerAutoSave({ claim_form_date: e.target.value });
                     }}
-                    className="w-full p-1.5 border border-slate-300 rounded text-base print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                    className="w-full p-1.5 border border-slate-300 rounded text-sm print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
                   />
                   <div className="hidden print:block">
-                    <span className="text-gray-600 text-sm">{isSanCheOrder(selectedOrder, selectedVehicle) ? '維修通知日期：' : 'Claim Form 日期：'}</span>
+                    <span className="text-gray-600">{isSanCheOrder(selectedOrder, selectedVehicle) ? '維修通知日期：' : 'Claim Form 日期：'}</span>
                     <strong className="text-slate-900">{claimFormDateInput || '未設定'}</strong>
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-gray-600 block font-semibold print:hidden text-sm">完成維修/交車日期：</label>
+                  <label className="text-gray-600 block font-semibold print:hidden">完成維修/交車日期：</label>
                   <input
                     type="date"
                     value={completedDateInput}
@@ -522,30 +522,30 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                       setCompletedDateInput(e.target.value);
                       triggerAutoSave({ completed_date: e.target.value });
                     }}
-                    className="w-full p-1.5 border border-slate-300 rounded text-base print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-emerald-50 text-emerald-900"
+                    className="w-full p-1.5 border border-slate-300 rounded text-sm print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-emerald-50 text-emerald-900"
                   />
                   <div className="hidden print:block">
-                    <span className="text-gray-600 text-sm">完成維修/交車日期：</span>
+                    <span className="text-gray-600">完成維修/交車日期：</span>
                     <strong className="text-emerald-700">{completedDateInput || '____________________'}</strong>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 2. 工單狀況敘述 (放大字級為 text-base / text-lg) */}
-            <div className="space-y-1.5">
-              <h4 className="text-base print:text-lg font-bold text-gray-800 uppercase tracking-wider">📝 狀況與故障描述</h4>
-              <p className="text-base print:text-lg text-gray-900 bg-gray-50 print:bg-white p-3.5 rounded-lg border border-slate-300 leading-normal">{selectedOrder.description || '無詳細描述'}</p>
+            {/* 2. 工單狀況敘述 (放大字體) */}
+            <div className="space-y-1">
+              <h4 className="text-sm print:text-base font-bold text-gray-700 uppercase tracking-wider">📝 狀況與故障描述</h4>
+              <p className="text-sm print:text-base text-gray-900 bg-gray-50 print:bg-white p-3 rounded-lg border border-slate-300 leading-snug">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 (取消粗體 font-normal，字體放大為 text-base / text-lg) */}
+            {/* 3. 維修項目清單 (已取消粗體並放大字體) */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <h4 className="text-base print:text-lg font-bold text-gray-800 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
+                <h4 className="text-sm print:text-base font-bold text-gray-700 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
                 <button
                   type="button"
                   onClick={handleAddNewItem}
-                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg shadow-2xs print:hidden cursor-pointer flex items-center gap-1"
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-2xs print:hidden cursor-pointer flex items-center gap-1"
                 >
                   + 新增維修項目
                 </button>
@@ -553,14 +553,14 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
               {modalItems.length > 0 ? (
                 <div className="border-2 rounded-lg overflow-hidden border-slate-400">
-                  <table className="w-full text-base print:text-lg text-left">
+                  <table className="w-full text-sm print:text-base text-left">
                     <thead className="bg-slate-200 text-slate-900 font-bold border-b-2 border-slate-400">
                       <tr>
-                        <th className="p-3 w-12 text-center print:hidden">完成</th>
-                        <th className="p-3 print:p-3 w-40">類別</th>
-                        <th className="p-3 print:p-3 w-1/2">項目名稱</th>
-                        <th className="p-3 print:p-3">進度備註 (Notes)</th>
-                        <th className="p-3 w-12 text-center print:hidden">刪除</th>
+                        <th className="p-2.5 w-12 text-center print:hidden">完成</th>
+                        <th className="p-2.5 print:p-2.5 w-36">類別</th>
+                        <th className="p-2.5 print:p-2.5 w-1/2">項目名稱</th>
+                        <th className="p-2.5 print:p-2.5">進度備註 (Notes)</th>
+                        <th className="p-2.5 w-12 text-center print:hidden">刪除</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-300">
@@ -569,7 +569,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
 
                         return (
                           <tr key={i} className={isChecked ? 'bg-emerald-50/50' : ''}>
-                            <td className="p-3 text-center print:hidden">
+                            <td className="p-2.5 text-center print:hidden">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
@@ -577,12 +577,12 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                                 className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
                               />
                             </td>
-                            {/* 類別：取消粗體 (font-normal) */}
-                            <td className="p-3 print:p-3 font-normal">
+                            {/* 類別 (取消粗體 font-normal) */}
+                            <td className="p-2.5 print:p-2.5 font-normal">
                               <select
                                 value={item.type || '進廠維修'}
                                 onChange={(e) => handleTypeChange(i, e.target.value)}
-                                className="p-1 border rounded text-base bg-white text-slate-900 font-normal print:hidden focus:ring-1 focus:ring-blue-500"
+                                className="p-1 border rounded text-sm bg-white text-slate-900 font-normal print:hidden focus:ring-1 focus:ring-blue-500"
                               >
                                 <option value="進廠維修">進廠維修</option>
                                 <option value="更換零件">更換零件</option>
@@ -591,34 +591,34 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                                 <option value="收費項目">收費項目</option>
                                 <option value="Recall項目">Recall項目</option>
                               </select>
-                              <span className="hidden print:inline-block px-3 py-1 bg-slate-100 text-slate-900 rounded border border-slate-400 text-base font-normal">
+                              <span className="hidden print:inline-block px-2.5 py-0.5 bg-slate-100 text-slate-900 rounded border border-slate-400 text-sm print:text-sm font-normal">
                                 {item.type || '進廠維修'}
                               </span>
                             </td>
-                            {/* 項目名稱：取消粗體 (font-normal) */}
-                            <td className="p-3 print:p-3 font-normal">
+                            {/* 項目名稱 (取消粗體 font-normal) */}
+                            <td className="p-2.5 print:p-2.5 font-normal">
                               <input
                                 type="text"
                                 value={item.item_name || ''}
                                 onChange={(e) => handleItemNameChange(i, e.target.value)}
                                 placeholder="項目名稱..."
-                                className={`w-full p-1 border rounded text-base bg-white text-slate-900 font-normal print:hidden focus:ring-1 focus:ring-blue-500 ${isChecked ? 'line-through text-gray-400' : ''}`}
+                                className={`w-full p-1 border rounded text-sm bg-white text-slate-900 font-normal print:hidden focus:ring-1 focus:ring-blue-500 ${isChecked ? 'line-through text-gray-400' : ''}`}
                               />
                               <span className={`hidden print:inline-block font-normal ${isChecked ? 'line-through text-gray-400' : 'text-slate-900'}`}>
                                 {item.item_name}
                               </span>
                             </td>
-                            {/* 進度備註：取消粗體 (font-normal) */}
-                            <td className="p-3 print:p-2.5">
+                            {/* 進度備註 (取消粗體 font-normal) */}
+                            <td className="p-2.5 print:p-2">
                               <input
                                 type="text"
                                 value={item.notes || ''}
                                 onChange={(e) => handleNoteChange(i, e.target.value)}
                                 placeholder="輸入工程進度..."
-                                className="note-input w-full p-1 border-b border-slate-400 print:border-b-2 print:border-slate-800 rounded-none text-base print:text-lg font-normal bg-transparent focus:outline-none focus:border-blue-600"
+                                className="note-input w-full p-1 border-b border-slate-400 print:border-b-2 print:border-slate-800 rounded-none text-sm print:text-base font-normal bg-transparent focus:outline-none focus:border-blue-600"
                               />
                             </td>
-                            <td className="p-3 text-center print:hidden">
+                            <td className="p-2.5 text-center print:hidden">
                               <button
                                 type="button"
                                 onClick={() => handleRemoveItem(i)}
@@ -634,18 +634,18 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   </table>
                 </div>
               ) : (
-                <p className="text-base text-gray-400 italic py-2">無詳細明細項目，可點擊右上角按鈕新增</p>
+                <p className="text-sm text-gray-400 italic py-2">無詳細明細項目，可點擊右上角按鈕新增</p>
               )}
             </div>
 
             {/* 4. 簽核與結案欄位 */}
             {selectedOrder.status?.toLowerCase() !== 'completed' && (
-              <div className="border-t pt-3 space-y-2 bg-slate-50 print:bg-white p-4 print:p-0 rounded-xl border-slate-200 print:hidden">
-                <h4 className="text-base font-bold text-slate-800 uppercase tracking-wider">✍️ 工單完工簽核與結案設定 (提交後正式結案)</h4>
+              <div className="border-t pt-3 space-y-2 bg-slate-50 print:bg-white p-3 print:p-0 rounded-xl border-slate-200 print:hidden">
+                <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider">✍️ 工單完工簽核與結案設定 (提交後正式結案)</h4>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">簽核完成日期 *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">簽核完成日期 *</label>
                     <input
                       type="date"
                       value={completedDateInput}
@@ -653,25 +653,25 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                         setCompletedDateInput(e.target.value);
                         triggerAutoSave({ completed_date: e.target.value });
                       }}
-                      className="w-full p-2 border rounded-lg text-base text-black bg-white focus:ring-2 focus:ring-blue-500"
+                      className="w-full p-2 border rounded-lg text-sm text-black bg-white focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">簽核員工姓名</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">簽核員工姓名</label>
                     <input
                       type="text"
                       value={staffNameInput}
                       onChange={(e) => setStaffNameInput(e.target.value)}
                       placeholder=""
-                      className="w-full p-2 border rounded-lg text-base text-black bg-white focus:ring-2 focus:ring-blue-500"
+                      className="w-full p-2 border rounded-lg text-sm text-black bg-white focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* 列印專屬簽名欄 (放大字體 text-base / text-lg) */}
-            <div className="hidden print:grid grid-cols-2 gap-x-8 gap-y-6 pt-6 print:pt-6 text-base print:text-lg font-bold border-t-2 border-slate-500 min-h-[150px] print:min-h-[170px]">
+            {/* 列印專屬簽名欄 (放大字體) */}
+            <div className="hidden print:grid grid-cols-2 gap-x-6 gap-y-5 pt-6 print:pt-6 text-sm print:text-base font-bold border-t-2 border-slate-500 min-h-[140px] print:min-h-[160px]">
               <div>完工日期：____________________</div>
               <div>維修主管簽署：____________________</div>
               <div>交車日期：____________________</div>
@@ -683,7 +683,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               <button
                 type="button"
                 onClick={handleCloseDetailModal}
-                className="px-5 py-2.5 border rounded-xl text-base font-semibold text-gray-600 hover:bg-gray-100 cursor-pointer"
+                className="px-4 py-2 border rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 cursor-pointer"
               >
                 關閉
               </button>
@@ -692,7 +692,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
                   type="button"
                   disabled={isSubmitting}
                   onClick={handleMarkAsCompleted}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? '提交中...' : '✅ 提交結案 (Mark as Completed)'}
                 </button>
@@ -712,7 +712,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         />
       )}
 
-      {/* 精確的列印媒體查詢與全域 18px 字體設定 */}
+      {/* 精確的列印媒體查詢與字體設定 */}
       <style jsx global>{`
         @media print {
           @page {
@@ -721,7 +721,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           }
           body {
             background-color: white !important;
-            font-size: 18px !important; /* 全域列印基準字級提升至 18px */
+            font-size: 16px !important; /* 全域列印字體調大至 16px */
             color: black !important;
           }
           .print\\:hidden {
