@@ -54,8 +54,8 @@ export default function ProjectAnalyticsModal({
 
     // 常用故障關鍵字分類清單
     const keywordsList = [
-      '煞車', '引擎', '冷氣', '波箱', '電池', '輪胎', '尾板', 
-      '燈光', '漏油', '漏水', '異音', '保養', 'Recall', '避震'
+      '漏電', '引擎', '冷氣', '皮帶', '電池', 'EDSS', '中門', 
+      '尾門', '漏油', '漏水', '異音', '尾踏板', '司機位', '軚油'
     ];
 
     searchVehicles.forEach((vehicle) => {
