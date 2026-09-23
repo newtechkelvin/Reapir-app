@@ -244,6 +244,14 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
         </form>
 
         <div className="flex gap-2 justify-end flex-wrap">
+          <a
+            href="/kanban"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2.5 bg-slate-900 hover:bg-black text-amber-400 border border-amber-500/50 text-sm font-bold rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            🖥️ 開啟全螢幕電視看板
+          </a>
           <button
             type="button"
             onClick={() => setShowAnalyticsModal(true)}
@@ -425,7 +433,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             </div>
 
-            {/* 1. 車輛與合約資訊欄 (全部文字設為 Font 12 / text-xs) */}
+            {/* 1. 車輛與合約資訊欄 */}
             <div className="border border-slate-400 rounded-lg p-3 print:p-2 bg-slate-50/50 print:bg-white space-y-1.5">
               <h4 className="text-xs print:text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1">🚘 車輛與合約基本資訊</h4>
               <div className="grid grid-cols-2 print:grid-cols-3 gap-2 text-xs print:text-xs">
@@ -542,13 +550,13 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             </div>
 
-            {/* 2. 工單狀況敘述 (Font 12 / text-xs) */}
+            {/* 2. 工單狀況敘述 */}
             <div className="space-y-1">
               <h4 className="text-xs print:text-xs font-bold text-gray-800 uppercase tracking-wider">📝 狀況與故障描述</h4>
               <p className="text-xs print:text-xs text-gray-900 bg-gray-50 print:bg-white p-2.5 rounded-lg border border-slate-300 leading-snug">{selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 (Font 12 / text-xs，無粗體) */}
+            {/* 3. 維修項目清單 */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
                 <h4 className="text-xs print:text-xs font-bold text-gray-800 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
@@ -680,7 +688,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
               </div>
             )}
 
-            {/* 列印專屬簽名欄 (Font 12 / text-xs) */}
+            {/* 列印專屬簽名欄 */}
             <div className="hidden print:grid grid-cols-2 gap-x-6 gap-y-4 pt-4 print:pt-4 text-xs print:text-xs font-bold border-t border-slate-500 min-h-[110px] print:min-h-[120px]">
               <div>完工日期：____________________</div>
               <div>維修主管簽署：____________________</div>
@@ -741,7 +749,7 @@ export default function SearchVehicles(props: SearchVehiclesProps) {
           }
           body {
             background-color: white !important;
-            font-size: 12px !important; /* 全域強制縮小為 12px */
+            font-size: 12px !important;
             color: black !important;
           }
           .print\\:hidden {
