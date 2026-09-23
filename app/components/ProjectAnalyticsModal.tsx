@@ -239,7 +239,7 @@ export default function ProjectAnalyticsModal({
           {/* 多次維修車輛排名 */}
           <div className="border rounded-xl p-4 bg-white border-slate-200">
             <h4 className="text-base font-bold text-slate-800 mb-2 flex items-center gap-1.5">
-              ⚠️ 高頻維修車輛名單 (入廠 $\ge 2$ 次)
+              ⚠️ 高頻維修車輛名單
             </h4>
             <div className="max-h-48 overflow-y-auto">
               {analyticsData.repeatVehicles.length === 0 ? (
