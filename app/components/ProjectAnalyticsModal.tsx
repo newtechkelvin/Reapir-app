@@ -268,17 +268,31 @@ export default function ProjectAnalyticsModal({
           {/* 自動文字分析報告 */}
           <div className="border rounded-xl p-4 bg-blue-50/50 border-blue-200 space-y-2">
             <h4 className="text-base font-bold text-blue-950 flex items-center gap-1.5">
-              💡 專案維修數據智慧分析診斷
+              💡 專案維修數據分析
             </h4>
             <div className="text-sm text-slate-700 leading-relaxed space-y-2">
               <p>
                 * 本專案包含 <strong>{analyticsData.totalVehicles}</strong> 架車輛，累計產生 <strong>{analyticsData.totalWorkOrders}</strong> 張工單。平均每車維修入廠天數約為 <strong>{analyticsData.avgDays} 天</strong>。
               </p>
+            {/* 改為顯示 Top 5 最主要故障原因 */}
               {analyticsData.topIssues.length > 0 && (
-                <p>
-                  * 數據顯示，該專案最主要的故障原因為「<strong className="text-blue-800">{analyticsData.topIssues[0][0]}</strong>」（共出現 {analyticsData.topIssues[0][1]} 次），建議針對此相關零組件進行預防性檢查。
-                </p>
+                <div>
+                  <p className="font-semibold text-slate-800 mb-1">
+                    * 數據顯示，該專案最主要的 <strong className="text-blue-800">{analyticsData.topIssues.length} 大故障原因</strong> 為：
+                  </p>
+                  <ul className="list-disc list-inside pl-2 space-y-1 font-medium text-slate-900">
+                    {analyticsData.topIssues.map(([kw, count], idx) => (
+                      <li key={kw}>
+                        第 {idx + 1} 名：「<strong className="text-blue-800">{kw}</strong>」（共出現 <strong className="text-amber-700">{count}</strong> 次）
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    建議針對上述高頻問題進行重點車隊預防性檢查與備料優化。
+                  </p>
+                </div>
               )}
+
               {analyticsData.repeatVehicles.length > 0 && (
                 <p>
                   * 共有 <strong className="text-amber-700">{analyticsData.repeatVehicles.length}</strong> 架車輛有多次入廠紀錄（如車牌 <strong className="text-amber-800">{analyticsData.repeatVehicles[0][0]}</strong>），建議調閱該車詳細履歷進行全面檢修。
