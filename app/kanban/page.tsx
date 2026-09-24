@@ -67,10 +67,10 @@ export default function KanbanDashboardPage() {
 
   // 定義 4 大分類
   const stages = [
-    { key: 'wclaim', label: 'W/CLAIM 待取/無取車日期', color: 'bg-indigo-700', border: 'border-indigo-600' },
-    { key: 'aoshop', label: 'AOSHOP 廠內維修中', color: 'bg-blue-700', border: 'border-blue-600' },
+    { key: 'wclaim', label: '待取車輛', color: 'bg-indigo-700', border: 'border-indigo-600' },
+    { key: 'aoshop', label: '廠內維修中', color: 'bg-blue-700', border: 'border-blue-600' },
     { key: 'outsourced', label: '外判處理中', color: 'bg-purple-700', border: 'border-purple-600' },
-    { key: 'pending_review', label: '待主管確認完工 (Pending Review)', color: 'bg-amber-700', border: 'border-amber-600' },
+    { key: 'pending_review', label: '待主管確認完工 (Pending)', color: 'bg-amber-700', border: 'border-amber-600' },
   ];
 
   // 根據要求精確歸類
@@ -242,9 +242,11 @@ export default function KanbanDashboardPage() {
             className="bg-slate-800 text-slate-200 border border-slate-700 text-xs font-bold px-2.5 py-1.5 rounded-lg focus:outline-none"
           >
             <option value="ALL">📍 所有車房位置</option>
-            <option value="九龍灣">機電 - 九龍灣</option>
+            <option value="九龍灣1/F">機電 - 九龍灣1/F</option>
+            <option value="九龍灣2/F">機電 - 九龍灣2/F</option>
             <option value="屯門">機電 - 屯門</option>
             <option value="柴灣">機電 - 柴灣</option>
+            <option value="芬園">機電 - 芬園</option>
             <option value="小蠔灣">機電 - 小蠔灣</option>
           </select>
 
