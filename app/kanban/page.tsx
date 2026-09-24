@@ -220,7 +220,7 @@ export default function KanbanDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-3 font-sans select-none flex flex-col justify-between overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-white p-3 font-sans select-none flex flex-col justify-between">
       
       {/* 1. 頂部看板控制列與快捷篩選器 */}
       <div className="flex flex-wrap justify-between items-center bg-slate-900/90 px-4 py-2.5 rounded-xl border border-slate-800 backdrop-blur mb-3 gap-3">
@@ -278,7 +278,7 @@ export default function KanbanDashboardPage() {
         </div>
       </div>
 
-      {/* 2. 版面佈局：左側分類 + 右側方形卡片從左至右橫向排列 */}
+      {/* 2. 版面佈局：左側分類固定 + 右側方形卡片多行自動換行 (Flex-Wrap Grid) */}
       <div className="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar">
         {stages.map((stage) => {
           const items = (categorizedVehicles as any)[stage.key] || [];
@@ -288,10 +288,10 @@ export default function KanbanDashboardPage() {
               key={stage.key}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, stage.key)}
-              className="bg-slate-900/80 border border-slate-800 rounded-2xl p-2.5 flex items-stretch gap-3 min-h-[140px] backdrop-blur shadow-md"
+              className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 flex items-stretch gap-3 min-h-[140px] backdrop-blur shadow-md"
             >
               {/* 【左側欄位分類】 */}
-              <div className={`w-48 min-w-[190px] ${stage.color} rounded-xl p-3 flex flex-col justify-between shadow-lg text-white`}>
+              <div className={`w-48 min-w-[190px] ${stage.color} rounded-xl p-3.5 flex flex-col justify-between shadow-lg text-white`}>
                 <div className="space-y-1">
                   <span className="text-[10px] font-extrabold uppercase opacity-80 tracking-widest block">CATEGORY</span>
                   <h3 className="text-base font-black leading-tight">{stage.label}</h3>
@@ -304,8 +304,8 @@ export default function KanbanDashboardPage() {
                 </div>
               </div>
 
-              {/* 【右側方形卡片由左至右橫向排列區】 */}
-              <div className="flex-1 flex items-center gap-3 overflow-x-auto pb-1 pt-0.5 custom-scrollbar">
+              {/* 【右側方形卡片區：使用 flex-wrap 多行自動換行】 */}
+              <div className="flex-1 flex flex-wrap items-start content-start gap-3 p-1">
                 {items.length === 0 ? (
                   <div className="text-slate-600 text-xs font-bold px-4 py-8 italic border border-dashed border-slate-800 rounded-xl w-full text-center">
                     此分類目前無待處理車輛
@@ -362,7 +362,7 @@ export default function KanbanDashboardPage() {
                           )}
                         </div>
 
-                        {/* 3. 維修項目明細 (代替故障描述) */}
+                        {/* 3. 維修項目明細 */}
                         <p className="text-[11px] text-slate-200 font-bold line-clamp-1 bg-slate-950/70 px-2 py-1 rounded border border-slate-700/60 text-blue-300">
                           🛠️ {itemsSummary}
                         </p>
@@ -517,10 +517,9 @@ export default function KanbanDashboardPage() {
         </div>
       )}
 
-      {/* 自訂滾動條 */}
+      {/* 自訂縱向滾動條 */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
-          height: 6px;
           width: 6px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
