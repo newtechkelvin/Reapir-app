@@ -12,10 +12,25 @@ export default function KanbanDashboardPage() {
   const [selectedGarageFilter, setSelectedGarageFilter] = useState<string>('ALL');
   const [onlyMultipleRepairs, setOnlyMultipleRepairs] = useState<boolean>(false);
 
-  // 彈窗與卡片互動 State
+  // 詳情/備註 Modal
   const [activeCardModal, setActiveCardModal] = useState<{ vehicle: any; order: any } | null>(null);
   const [noteInput, setNoteInput] = useState<string>('');
   const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
+
+  // 強制填寫拖拽資訊 Modal State
+  const [dragPromptModal, setDragPromptModal] = useState<{
+    isOpen: boolean;
+    targetStage: 'aoshop' | 'outsourced' | null;
+    orderId: string;
+    pickupDate: string;
+    contractorName: string;
+  }>({
+    isOpen: false,
+    targetStage: null,
+    orderId: '',
+    pickupDate: new Date().toISOString().split('T')[0],
+    contractorName: '',
+  });
 
   // 擷取看板數據
   const fetchKanbanData = async () => {
@@ -50,20 +65,20 @@ export default function KanbanDashboardPage() {
     }
   };
 
-  // 分類區域定義 (左側分類欄位)
+  // 定義 4 大分類
   const stages = [
-    { key: 'wclaim', label: 'W/CLAIM 待取/待簽', color: 'bg-indigo-700', border: 'border-indigo-600', badge: 'bg-indigo-950 text-indigo-300' },
-    { key: 'aoshop', label: 'AOSHOP 廠內維修中', color: 'bg-blue-700', border: 'border-blue-600', badge: 'bg-blue-950 text-blue-300' },
-    { key: 'booking_bos', label: 'BOOKING / BOS 特殊處理', color: 'bg-purple-700', border: 'border-purple-600', badge: 'bg-purple-950 text-purple-300' },
-    { key: 'pending_review', label: '待主管確認完工 (Pending Review)', color: 'bg-amber-700', border: 'border-amber-600', badge: 'bg-amber-950 text-amber-300' },
+    { key: 'wclaim', label: 'W/CLAIM 待取/無取車日期', color: 'bg-indigo-700', border: 'border-indigo-600' },
+    { key: 'aoshop', label: 'AOSHOP 廠內維修中', color: 'bg-blue-700', border: 'border-blue-600' },
+    { key: 'outsourced', label: '外判處理中', color: 'bg-purple-700', border: 'border-purple-600' },
+    { key: 'pending_review', label: '待主管確認完工 (Pending Review)', color: 'bg-amber-700', border: 'border-amber-600' },
   ];
 
-  // 資料處理與歸類 (自動過濾已完全簽核結案的工單)
+  // 根據要求精確歸類
   const categorizedVehicles = useMemo(() => {
     const list = {
       wclaim: [] as any[],
       aoshop: [] as any[],
-      booking_bos: [] as any[],
+      outsourced: [] as any[],
       pending_review: [] as any[],
     };
 
@@ -74,24 +89,27 @@ export default function KanbanDashboardPage() {
       orders.forEach((wo: any) => {
         const status = (wo.status || '').toLowerCase();
         const loc = (wo.garage_location || wo.location || '').toLowerCase();
+        const pickupDate = wo.pickup_return_date || vehicle.pickup_return_date || '';
 
-        // 條件過濾：完全 Completed / Closed 且已簽核者，直接隱藏不顯示
+        // 已 Completed 者隱藏
         if (status === 'completed' || status === 'closed' || status === '已完工') return;
 
-        // 篩選器條件檢查
+        // 篩選條件
         if (selectedGarageFilter !== 'ALL' && !loc.includes(selectedGarageFilter.toLowerCase())) return;
         if (onlyMultipleRepairs && totalOrders < 2) return;
 
         const itemData = { vehicle, order: wo, totalOrders };
 
-        // 狀態階段歸類
+        // 核心歸類邏輯：
         if (status === 'pending_review' || wo.is_staff_completed) {
           list.pending_review.push(itemData);
-        } else if (loc.includes('claim') || wo.claim_form_date) {
+        } else if (loc.includes('外判') || status === 'outsourced' || status === 'booking') {
+          list.outsourced.push(itemData);
+        } else if (!pickupDate || pickupDate.trim() === '') {
+          // 待取：全部 Open Status 且「無取車日期」的工單
           list.wclaim.push(itemData);
-        } else if (status === 'booking' || loc.includes('bos')) {
-          list.booking_bos.push(itemData);
         } else {
+          // 有取車日期，屬於廠內維修中
           list.aoshop.push(itemData);
         }
       });
@@ -100,35 +118,35 @@ export default function KanbanDashboardPage() {
     return list;
   }, [vehicles, selectedGarageFilter, onlyMultipleRepairs]);
 
-  // 更新工單狀態 API
-  const updateOrderStatus = async (orderId: string, newStatus: string, extraData: any = {}) => {
+  // 更新工單 Database PATCH
+  const updateOrderStatus = async (orderId: string, payload: any) => {
     try {
       const res = await fetch(`/api/work-orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus, ...extraData }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         fetchKanbanData();
       }
     } catch (err) {
-      console.error('更新狀態失敗:', err);
+      console.error('更新資料庫失敗:', err);
     }
   };
 
-  // 1. 同事標示「同事已完成」
+  // 1. 同事標示已完成
   const handleStaffMarkComplete = (orderId: string) => {
-    updateOrderStatus(orderId, 'pending_review', { is_staff_completed: true });
+    updateOrderStatus(orderId, { status: 'pending_review', is_staff_completed: true });
   };
 
-  // 2. 主管點擊「確認完工」 (工單消失於畫面)
+  // 2. 主管確認完工 (隱藏卡片)
   const handleSupervisorConfirm = (orderId: string) => {
     if (confirm('確定主管確認無誤？確認後此工單將從看板中移除並標示為 Completed。')) {
-      updateOrderStatus(orderId, 'Completed', { is_staff_completed: true });
+      updateOrderStatus(orderId, { status: 'Completed', is_staff_completed: true });
     }
   };
 
-  // 修正版 HTML5 拖拽事件 (修復無法拖拽問題)
+  // 拖拽 Handle
   const handleDragStart = (e: React.DragEvent, orderId: string) => {
     e.dataTransfer.setData('text/plain', orderId);
     e.dataTransfer.effectAllowed = 'move';
@@ -145,12 +163,60 @@ export default function KanbanDashboardPage() {
     const orderId = e.dataTransfer.getData('text/plain') || draggedOrderId;
     if (!orderId) return;
 
-    let targetStatus = 'Open';
-    if (stageKey === 'pending_review') targetStatus = 'pending_review';
-    else if (stageKey === 'booking_bos') targetStatus = 'booking';
-    
-    updateOrderStatus(orderId, targetStatus);
+    if (stageKey === 'aoshop') {
+      // 拖到廠內維修：強制彈窗填取車日期
+      setDragPromptModal({
+        isOpen: true,
+        targetStage: 'aoshop',
+        orderId,
+        pickupDate: new Date().toISOString().split('T')[0],
+        contractorName: '',
+      });
+    } else if (stageKey === 'outsourced') {
+      // 拖到外判處理：強制彈窗填取車日期與外判商
+      setDragPromptModal({
+        isOpen: true,
+        targetStage: 'outsourced',
+        orderId,
+        pickupDate: new Date().toISOString().split('T')[0],
+        contractorName: '',
+      });
+    } else if (stageKey === 'wclaim') {
+      // 拖回待取：清空取車日期
+      updateOrderStatus(orderId, { status: 'Open', pickup_return_date: '' });
+    } else if (stageKey === 'pending_review') {
+      updateOrderStatus(orderId, { status: 'pending_review', is_staff_completed: true });
+    }
     setDraggedOrderId(null);
+  };
+
+  // 送出強制彈窗資料至 Database
+  const handleSaveDragPrompt = () => {
+    const { targetStage, orderId, pickupDate, contractorName } = dragPromptModal;
+    if (!pickupDate) {
+      alert('請填寫取車/回廠日期！');
+      return;
+    }
+
+    if (targetStage === 'aoshop') {
+      updateOrderStatus(orderId, {
+        status: 'Open',
+        pickup_return_date: pickupDate,
+        vehicle_location: '工場',
+      });
+    } else if (targetStage === 'outsourced') {
+      if (!contractorName.trim()) {
+        alert('請填寫外判處理名稱/廠商！');
+        return;
+      }
+      updateOrderStatus(orderId, {
+        status: 'booking',
+        pickup_return_date: pickupDate,
+        garage_location: `外判 - ${contractorName.trim()}`,
+      });
+    }
+
+    setDragPromptModal({ isOpen: false, targetStage: null, orderId: '', pickupDate: '', contractorName: '' });
   };
 
   return (
@@ -161,7 +227,7 @@ export default function KanbanDashboardPage() {
         <div className="flex items-center gap-3">
           <span className="text-2xl">🖥️</span>
           <h1 className="text-xl font-black tracking-wider text-amber-400">
-            車輛維修動態看板 (橫向卡片流向版)
+            車輛維修動態看板 (廠內/外判即時控制台)
           </h1>
           <span className="bg-red-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold animate-pulse">
             LIVE 24H
@@ -212,7 +278,7 @@ export default function KanbanDashboardPage() {
         </div>
       </div>
 
-      {/* 2. 全新版面佈局：左側欄位分類 + 右側方形卡片從左至右橫向排列 */}
+      {/* 2. 版面佈局：左側分類 + 右側方形卡片從左至右橫向排列 */}
       <div className="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar">
         {stages.map((stage) => {
           const items = (categorizedVehicles as any)[stage.key] || [];
@@ -249,6 +315,12 @@ export default function KanbanDashboardPage() {
                     const isMultipleRepairs = totalOrders >= 2;
                     const isPendingReview = stage.key === 'pending_review';
 
+                    // 抓取工單內所有的維修項目名稱
+                    const rawItems = order.work_order_items || order.items || [];
+                    const itemsSummary = rawItems.length > 0
+                      ? rawItems.map((i: any) => i.item_name).filter(Boolean).join('、')
+                      : order.description || '進廠維修';
+
                     return (
                       <div
                         key={order.id || idx}
@@ -266,19 +338,21 @@ export default function KanbanDashboardPage() {
                             : 'border-slate-700'
                         } rounded-xl p-2.5 shadow-lg flex flex-col justify-between relative hover:scale-[1.02] hover:border-blue-400 transition-all cursor-grab active:cursor-grabbing`}
                       >
-                        {/* 1. 卡片頂部：品牌與日期 */}
+                        {/* 1. 卡片頂部：品牌與取車/回廠日期 */}
                         <div className="flex justify-between items-center text-[10px] text-slate-400">
                           <span className="bg-slate-700 text-slate-200 px-1.5 py-0.5 rounded font-bold">
                             {vehicle.brand || 'FUSO'} {vehicle.model ? `• ${vehicle.model}` : ''}
                           </span>
-                          {order.claim_form_date && (
-                            <span className="text-amber-400 font-extrabold">
-                              {order.claim_form_date.slice(5)}
+                          {order.pickup_return_date ? (
+                            <span className="text-emerald-400 font-extrabold">
+                              📅 取車: {order.pickup_return_date.slice(5)}
                             </span>
+                          ) : (
+                            <span className="text-amber-400 font-extrabold">未設定取車日</span>
                           )}
                         </div>
 
-                        {/* 2. 車牌號碼與警示 */}
+                        {/* 2. 車牌號碼與多次報修警示 */}
                         <div className="text-xl font-black tracking-tight text-white my-0.5 flex items-center justify-between">
                           <span>{vehicle.plate_number}</span>
                           {isMultipleRepairs && (
@@ -288,15 +362,15 @@ export default function KanbanDashboardPage() {
                           )}
                         </div>
 
-                        {/* 3. 故障簡述 */}
-                        <p className="text-[11px] text-slate-300 font-medium line-clamp-1 bg-slate-950/60 px-2 py-1 rounded border border-slate-700/50">
-                          {order.description || '進廠檢查與維修'}
+                        {/* 3. 維修項目明細 (代替故障描述) */}
+                        <p className="text-[11px] text-slate-200 font-bold line-clamp-1 bg-slate-950/70 px-2 py-1 rounded border border-slate-700/60 text-blue-300">
+                          🛠️ {itemsSummary}
                         </p>
 
-                        {/* 4. 底部操作按鈕區 */}
+                        {/* 4. 底部位置與操作按鈕區 */}
                         <div className="flex justify-between items-center pt-1 border-t border-slate-700/60">
                           <span className="text-[10px] text-slate-400 truncate max-w-[90px]">
-                            📍 {order.garage_location || '機電1/F'}
+                            📍 {order.vehicle_location || order.garage_location || '機電1/F'}
                           </span>
 
                           {!isPendingReview ? (
@@ -331,7 +405,64 @@ export default function KanbanDashboardPage() {
         })}
       </div>
 
-      {/* 3. 卡片點擊快速預覽與新增備註 Modal */}
+      {/* 3. 強制填寫資料 Modal (拖拽落欄位時彈出) */}
+      {dragPromptModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 text-black">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-black text-slate-900 border-b pb-2">
+              📝 請補充工單狀態資料
+            </h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  取車 / 回廠日期 *
+                </label>
+                <input
+                  type="date"
+                  value={dragPromptModal.pickupDate}
+                  onChange={(e) => setDragPromptModal({ ...dragPromptModal, pickupDate: e.target.value })}
+                  className="w-full p-2 border rounded-lg text-sm text-black bg-slate-50 focus:ring-2 focus:ring-blue-500 font-bold"
+                />
+              </div>
+
+              {dragPromptModal.targetStage === 'outsourced' && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    外判處理廠商 / 單位名稱 *
+                  </label>
+                  <input
+                    type="text"
+                    value={dragPromptModal.contractorName}
+                    onChange={(e) => setDragPromptModal({ ...dragPromptModal, contractorName: e.target.value })}
+                    placeholder="例如：冷氣專科車房 / 大昌行"
+                    className="w-full p-2 border rounded-lg text-sm text-black bg-slate-50 focus:ring-2 focus:ring-blue-500 font-bold"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setDragPromptModal({ isOpen: false, targetStage: null, orderId: '', pickupDate: '', contractorName: '' })}
+                className="px-4 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-300"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDragPrompt}
+                className="px-5 py-2 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-md hover:bg-blue-700"
+              >
+                確認並同步至 Database
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. 卡片點擊詳情 Modal */}
       {activeCardModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 text-black">
           <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
@@ -350,6 +481,7 @@ export default function KanbanDashboardPage() {
             <div className="space-y-2 text-xs text-slate-700">
               <p>工單編號：<strong className="text-blue-900">{activeCardModal.order.order_number || 'WO-未知'}</strong></p>
               <p>車輛專案：<strong>{activeCardModal.vehicle.project || '未設定'}</strong></p>
+              <p>車輛位置：<strong>{activeCardModal.order.vehicle_location || '未設定'}</strong></p>
               <p>故障敘述：<strong>{activeCardModal.order.description || '無描述'}</strong></p>
             </div>
 
@@ -373,9 +505,7 @@ export default function KanbanDashboardPage() {
               </button>
               <button
                 onClick={() => {
-                  updateOrderStatus(activeCardModal.order.id, activeCardModal.order.status || 'Open', {
-                    notes: noteInput,
-                  });
+                  updateOrderStatus(activeCardModal.order.id, { notes: noteInput });
                   setActiveCardModal(null);
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-md hover:bg-blue-700"
@@ -387,7 +517,7 @@ export default function KanbanDashboardPage() {
         </div>
       )}
 
-      {/* 自訂橫向與縱向滾動條樣式 */}
+      {/* 自訂滾動條 */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
           height: 6px;
