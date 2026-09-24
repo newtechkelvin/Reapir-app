@@ -19,8 +19,10 @@ export default function WorkOrdersSummary({
 
   // 對齊「車輛維修工單 (Repair Job Sheet)」Modal 狀態
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
-  const [editLocation, setEditLocation] = useState('機電 - 九龍灣1/F');
-  const [editSpot, setEditSpot] = useState('');
+  const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
+
+  const [editGarageLocation, setEditGarageLocation] = useState('');
+  const [editVehicleLocation, setEditVehicleLocation] = useState('');
   const [editPickupReturnDate, setEditPickupReturnDate] = useState('');
   const [editClaimDate, setEditClaimDate] = useState('');
   const [editCompletedDate, setEditCompletedDate] = useState('');
@@ -28,7 +30,7 @@ export default function WorkOrdersSummary({
   const [editItems, setEditItems] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 所有報表統計均直接使用統一 availability 計算，不再使用舊版 fallback。
+  // 計算可用率與停修天數
   const getVehicleStats = (vehicle: any) => {
     const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
     const calculation = calculateAvailability(vehicle);
@@ -81,14 +83,14 @@ export default function WorkOrdersSummary({
     0
   );
 
-  // 對數報表：只顯示目前有效期間本身觸發展延的政府車輛。
+  // 對數報表車輛清單
   const lowAvailabilityVehicles = (vehicles || [])
     .filter((v: any) => (v.warranty_type || 'government').toLowerCase() === 'government')
     .map((v: any) => ({ ...v, stats: getVehicleStats(v) }))
     .filter((v: any) => v.stats.periodTriggered && v.stats.availability !== null && v.stats.availability < 95)
     .sort((a: any, b: any) => (b.stats.totalOpenDays ?? 0) - (a.stats.totalOpenDays ?? 0));
 
-  // 專屬列印對數報表函數（防止影響工單 Job Sheet 列印）
+  // 列印對數報表 (加上類別觸發)
   const handlePrintWarrantyReport = () => {
     if (lowAvailabilityVehicles.length === 0) {
       alert('目前沒有符合展延條件（可用率 < 95%）的車輛報表可列印。');
@@ -98,6 +100,15 @@ export default function WorkOrdersSummary({
     window.print();
     setTimeout(() => {
       document.body.classList.remove('printing-warranty-report');
+    }, 1000);
+  };
+
+  // 列印單張工單 Job Sheet (與 SearchVehicles 一致)
+  const handlePrintJobSheet = () => {
+    document.body.classList.add('printing-job-sheet');
+    window.print();
+    setTimeout(() => {
+      document.body.classList.remove('printing-job-sheet');
     }, 1000);
   };
 
@@ -140,13 +151,21 @@ export default function WorkOrdersSummary({
     })
     .sort((a: any, b: any) => b.stats.openCount - a.stats.openCount || b.stats.totalOpenDays - a.stats.totalOpenDays);
 
-  // 開啟工單明細 Modal
-  const handleOpenDetailModal = (order: any) => {
+  // 判斷是否為散車
+  const isSanCheOrder = (wo: any, vehicle: any) => {
+    const wType = (wo?.warranty_type || vehicle?.warranty_type || '').toString().toLowerCase();
+    const project = (vehicle?.project || wo?.project || '').toString().toLowerCase();
+    return wType === 'general' || wType === '散車' || project.includes('散車');
+  };
+
+  // 開啟工單明細 Modal (完美對齊 SearchVehicles)
+  const handleOpenDetailModal = (vehicle: any, order: any) => {
+    setSelectedVehicle(vehicle);
     setSelectedOrder(order);
-    setEditLocation(order.garage_location || order.location || '機電 - 九龍灣1/F');
-    setEditSpot(order.vehicle_spot || '');
-    setEditPickupReturnDate(order.pickup_return_date || '');
-    setEditClaimDate(order.claim_form_date || '');
+    setEditGarageLocation(order.garage_location || order.location || vehicle.garage_location || vehicle.location || '');
+    setEditVehicleLocation(order.vehicle_location || vehicle.vehicle_location || '');
+    setEditPickupReturnDate(order.pickup_return_date || vehicle.pickup_return_date || '');
+    setEditClaimDate(order.claim_form_date || vehicle.claim_form_date || '');
     setEditCompletedDate(order.completed_date || '');
     setEditDescription(order.description || '');
 
@@ -157,7 +176,7 @@ export default function WorkOrdersSummary({
         rawItems = JSON.parse(rawItems);
       } catch (e) {
         rawItems = rawItems.split(';').map((str: string) => ({
-          completed: true,
+          is_completed: true,
           type: '進廠維修',
           item_name: str.trim(),
           notes: '舊保單批次自動匯入',
@@ -166,32 +185,22 @@ export default function WorkOrdersSummary({
     }
 
     if (Array.isArray(rawItems) && rawItems.length > 0) {
-      const parsed = rawItems.map((it: any) => {
-        if (typeof it === 'string') {
-          return {
-            completed: true,
-            type: '進廠維修',
-            item_name: it,
-            notes: '舊保單批次自動匯入',
-          };
-        }
-        return {
-          completed: it.completed ?? true,
-          type: it.type || '進廠維修',
-          item_name: it.item_name || it.name || '',
-          notes: it.notes || '舊保單批次自動匯入',
-        };
-      });
+      const parsed = rawItems.map((it: any) => ({
+        is_completed: it.is_completed ?? it.completed ?? false,
+        type: it.type || '進廠維修',
+        item_name: it.item_name || it.name || '',
+        notes: it.notes || '',
+      }));
       setEditItems(parsed);
     } else {
-      setEditItems([{ completed: false, type: '進廠維修', item_name: '', notes: '' }]);
+      setEditItems([{ is_completed: false, type: '進廠維修', item_name: '', notes: '' }]);
     }
   };
 
   const handleAddItem = () => {
     setEditItems([
       ...editItems,
-      { completed: false, type: '進廠維修', item_name: '', notes: '' },
+      { is_completed: false, type: '進廠維修', item_name: '', notes: '' },
     ]);
   };
 
@@ -217,8 +226,8 @@ export default function WorkOrdersSummary({
     try {
       setIsSaving(true);
       const payload = {
-        garage_location: editLocation || null,
-        vehicle_location: editSpot || null,
+        garage_location: editGarageLocation || null,
+        vehicle_location: editVehicleLocation || null,
         pickup_return_date: editPickupReturnDate.trim() ? editPickupReturnDate : null,
         claim_form_date: editClaimDate.trim() ? editClaimDate : null,
         completed_date: editCompletedDate.trim() ? editCompletedDate : null,
@@ -226,7 +235,7 @@ export default function WorkOrdersSummary({
         description: editDescription || '',
         items: editItems
           .map((item) => ({
-            completed: Boolean(item.completed),
+            is_completed: Boolean(item.is_completed),
             type: item.type || '進廠維修',
             item_name: String(item.item_name || '').trim(),
             notes: String(item.notes || '').trim(),
@@ -243,6 +252,7 @@ export default function WorkOrdersSummary({
       if (res.ok) {
         alert('工單更新成功！');
         setSelectedOrder(null);
+        setSelectedVehicle(null);
         onRefresh();
       } else {
         const errorData = await res.json().catch(() => null);
@@ -257,7 +267,7 @@ export default function WorkOrdersSummary({
 
   return (
     <div className="space-y-6 text-black">
-      {/* 搜尋與頂部工具列 (已補上專屬列印對數報表按鈕) */}
+      {/* 搜尋與頂部工具列 */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
         <div className="flex-1 w-full flex items-center gap-3">
           <input
@@ -409,7 +419,7 @@ export default function WorkOrdersSummary({
 
                         <button
                           type="button"
-                          onClick={() => handleOpenDetailModal(wo)}
+                          onClick={() => handleOpenDetailModal(vehicle, wo)}
                           className="text-blue-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5 whitespace-nowrap shrink-0 border-0 bg-transparent"
                         >
                           檢視明細 &rarr;
@@ -424,240 +434,271 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* 「車輛維修工單 (Repair Job Sheet)」Modal */}
+      {/* 完全對齊 SearchVehicles 的「車輛維修工單 (Repair Job Sheet)」Modal 視窗 */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto">
-            <div className="text-center space-y-1 pb-2">
-              <h2 className="text-xl font-black text-slate-900 tracking-wide">
-                新力機械有限公司
-              </h2>
-              <p className="text-[11px] text-gray-500 font-bold tracking-widest uppercase">
-                NEW TECH MOTOR ENGINEERING LIMITED
-              </p>
-              <div className="bg-slate-100 py-1 px-4 rounded-lg inline-block border border-slate-200 mt-1">
-                <span className="text-sm font-black text-slate-800">
-                  車輛維修工單 (Repair Job Sheet)
-                </span>
-              </div>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 job-sheet-modal-container">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto print-job-sheet-content">
+            
+            {/* 保留 Header 特大標題 */}
+            <div className="text-center border-b-2 border-slate-900 pb-2">
+              <h1 className="text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
+              <p className="text-xs text-slate-800 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
+              <p className="text-sm font-extrabold text-blue-950 mt-1 bg-slate-100 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
             </div>
 
-            <hr className="border-slate-800 border-t-2" />
-
-            <div className="flex flex-wrap justify-between items-center gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-black text-blue-900 flex items-center gap-1">
-                  📋 {selectedOrder.woNum}
-                </span>
-                <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-black px-2.5 py-0.5 rounded-full">
+            {/* Header 控制區 */}
+            <div className="flex justify-between items-center border-b pb-2 print:hidden">
+              <div className="flex items-center gap-3">
+                <span className="font-bold text-blue-900 text-lg">📋 {selectedOrder.order_number || selectedOrder.woNum || 'WO-未知'}</span>
+                <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${selectedOrder.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                   狀態: {selectedOrder.status || 'Open'}
                 </span>
+                {isSanCheOrder(selectedOrder, selectedVehicle) && (
+                  <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                    🚗 散車工單
+                  </span>
+                )}
               </div>
-
-              <div className="flex items-center gap-2">
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedOrder(null)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold cursor-pointer px-1"
+                  onClick={handlePrintJobSheet}
+                  className="px-3.5 py-1 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg cursor-pointer shadow-sm"
+                >
+                  🖨️ 列印此工單
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedOrder(null);
+                    setSelectedVehicle(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-700 text-xl font-bold px-2 cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 space-y-3">
-              <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5 border-b pb-2 border-slate-200">
-                🚘 車輛與合約基本資訊
-              </h3>
+            {/* 1. 車輛與合約資訊欄 (7 個完整車房選項與完整欄位) */}
+            <div className="border border-slate-400 rounded-lg p-3 bg-slate-50/50 space-y-1.5">
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1">🚘 車輛與合約基本資訊</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                <div><span className="text-gray-600">工單編號：</span><strong className="text-blue-900 font-bold">{selectedOrder.order_number || selectedOrder.woNum || 'WO-未知'}</strong></div>
+                <div><span className="text-gray-600">車牌號碼：</span><strong className="text-blue-900 font-bold">{selectedVehicle?.plate_number || selectedOrder.vehiclePlate || '未設定'}</strong></div>
+                <div><span className="text-gray-600">車輛品牌：</span><strong className="text-slate-900">{selectedVehicle?.brand || selectedOrder.vehicleBrand || '未設定'}</strong></div>
+                <div><span className="text-gray-600">車輛型號：</span><strong className="text-slate-900">{selectedVehicle?.model || selectedOrder.vehicleModel || '未設定'}</strong></div>
+                <div><span className="text-gray-600">VIN 碼：</span><strong className="text-slate-900">{selectedVehicle?.vin || selectedOrder.vehicleVin || '無'}</strong></div>
+                <div><span className="text-gray-600">專案名稱：</span><strong className="text-slate-900">{selectedVehicle?.project || selectedOrder.vehicleProject || '未設定'}</strong></div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-gray-500 font-bold">工單編號 :</span>
-                  <p className="font-black text-slate-900 text-sm mt-0.5">{selectedOrder.woNum}</p>
-                </div>
-
-                <div>
-                  <span className="text-gray-500 font-bold">車牌號碼 :</span>
-                  <p className="font-black text-blue-900 text-sm mt-0.5">{selectedOrder.vehiclePlate}</p>
-                </div>
-
-                <div>
-                  <span className="text-gray-500 font-bold">車輛品牌 :</span>
-                  <p className="font-bold text-slate-800 mt-0.5">{selectedOrder.vehicleBrand}</p>
-                </div>
-
-                <div>
-                  <span className="text-gray-500 font-bold">車類型號 :</span>
-                  <p className="font-bold text-slate-800 mt-0.5">{selectedOrder.vehicleModel}</p>
-                </div>
-
-                <div>
-                  <span className="text-gray-500 font-bold">VIN 碼 :</span>
-                  <p className="font-bold text-slate-800 mt-0.5">{selectedOrder.vehicleVin}</p>
-                </div>
-
-                <div>
-                  <span className="text-gray-500 font-bold">專案名稱 :</span>
-                  <p className="font-bold text-slate-800 mt-0.5">{selectedOrder.vehicleProject}</p>
-                </div>
-
-                <div>
-                  <label className="block text-gray-500 font-bold mb-1">車房位置 :</label>
-                  <select
-                    value={editLocation}
-                    onChange={(e) => setEditLocation(e.target.value)}
-                    className="w-full p-2 border rounded-xl font-bold bg-white border-slate-300"
-                  >
-                    <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
-                    <option value="機電 - 屯門">機電 - 屯門</option>
-                    <option value="機電 - 葵涌">機電 - 葵涌</option>
-                    <option value="外部車房">外部車房</option>
-                  </select>
-                </div>
+                {isSanCheOrder(selectedOrder, selectedVehicle) ? (
+                  <div>
+                    <label className="text-gray-600 block font-semibold print:hidden">取車位置：</label>
+                    <input
+                      type="text"
+                      value={editGarageLocation}
+                      onChange={(e) => setEditGarageLocation(e.target.value)}
+                      placeholder="院舍 / 客人自行送廠"
+                      className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                    />
+                    <div className="hidden print:block"><span className="text-gray-600">取車位置：</span><strong className="text-slate-900">{editGarageLocation || '未設定'}</strong></div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-gray-600 block font-semibold print:hidden">車房位置：</label>
+                    <select
+                      value={editGarageLocation}
+                      onChange={(e) => setEditGarageLocation(e.target.value)}
+                      className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">-- 請選擇車房位置 --</option>
+                      <option value="機電 - 九龍灣1/F">機電 - 九龍灣1/F</option>
+                      <option value="機電 - 九龍灣2/F">機電 - 九龍灣2/F</option>
+                      <option value="機電 - 屯門">機電 - 屯門</option>
+                      <option value="機電 - 小蠔灣">機電 - 小蠔灣</option>
+                      <option value="機電 - 柴灣">機電 - 柴灣</option>
+                      <option value="機電 - 芬園">機電 - 芬園</option>
+                      <option value="車行">車行</option>
+                    </select>
+                    <div className="hidden print:block"><span className="text-gray-600">車房位置：</span><strong className="text-slate-900">{editGarageLocation || '未設定'}</strong></div>
+                  </div>
+                )}
 
                 <div>
-                  <label className="block text-gray-500 font-bold mb-1">車輛位置 :</label>
+                  <label className="text-gray-600 block font-semibold print:hidden">車輛位置：</label>
                   <input
                     type="text"
-                    value={editSpot}
-                    onChange={(e) => setEditSpot(e.target.value)}
+                    value={editVehicleLocation}
+                    onChange={(e) => setEditVehicleLocation(e.target.value)}
                     placeholder="例如：停泊位 B2"
-                    className="w-full p-2 border rounded-xl font-semibold bg-white border-slate-300"
+                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
                   />
+                  <div className="hidden print:block"><span className="text-gray-600">車輛位置：</span><strong className="text-slate-900">{editVehicleLocation || '未設定'}</strong></div>
                 </div>
 
                 <div>
-                  <label className="block text-gray-500 font-bold mb-1">取車/回廠日期 :</label>
+                  <label className="text-gray-600 block font-semibold print:hidden">取車/回廠日期：</label>
                   <input
                     type="date"
                     value={editPickupReturnDate}
                     onChange={(e) => setEditPickupReturnDate(e.target.value)}
-                    className="w-full p-2 border rounded-xl font-semibold bg-white border-slate-300"
+                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
                   />
+                  <div className="hidden print:block"><span className="text-gray-600">取車/回廠日期：</span><strong className="text-slate-900">{editPickupReturnDate || '未設定'}</strong></div>
                 </div>
 
                 <div>
-                  <label className="block text-gray-500 font-bold mb-1">Claim Form 日期 :</label>
+                  <label className="text-gray-600 block font-semibold print:hidden">
+                    {isSanCheOrder(selectedOrder, selectedVehicle) ? '維修通知日期：' : 'Claim Form 日期：'}
+                  </label>
                   <input
                     type="date"
                     value={editClaimDate}
                     onChange={(e) => setEditClaimDate(e.target.value)}
-                    className="w-full p-2 border rounded-xl font-semibold bg-white border-slate-300"
+                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-white"
                   />
+                  <div className="hidden print:block">
+                    <span className="text-gray-600">{isSanCheOrder(selectedOrder, selectedVehicle) ? '維修通知日期：' : 'Claim Form 日期：'}</span>
+                    <strong className="text-slate-900">{editClaimDate || '未設定'}</strong>
+                  </div>
                 </div>
 
-                <div className="col-span-1 md:col-span-2">
-                  <label className="block text-gray-500 font-bold mb-1">完成維修/交車日期 :</label>
+                <div>
+                  <label className="text-gray-600 block font-semibold print:hidden">完成維修/交車日期：</label>
                   <input
                     type="date"
                     value={editCompletedDate}
                     onChange={(e) => setEditCompletedDate(e.target.value)}
-                    className="w-full p-2 border rounded-xl font-semibold bg-emerald-50 border-emerald-300 text-emerald-900"
+                    className="w-full p-1 border border-slate-300 rounded text-xs print:hidden font-bold focus:ring-1 focus:ring-blue-500 bg-emerald-50 text-emerald-900"
                   />
+                  <div className="hidden print:block">
+                    <span className="text-gray-600">完成維修/交車日期：</span>
+                    <strong className="text-emerald-700">{editCompletedDate || '____________________'}</strong>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                📝 狀況與故障描述
-              </h3>
-              <textarea
-                rows={2}
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="請輸入故障說明描述..."
-                className="w-full p-3 border rounded-2xl text-xs font-semibold bg-slate-50 border-slate-200 text-slate-800 focus:bg-white"
-              />
+            {/* 2. 工單狀況敘述 */}
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">📝 狀況與故障描述</h4>
+              <p className="text-xs text-gray-900 bg-gray-50 p-2.5 rounded-lg border border-slate-300 leading-snug">{editDescription || selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            <div className="space-y-2">
+            {/* 3. 維修項目清單 (6 個完整類別選項) */}
+            <div className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                  🛠️ 維修與零件項目明細
-                </h3>
+                <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
                 <button
                   type="button"
                   onClick={handleAddItem}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1"
+                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-2xs print:hidden cursor-pointer flex items-center gap-1"
                 >
                   + 新增維修項目
                 </button>
               </div>
 
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
-                    <tr>
-                      <th className="p-2.5 text-center w-12">完成</th>
-                      <th className="p-2.5 w-32">類別</th>
-                      <th className="p-2.5">項目名稱</th>
-                      <th className="p-2.5">進度備註 (Notes)</th>
-                      <th className="p-2.5 text-center w-12">刪除</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-semibold">
-                    {editItems.map((item, iIdx) => (
-                      <tr key={iIdx} className="hover:bg-slate-50">
-                        <td className="p-2 text-center">
-                          <input
-                            type="checkbox"
-                            checked={item.completed}
-                            onChange={(e) => handleItemChange(iIdx, 'completed', e.target.checked)}
-                            className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <select
-                            value={item.type}
-                            onChange={(e) => handleItemChange(iIdx, 'type', e.target.value)}
-                            className="w-full p-1.5 border rounded-lg font-bold bg-white text-xs border-slate-300"
-                          >
-                            <option value="進廠維修">進廠維修</option>
-                            <option value="更換零件">更換零件</option>
-                            <option value="定期保養">定期保養</option>
-                            <option value="其他">其他</option>
-                          </select>
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={item.item_name}
-                            onChange={(e) => handleItemChange(iIdx, 'item_name', e.target.value)}
-                            placeholder="請輸入項目名稱..."
-                            className="w-full p-1.5 border rounded-lg font-bold bg-white text-xs border-slate-300 text-slate-900"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={item.notes}
-                            onChange={(e) => handleItemChange(iIdx, 'notes', e.target.value)}
-                            placeholder="例如：舊保單批次自動匯入"
-                            className="w-full p-1.5 border border-dashed rounded-lg font-medium bg-slate-50 text-xs border-slate-300 text-slate-700"
-                          />
-                        </td>
-                        <td className="p-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(iIdx)}
-                            className="text-red-500 hover:text-red-700 font-bold text-sm cursor-pointer"
-                          >
-                            ✕
-                          </button>
-                        </td>
+              {editItems.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden border-slate-400">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-200 text-slate-900 font-bold border-b border-slate-400">
+                      <tr>
+                        <th className="p-2 w-10 text-center print:hidden">完成</th>
+                        <th className="p-2 print:p-1.5 w-28">類別</th>
+                        <th className="p-2 print:p-1.5 w-1/2">項目名稱</th>
+                        <th className="p-2 print:p-1.5">進度備註 (Notes)</th>
+                        <th className="p-2 w-10 text-center print:hidden">刪除</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-300">
+                      {editItems.map((item: any, i: number) => {
+                        const isChecked = !!item.is_completed;
+
+                        return (
+                          <tr key={i} className={isChecked ? 'bg-emerald-50/50' : ''}>
+                            <td className="p-2 text-center print:hidden">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => handleItemChange(i, 'is_completed', e.target.checked)}
+                                className="w-3.5 h-3.5 text-emerald-600 rounded cursor-pointer"
+                              />
+                            </td>
+                            <td className="p-2 print:p-1.5 font-normal">
+                              <select
+                                value={item.type || '進廠維修'}
+                                onChange={(e) => handleItemChange(i, 'type', e.target.value)}
+                                className="p-1 border rounded text-xs bg-white text-slate-900 font-normal print:hidden focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="進廠維修">進廠維修</option>
+                                <option value="更換零件">更換零件</option>
+                                <option value="現場處理">現場處理</option>
+                                <option value="外判處理">外判處理</option>
+                                <option value="收費項目">收費項目</option>
+                                <option value="Recall項目">Recall項目</option>
+                              </select>
+                              <span className="hidden print:inline-block px-2 py-0.5 bg-slate-100 text-slate-900 rounded border border-slate-400 text-xs font-normal">
+                                {item.type || '進廠維修'}
+                              </span>
+                            </td>
+                            <td className="p-2 print:p-1.5 font-normal">
+                              <input
+                                type="text"
+                                value={item.item_name || ''}
+                                onChange={(e) => handleItemChange(i, 'item_name', e.target.value)}
+                                placeholder="項目名稱..."
+                                className={`w-full p-1 border rounded text-xs bg-white text-slate-900 font-normal print:hidden focus:ring-1 focus:ring-blue-500 ${isChecked ? 'line-through text-gray-400' : ''}`}
+                              />
+                              <span className={`hidden print:inline-block font-normal ${isChecked ? 'line-through text-gray-400' : 'text-slate-900'}`}>
+                                {item.item_name}
+                              </span>
+                            </td>
+                            <td className="p-2 print:p-1.5">
+                              <input
+                                type="text"
+                                value={item.notes || ''}
+                                onChange={(e) => handleItemChange(i, 'notes', e.target.value)}
+                                placeholder="輸入工程進度..."
+                                className="note-input w-full p-1 border-b border-slate-400 print:border-b print:border-slate-800 rounded-none text-xs font-normal bg-transparent focus:outline-none focus:border-blue-600"
+                              />
+                            </td>
+                            <td className="p-2 text-center print:hidden">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(i)}
+                                className="text-red-500 hover:text-red-700 font-bold px-1 cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic py-2">無詳細明細項目，可點擊右上角按鈕新增</p>
+              )}
             </div>
 
-            <div className="flex justify-between items-center pt-3 border-t border-slate-200">
+            {/* 列印專屬簽名欄 */}
+            <div className="hidden print:grid grid-cols-2 gap-x-6 gap-y-4 pt-4 text-xs font-bold border-t border-slate-500 min-h-[110px]">
+              <div>完工日期：____________________</div>
+              <div>維修主管簽署：____________________</div>
+              <div>交車日期：____________________</div>
+              <div>交車司機：____________________</div>
+            </div>
+
+            {/* Footer 操作按鈕 */}
+            <div className="flex justify-between items-center border-t pt-3 print:hidden">
               <button
                 type="button"
-                onClick={() => setSelectedOrder(null)}
-                className="px-5 py-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs"
+                onClick={() => {
+                  setSelectedOrder(null);
+                  setSelectedVehicle(null);
+                }}
+                className="px-4 py-2 border rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 cursor-pointer"
               >
                 關閉
               </button>
@@ -666,7 +707,7 @@ export default function WorkOrdersSummary({
                 type="button"
                 disabled={isSaving}
                 onClick={handleSaveOrderEdit}
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all disabled:opacity-50"
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all disabled:opacity-50"
               >
                 {isSaving ? '⏳ 儲存修改中...' : '💾 儲存工單變更'}
               </button>
@@ -787,7 +828,7 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* PDF 列印版：只有當 body 擁有 .printing-warranty-report 類別時才被啟動 */}
+      {/* 列印對數報表版：只有當含有 body.printing-warranty-report 時才被渲染 */}
       <div className="warranty-print-report" aria-hidden="true">
         <table>
           <thead>
@@ -829,11 +870,29 @@ export default function WorkOrdersSummary({
         </table>
       </div>
 
-      {/* 修正後的專屬列印 CSS：只在帶有 .printing-warranty-report 時才啟動 */}
+      {/* 隔離且精確的列印 CSS 控制 */}
       <style jsx global>{`
         .warranty-print-report { display: none; }
-        
+
         @media print {
+          /* 情況 1：列印單張工單 Job Sheet */
+          body.printing-job-sheet {
+            background-color: white !important;
+            font-size: 12px !important;
+            color: black !important;
+          }
+          body.printing-job-sheet .print-job-sheet-content {
+            display: block !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+          }
+          body.printing-job-sheet body *:not(.print-job-sheet-content):not(.print-job-sheet-content *) {
+            display: none !important;
+          }
+
+          /* 情況 2：列印政府對數報表 */
           body.printing-warranty-report {
             height: auto !important;
             min-height: 0 !important;
@@ -885,6 +944,13 @@ export default function WorkOrdersSummary({
           .print-column-heading th { background: #e5e7eb !important; font-weight: 800; text-align: center; }
           .warranty-print-report td { text-align: center; }
           .warranty-print-report td:nth-child(2) { text-align: left; }
+
+          /* 隱藏輸入框 placeholder */
+          input::placeholder,
+          .note-input::placeholder {
+            color: transparent !important;
+            opacity: 0 !important;
+          }
         }
       `}</style>
     </div>
