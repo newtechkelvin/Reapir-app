@@ -55,7 +55,6 @@ export default function WorkOrdersSummary({
 
     const currentPeriod = calculation.currentPeriod;
     return {
-      // 停修日及可用率必須同時來自同一個 currentPeriod。
       totalOpenDays: currentPeriod?.repairDays ?? null,
       availability: currentPeriod?.availability ?? null,
       periodStart: currentPeriod?.start ?? null,
@@ -83,16 +82,23 @@ export default function WorkOrdersSummary({
   );
 
   // 對數報表：只顯示目前有效期間本身觸發展延的政府車輛。
-  // 只曾在過往期間觸發、但目前期間未觸發的車輛，不列入當期報表。
   const lowAvailabilityVehicles = (vehicles || [])
     .filter((v: any) => (v.warranty_type || 'government').toLowerCase() === 'government')
     .map((v: any) => ({ ...v, stats: getVehicleStats(v) }))
     .filter((v: any) => v.stats.periodTriggered && v.stats.availability !== null && v.stats.availability < 95)
     .sort((a: any, b: any) => (b.stats.totalOpenDays ?? 0) - (a.stats.totalOpenDays ?? 0));
 
-  const exportPenaltyPdf = () => {
-    if (lowAvailabilityVehicles.length === 0) return;
+  // 專屬列印對數報表函數（防止影響工單 Job Sheet 列印）
+  const handlePrintWarrantyReport = () => {
+    if (lowAvailabilityVehicles.length === 0) {
+      alert('目前沒有符合展延條件（可用率 < 95%）的車輛報表可列印。');
+      return;
+    }
+    document.body.classList.add('printing-warranty-report');
     window.print();
+    setTimeout(() => {
+      document.body.classList.remove('printing-warranty-report');
+    }, 1000);
   };
 
   const exportPenaltyReport = () => {
@@ -104,7 +110,7 @@ export default function WorkOrdersSummary({
       vehicle.plate_number,
       vehicle.vin,
       vehicle.project,
-          vehicle.stats.totalOpenDays === null ? '' : vehicle.stats.totalOpenDays,
+      vehicle.stats.totalOpenDays === null ? '' : vehicle.stats.totalOpenDays,
       vehicle.stats.availability === null ? '' : `${vehicle.stats.availability}%`,
       vehicle.stats.origExpiryStr,
       vehicle.stats.extensionMonths,
@@ -201,8 +207,6 @@ export default function WorkOrdersSummary({
 
   const handleSaveOrderEdit = async () => {
     if (!selectedOrder) return;
-
-    // 1. 確保取得有效的工單識別碼
     const orderId = selectedOrder.id || selectedOrder.work_order_id || selectedOrder.woNum;
 
     if (!orderId) {
@@ -212,11 +216,9 @@ export default function WorkOrdersSummary({
 
     try {
       setIsSaving(true);
-
-      // 2. 將欄位對齊資料庫 schema：使用 vehicle_location 而非不存在的 vehicle_spot
       const payload = {
         garage_location: editLocation || null,
-        vehicle_location: editSpot || null, // 修正：對齊資料庫欄位名稱
+        vehicle_location: editSpot || null,
         pickup_return_date: editPickupReturnDate.trim() ? editPickupReturnDate : null,
         claim_form_date: editClaimDate.trim() ? editClaimDate : null,
         completed_date: editCompletedDate.trim() ? editCompletedDate : null,
@@ -244,11 +246,9 @@ export default function WorkOrdersSummary({
         onRefresh();
       } else {
         const errorData = await res.json().catch(() => null);
-        console.error('後端儲存報錯詳情:', errorData);
         alert(`儲存失敗: ${errorData?.error || errorData?.message || '請檢查資料格式'}`);
       }
     } catch (err) {
-      console.error('儲存工單出錯:', err);
       alert('網路連線失敗，請稍後再試');
     } finally {
       setIsSaving(false);
@@ -257,7 +257,7 @@ export default function WorkOrdersSummary({
 
   return (
     <div className="space-y-6 text-black">
-      {/* 搜尋與頂部工具列 */}
+      {/* 搜尋與頂部工具列 (已補上專屬列印對數報表按鈕) */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
         <div className="flex-1 w-full flex items-center gap-3">
           <input
@@ -274,7 +274,15 @@ export default function WorkOrdersSummary({
           </div>
         </div>
 
-        <div className="flex gap-2 shrink-0">
+        <div className="flex gap-2 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={handlePrintWarrantyReport}
+            className="px-4 py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+          >
+            🖨️ 列印政府對數報表
+          </button>
+
           <button
             type="button"
             onClick={() => setShowReportModal(true)}
@@ -306,7 +314,6 @@ export default function WorkOrdersSummary({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {filteredVehicles.map((vehicle: any, idx: number) => {
             const { stats } = vehicle;
-
             const isCritical = stats.availability < 95;
             const isWarning = stats.availability >= 95 && stats.availability <= 96;
 
@@ -368,10 +375,7 @@ export default function WorkOrdersSummary({
                 </div>
 
                 <div className="flex justify-between items-center text-xs pt-1 gap-2">
-                  <span
-                    className="text-slate-800 font-extrabold truncate flex-1"
-                    title={vehicle.project}
-                  >
+                  <span className="text-slate-800 font-extrabold truncate flex-1" title={vehicle.project}>
                     專案 : {vehicle.project || '預設專案'}
                   </span>
                   <span className="text-slate-700 font-bold whitespace-nowrap shrink-0">
@@ -448,20 +452,9 @@ export default function WorkOrdersSummary({
                 <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-black px-2.5 py-0.5 rounded-full">
                   狀態: {selectedOrder.status || 'Open'}
                 </span>
-                <span className="text-[11px] text-gray-400 font-medium ml-2">
-                  最後更新時間: {selectedOrder.updated_at || new Date().toLocaleString()}
-                </span>
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1 cursor-pointer"
-                >
-                  🖨️ 列印此工單
-                </button>
-
                 <button
                   type="button"
                   onClick={() => setSelectedOrder(null)}
@@ -696,7 +689,7 @@ export default function WorkOrdersSummary({
                 </p>
                 <div className="mt-2 text-center">
                   <span className="bg-red-50 text-red-700 font-black text-sm px-4 py-1 rounded-full border border-red-200">
-                    🏛️                     政府車輛保固展延對數報表 (現行期間已觸發展延)
+                    🏛️ 政府車輛保固展延對數報表 (現行期間已觸發展延)
                   </span>
                 </div>
               </div>
@@ -776,11 +769,11 @@ export default function WorkOrdersSummary({
               </button>
               <button
                 type="button"
-                onClick={exportPenaltyPdf}
+                onClick={handlePrintWarrantyReport}
                 disabled={lowAvailabilityVehicles.length === 0}
                 className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-xl cursor-pointer disabled:opacity-50"
               >
-                ⬇️ 輸出正式 PDF
+                🖨️ 列印對數報表
               </button>
               <button
                 type="button"
@@ -794,7 +787,7 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* PDF 列印版：使用瀏覽器的「另存為 PDF」，採 A4 直身版面。thead 會在每頁重複。 */}
+      {/* PDF 列印版：只有當 body 擁有 .printing-warranty-report 類別時才被啟動 */}
       <div className="warranty-print-report" aria-hidden="true">
         <table>
           <thead>
@@ -836,16 +829,26 @@ export default function WorkOrdersSummary({
         </table>
       </div>
 
+      {/* 修正後的專屬列印 CSS：只在帶有 .printing-warranty-report 時才啟動 */}
       <style jsx global>{`
         .warranty-print-report { display: none; }
+        
         @media print {
-          @page { size: A4 portrait; margin: 15mm 10mm 18mm; }
-          html, body { height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
-          body * { visibility: hidden !important; }
-          body *:not(.warranty-print-report):not(.warranty-print-report *) { max-height: 0 !important; min-height: 0 !important; height: 0 !important; overflow: hidden !important; }
-          .warranty-print-report,
-          .warranty-print-report * { visibility: visible !important; }
-          .warranty-print-report {
+          body.printing-warranty-report {
+            height: auto !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+          body.printing-warranty-report * {
+            visibility: hidden !important;
+          }
+          body.printing-warranty-report .warranty-print-report,
+          body.printing-warranty-report .warranty-print-report * {
+            visibility: visible !important;
+          }
+          body.printing-warranty-report .warranty-print-report {
             display: block !important;
             position: absolute !important;
             top: 0 !important;
@@ -856,22 +859,21 @@ export default function WorkOrdersSummary({
             font-family: Arial, "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
             font-size: 9pt;
           }
-          .warranty-print-report table {
+          body.printing-warranty-report .warranty-print-report table {
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
           }
-          .warranty-print-report thead { display: table-header-group; }
-          .warranty-print-report tfoot { display: table-footer-group; }
-          .warranty-print-report tr { break-inside: avoid; page-break-inside: avoid; }
-          .warranty-print-report th,
-          .warranty-print-report td {
+          body.printing-warranty-report .warranty-print-report thead { display: table-header-group; }
+          body.printing-warranty-report .warranty-print-report tr { break-inside: avoid; page-break-inside: avoid; }
+          body.printing-warranty-report .warranty-print-report th,
+          body.printing-warranty-report .warranty-print-report td {
             border: 0.35mm solid #9ca3af;
             padding: 2.4mm 1.8mm;
             vertical-align: middle;
             overflow-wrap: anywhere;
           }
-          .warranty-print-report thead tr:first-child th {
+          body.printing-warranty-report .warranty-print-report thead tr:first-child th {
             border: 0;
             padding: 0 0 5mm;
           }
