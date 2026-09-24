@@ -15,7 +15,7 @@ export default function KanbanDashboardPage() {
   // 彈窗與卡片互動 State
   const [activeCardModal, setActiveCardModal] = useState<{ vehicle: any; order: any } | null>(null);
   const [noteInput, setNoteInput] = useState<string>('');
-  const [draggedOrder, setDraggedOrder] = useState<any | null>(null);
+  const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
 
   // 擷取看板數據
   const fetchKanbanData = async () => {
@@ -50,12 +50,12 @@ export default function KanbanDashboardPage() {
     }
   };
 
-  // 定義橫向流向 4 大階段
+  // 分類區域定義 (左側分類欄位)
   const stages = [
-    { key: 'wclaim', label: '1. W/CLAIM 待取/待簽', color: 'bg-indigo-600', border: 'border-indigo-500' },
-    { key: 'aoshop', label: '2. AOSHOP 廠內維修中', color: 'bg-blue-600', border: 'border-blue-500' },
-    { key: 'booking_bos', label: '3. BOOKING / BOS 特殊處理', color: 'bg-purple-600', border: 'border-purple-500' },
-    { key: 'pending_review', label: '4. 待主管確認完工 (Pending Review)', color: 'bg-amber-600', border: 'border-amber-500' },
+    { key: 'wclaim', label: 'W/CLAIM 待取/待簽', color: 'bg-indigo-700', border: 'border-indigo-600', badge: 'bg-indigo-950 text-indigo-300' },
+    { key: 'aoshop', label: 'AOSHOP 廠內維修中', color: 'bg-blue-700', border: 'border-blue-600', badge: 'bg-blue-950 text-blue-300' },
+    { key: 'booking_bos', label: 'BOOKING / BOS 特殊處理', color: 'bg-purple-700', border: 'border-purple-600', badge: 'bg-purple-950 text-purple-300' },
+    { key: 'pending_review', label: '待主管確認完工 (Pending Review)', color: 'bg-amber-700', border: 'border-amber-600', badge: 'bg-amber-950 text-amber-300' },
   ];
 
   // 資料處理與歸類 (自動過濾已完全簽核結案的工單)
@@ -128,19 +128,29 @@ export default function KanbanDashboardPage() {
     }
   };
 
-  // 拖拽手勢處理
-  const handleDragStart = (e: React.DragEvent, order: any) => {
-    setDraggedOrder(order);
+  // 修正版 HTML5 拖拽事件 (修復無法拖拽問題)
+  const handleDragStart = (e: React.DragEvent, orderId: string) => {
+    e.dataTransfer.setData('text/plain', orderId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedOrderId(orderId);
   };
 
-  const handleDrop = (stageKey: string) => {
-    if (!draggedOrder) return;
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, stageKey: string) => {
+    e.preventDefault();
+    const orderId = e.dataTransfer.getData('text/plain') || draggedOrderId;
+    if (!orderId) return;
+
     let targetStatus = 'Open';
     if (stageKey === 'pending_review') targetStatus = 'pending_review';
     else if (stageKey === 'booking_bos') targetStatus = 'booking';
     
-    updateOrderStatus(draggedOrder.id, targetStatus);
-    setDraggedOrder(null);
+    updateOrderStatus(orderId, targetStatus);
+    setDraggedOrderId(null);
   };
 
   return (
@@ -151,7 +161,7 @@ export default function KanbanDashboardPage() {
         <div className="flex items-center gap-3">
           <span className="text-2xl">🖥️</span>
           <h1 className="text-xl font-black tracking-wider text-amber-400">
-            車輛維修動態看板 (橫向流程控制台)
+            車輛維修動態看板 (橫向卡片流向版)
           </h1>
           <span className="bg-red-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold animate-pulse">
             LIVE 24H
@@ -166,10 +176,10 @@ export default function KanbanDashboardPage() {
             className="bg-slate-800 text-slate-200 border border-slate-700 text-xs font-bold px-2.5 py-1.5 rounded-lg focus:outline-none"
           >
             <option value="ALL">📍 所有車房位置</option>
-            <option value="九龍灣">九龍灣</option>
-            <option value="屯門">屯門</option>
-            <option value="柴灣">柴灣</option>
-            <option value="小蠔灣">小蠔灣</option>
+            <option value="九龍灣">機電 - 九龍灣</option>
+            <option value="屯門">機電 - 屯門</option>
+            <option value="柴灣">機電 - 柴灣</option>
+            <option value="小蠔灣">機電 - 小蠔灣</option>
           </select>
 
           <button
@@ -202,31 +212,37 @@ export default function KanbanDashboardPage() {
         </div>
       </div>
 
-      {/* 2. 核心橫向流向 4 大階段 (Horizontal Layout) */}
-      <div className="flex-1 grid grid-cols-4 gap-3 overflow-hidden">
+      {/* 2. 全新版面佈局：左側欄位分類 + 右側方形卡片從左至右橫向排列 */}
+      <div className="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar">
         {stages.map((stage) => {
           const items = (categorizedVehicles as any)[stage.key] || [];
 
           return (
             <div
               key={stage.key}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handleDrop(stage.key)}
-              className="bg-slate-900/60 border border-slate-800/80 rounded-xl flex flex-col overflow-hidden backdrop-blur"
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, stage.key)}
+              className="bg-slate-900/80 border border-slate-800 rounded-2xl p-2.5 flex items-stretch gap-3 min-h-[140px] backdrop-blur shadow-md"
             >
-              {/* 階段標題 Header */}
-              <div className={`${stage.color} text-white px-3 py-2 font-black text-sm flex justify-between items-center shadow-md`}>
-                <span>{stage.label}</span>
-                <span className="bg-black/30 px-2 py-0.5 rounded-md text-xs font-extrabold">
-                  {items.length} 架
-                </span>
+              {/* 【左側欄位分類】 */}
+              <div className={`w-48 min-w-[190px] ${stage.color} rounded-xl p-3 flex flex-col justify-between shadow-lg text-white`}>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-extrabold uppercase opacity-80 tracking-widest block">CATEGORY</span>
+                  <h3 className="text-base font-black leading-tight">{stage.label}</h3>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-white/20">
+                  <span className="text-xs font-semibold">當前車輛數</span>
+                  <span className="bg-black/30 text-white px-2.5 py-0.5 rounded-full font-black text-xs">
+                    {items.length} 架
+                  </span>
+                </div>
               </div>
 
-              {/* 卡片動態滾動區域 */}
-              <div className="p-2 space-y-2.5 overflow-y-auto flex-1 custom-scrollbar">
+              {/* 【右側方形卡片由左至右橫向排列區】 */}
+              <div className="flex-1 flex items-center gap-3 overflow-x-auto pb-1 pt-0.5 custom-scrollbar">
                 {items.length === 0 ? (
-                  <div className="text-center py-12 text-slate-600 text-xs font-bold">
-                    目前無車輛
+                  <div className="text-slate-600 text-xs font-bold px-4 py-8 italic border border-dashed border-slate-800 rounded-xl w-full text-center">
+                    此分類目前無待處理車輛
                   </div>
                 ) : (
                   items.map(({ vehicle, order, totalOrders }: any, idx: number) => {
@@ -237,21 +253,21 @@ export default function KanbanDashboardPage() {
                       <div
                         key={order.id || idx}
                         draggable
-                        onDragStart={(e) => handleDragStart(e, order)}
+                        onDragStart={(e) => handleDragStart(e, order.id)}
                         onClick={() => {
                           setActiveCardModal({ vehicle, order });
                           setNoteInput(order.notes || '');
                         }}
-                        className={`bg-slate-800/90 border-2 ${
+                        className={`w-64 min-w-[256px] h-32 bg-slate-800/90 border-2 ${
                           isPendingReview
-                            ? 'border-amber-400 bg-amber-950/20 animate-pulse'
+                            ? 'border-amber-400 bg-amber-950/30 animate-pulse'
                             : isMultipleRepairs
                             ? 'border-red-500'
                             : 'border-slate-700'
-                        } rounded-xl p-3 shadow-lg relative hover:scale-[1.02] transition-all cursor-pointer`}
+                        } rounded-xl p-2.5 shadow-lg flex flex-col justify-between relative hover:scale-[1.02] hover:border-blue-400 transition-all cursor-grab active:cursor-grabbing`}
                       >
-                        {/* 卡片標題：車型與日期 */}
-                        <div className="flex justify-between items-center text-[11px] text-slate-400 mb-1">
+                        {/* 1. 卡片頂部：品牌與日期 */}
+                        <div className="flex justify-between items-center text-[10px] text-slate-400">
                           <span className="bg-slate-700 text-slate-200 px-1.5 py-0.5 rounded font-bold">
                             {vehicle.brand || 'FUSO'} {vehicle.model ? `• ${vehicle.model}` : ''}
                           </span>
@@ -262,24 +278,24 @@ export default function KanbanDashboardPage() {
                           )}
                         </div>
 
-                        {/* 車牌大字與多次報修警示 */}
-                        <div className="text-2xl font-black tracking-tight text-white my-0.5 flex items-center justify-between">
+                        {/* 2. 車牌號碼與警示 */}
+                        <div className="text-xl font-black tracking-tight text-white my-0.5 flex items-center justify-between">
                           <span>{vehicle.plate_number}</span>
                           {isMultipleRepairs && (
-                            <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">
+                            <span className="bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">
                               ⚠️ 多次報修 ({totalOrders}次)
                             </span>
                           )}
                         </div>
 
-                        {/* 故障描述簡述 */}
-                        <p className="text-xs text-slate-300 font-semibold line-clamp-2 bg-slate-900/70 p-2 rounded-md border border-slate-700/50 my-1.5">
+                        {/* 3. 故障簡述 */}
+                        <p className="text-[11px] text-slate-300 font-medium line-clamp-1 bg-slate-950/60 px-2 py-1 rounded border border-slate-700/50">
                           {order.description || '進廠檢查與維修'}
                         </p>
 
-                        {/* 操作按鈕區 */}
-                        <div className="mt-2.5 pt-2 border-t border-slate-700/60 flex justify-between items-center">
-                          <span className="text-[10px] text-slate-400">
+                        {/* 4. 底部操作按鈕區 */}
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-700/60">
+                          <span className="text-[10px] text-slate-400 truncate max-w-[90px]">
                             📍 {order.garage_location || '機電1/F'}
                           </span>
 
@@ -289,9 +305,9 @@ export default function KanbanDashboardPage() {
                                 e.stopPropagation();
                                 handleStaffMarkComplete(order.id);
                               }}
-                              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-[11px] rounded-lg shadow cursor-pointer"
+                              className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-[10px] rounded-md shadow cursor-pointer"
                             >
-                              ✓ 同事標示已完成
+                              ✓ 同事已完成
                             </button>
                           ) : (
                             <button
@@ -299,9 +315,9 @@ export default function KanbanDashboardPage() {
                                 e.stopPropagation();
                                 handleSupervisorConfirm(order.id);
                               }}
-                              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-lg shadow-md animate-bounce cursor-pointer"
+                              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] rounded-md shadow animate-bounce cursor-pointer"
                             >
-                              👑 主管確認完工 (清除卡片)
+                              👑 確認完工 (清除)
                             </button>
                           )}
                         </div>
@@ -371,17 +387,22 @@ export default function KanbanDashboardPage() {
         </div>
       )}
 
-      {/* 自訂滾動條樣式 */}
+      {/* 自訂橫向與縱向滾動條樣式 */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
+          height: 6px;
+          width: 6px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
           background: rgba(15, 23, 42, 0.6);
+          border-radius: 4px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
           background: #334155;
           border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #475569;
         }
       `}</style>
     </div>
