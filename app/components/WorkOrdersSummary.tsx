@@ -90,7 +90,7 @@ export default function WorkOrdersSummary({
     .filter((v: any) => v.stats.periodTriggered && v.stats.availability !== null && v.stats.availability < 95)
     .sort((a: any, b: any) => (b.stats.totalOpenDays ?? 0) - (a.stats.totalOpenDays ?? 0));
 
-  // 列印對數報表 (加上類別觸發)
+  // 列印對數報表
   const handlePrintWarrantyReport = () => {
     if (lowAvailabilityVehicles.length === 0) {
       alert('目前沒有符合展延條件（可用率 < 95%）的車輛報表可列印。');
@@ -103,7 +103,7 @@ export default function WorkOrdersSummary({
     }, 1000);
   };
 
-  // 列印單張工單 Job Sheet (與 SearchVehicles 一致)
+  // 列印單張工單 Job Sheet
   const handlePrintJobSheet = () => {
     document.body.classList.add('printing-job-sheet');
     window.print();
@@ -158,7 +158,7 @@ export default function WorkOrdersSummary({
     return wType === 'general' || wType === '散車' || project.includes('散車');
   };
 
-  // 開啟工單明細 Modal (完美對齊 SearchVehicles)
+  // 開啟工單明細 Modal
   const handleOpenDetailModal = (vehicle: any, order: any) => {
     setSelectedVehicle(vehicle);
     setSelectedOrder(order);
@@ -266,9 +266,9 @@ export default function WorkOrdersSummary({
   };
 
   return (
-    <div className="space-y-6 text-black">
+    <div className="space-y-6 text-black summary-main-container">
       {/* 搜尋與頂部工具列 */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs print-hidden-element">
         <div className="flex-1 w-full flex items-center gap-3">
           <input
             type="text"
@@ -313,15 +313,15 @@ export default function WorkOrdersSummary({
 
       {/* 3 欄式卡片列表 */}
       {isLoading ? (
-        <div className="text-center py-12 text-gray-500 font-semibold animate-pulse">
+        <div className="text-center py-12 text-gray-500 font-semibold animate-pulse print-hidden-element">
           ⏳ 正在載入車輛工單資料...
         </div>
       ) : filteredVehicles.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-2xl border border-dashed text-gray-500">
+        <div className="text-center py-12 bg-white rounded-2xl border border-dashed text-gray-500 print-hidden-element">
           <p className="text-base font-bold">目前沒有有 Open 工單的政府車輛</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 print-hidden-element">
           {filteredVehicles.map((vehicle: any, idx: number) => {
             const { stats } = vehicle;
             const isCritical = stats.availability < 95;
@@ -480,7 +480,7 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 1. 車輛與合約資訊欄 (7 個完整車房選項與完整欄位) */}
+            {/* 1. 車輛與合約資訊欄 */}
             <div className="border border-slate-400 rounded-lg p-3 bg-slate-50/50 space-y-1.5">
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1">🚘 車輛與合約基本資訊</h4>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
@@ -585,7 +585,7 @@ export default function WorkOrdersSummary({
               <p className="text-xs text-gray-900 bg-gray-50 p-2.5 rounded-lg border border-slate-300 leading-snug">{editDescription || selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 (6 個完整類別選項) */}
+            {/* 3. 維修項目清單 */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
@@ -828,7 +828,7 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* 列印對數報表版：只有當含有 body.printing-warranty-report 時才被渲染 */}
+      {/* 列印對數報表 DOM 節點 */}
       <div className="warranty-print-report" aria-hidden="true">
         <table>
           <thead>
@@ -870,26 +870,41 @@ export default function WorkOrdersSummary({
         </table>
       </div>
 
-      {/* 隔離且精確的列印 CSS 控制 */}
+      {/* 重構後的嚴格隔離列印 CSS */}
       <style jsx global>{`
         .warranty-print-report { display: none; }
 
         @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+
           /* 情況 1：列印單張工單 Job Sheet */
           body.printing-job-sheet {
             background-color: white !important;
             font-size: 12px !important;
             color: black !important;
           }
-          body.printing-job-sheet .print-job-sheet-content {
-            display: block !important;
+          body.printing-job-sheet .print-hidden-element,
+          body.printing-job-sheet .warranty-print-report {
+            display: none !important;
+          }
+          body.printing-job-sheet .job-sheet-modal-container {
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
             width: 100% !important;
+            height: auto !important;
+            background: white !important;
+            padding: 0 !important;
           }
-          body.printing-job-sheet body *:not(.print-job-sheet-content):not(.print-job-sheet-content *) {
-            display: none !important;
+          body.printing-job-sheet .print-job-sheet-content {
+            max-height: none !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            width: 100% !important;
           }
 
           /* 情況 2：列印政府對數報表 */
@@ -899,6 +914,10 @@ export default function WorkOrdersSummary({
             margin: 0 !important;
             padding: 0 !important;
             overflow: visible !important;
+          }
+          body.printing-warranty-report .print-hidden-element,
+          body.printing-warranty-report .job-sheet-modal-container {
+            display: none !important;
           }
           body.printing-warranty-report * {
             visibility: hidden !important;
