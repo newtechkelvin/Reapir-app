@@ -122,6 +122,11 @@ export async function POST(request: NextRequest) {
     const brand = normalizeText(body.brand);
     const model = normalizeText(body.model);
     const warrantyType = normalizeWarrantyType(body.warranty_type);
+
+    // ✅ 修正：精確對齊前端傳過來的 garage_location 與 vehicle_location 欄位名稱
+    const inputGarageLocation = normalizeText(body.garage_location || body.location);
+    const inputVehicleLocation = normalizeText(body.vehicle_location || body.location);
+
     const maintenanceStartDate = normalizeDate(body.maintenance_start_date || (warrantyType === 'General' ? body.delivery_date : null));
     const maintenanceExpiryDate = normalizeDate(body.maintenance_expiry_date) || (warrantyType === 'General' ? addOneYear(maintenanceStartDate) : null);
     const quoteStatus = normalizeText(body.quote_status) || (warrantyType === 'General' ? 'pending' : 'not_required');
@@ -164,8 +169,11 @@ export async function POST(request: NextRequest) {
         project: project || (warrantyType === 'General' ? '散車保固' : ''),
         brand,
         model,
-        garage_location: normalizeText(body.location) || '機電 - 九龍灣1/F',
-        vehicle_location: warrantyType === 'General' ? normalizeText(body.location) : '',
+
+        // ✅ 修正：優先寫入前端帶入的位置，若完全未指定才留空或視情況保留
+        garage_location: warrantyType === 'General' ? '' : inputGarageLocation,
+        vehicle_location: warrantyType === 'General' ? inputVehicleLocation : (inputVehicleLocation || ''),
+
         claim_form_date: body.claim_form_date || null,
         pickup_return_date: body.pickup_return_date || null,
         warranty_type: warrantyType,
@@ -200,6 +208,12 @@ export async function POST(request: NextRequest) {
       if (brand) updateData.brand = brand;
       if (model) updateData.model = model;
       if (project) updateData.project = project;
+
+      // 如果有選擇車房位置，也同步更新車輛最後位置
+      if (inputGarageLocation && warrantyType !== 'General') {
+        updateData.garage_location = inputGarageLocation;
+      }
+
       const { error } = await supabase.from('vehicles').update(updateData).eq('id', vehicle.id);
       if (error) return NextResponse.json({ error: `更新車輛資料失敗: ${error.message}` }, { status: 500 });
       vehicle = { ...vehicle, ...updateData };
@@ -219,8 +233,11 @@ export async function POST(request: NextRequest) {
       plate_number: vehicle.plate_number || plateNumber,
       order_number: orderNumber,
       description: normalizeText(body.description),
-      garage_location: warrantyType === 'General' ? '' : (normalizeText(body.location) || vehicle.garage_location || '機電 - 九龍灣1/F'),
-      vehicle_location: warrantyType === 'General' ? normalizeText(body.location) : '',
+
+      // ✅ 關鍵修正：確實取用前端傳進來的 inputGarageLocation，不再預設強制補「機電 - 九龍灣1/F」
+      garage_location: warrantyType === 'General' ? '' : (inputGarageLocation || vehicle.garage_location || ''),
+      vehicle_location: inputVehicleLocation || '',
+
       claim_form_date: body.claim_form_date || null,
       pickup_return_date: body.pickup_return_date || null,
       status: 'Open',
