@@ -75,7 +75,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   
-  // 修正 1：預設值改為空字串，不再預設強制為九龍灣1/F
+  // 修正 1：預設為空字串，完全由使用者選擇控制
   const [garageLocation, setGarageLocation] = useState('');
   const [isCustomGarage, setIsCustomGarage] = useState(false);
 
@@ -117,9 +117,26 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     '車行',
   ];
 
+  // 修正 2：當外部 props 傳入新的 garageLocation 時才進行本地同步
+  useEffect(() => {
+    if (props.garageLocation !== undefined && props.garageLocation !== null && props.garageLocation !== '') {
+      setGarageLocation(props.garageLocation);
+      if (!GARAGE_OPTIONS.includes(props.garageLocation)) {
+        setIsCustomGarage(true);
+      } else {
+        setIsCustomGarage(false);
+      }
+    }
+  }, [props.garageLocation]);
+
   const updateWarrantyType = (type: 'government' | 'general') => {
     setWarrantyType(type);
     props.setWarrantyType?.(type === 'government' ? 'Government' : 'General');
+  };
+
+  const handleGarageChange = (val: string) => {
+    setGarageLocation(val);
+    props.setGarageLocation?.(val);
   };
 
   const applyVehicleMatch = (match: any) => {
@@ -135,16 +152,12 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     if (match.maintenance_start_date) setMaintenanceStartDate(String(match.maintenance_start_date));
     if (match.maintenance_expiry_date) setMaintenanceExpiryDate(String(match.maintenance_expiry_date));
     
-    // 如果匹配車輛含有車房位置則帶入，否則不隨意覆蓋
     if (match.garage_location) {
-      if (GARAGE_OPTIONS.includes(match.garage_location)) {
-        setGarageLocation(match.garage_location);
-        props.setGarageLocation?.(match.garage_location);
-        setIsCustomGarage(false);
-      } else {
-        setGarageLocation(match.garage_location);
-        props.setGarageLocation?.(match.garage_location);
+      handleGarageChange(match.garage_location);
+      if (!GARAGE_OPTIONS.includes(match.garage_location)) {
         setIsCustomGarage(true);
+      } else {
+        setIsCustomGarage(false);
       }
     }
   };
@@ -206,7 +219,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
     setField(props.setPickupReturnDate, setPickupReturnDate, vehicle.pickup_return_date);
     
     if (vehicle.garage_location) {
-      setField(props.setGarageLocation, setGarageLocation, vehicle.garage_location);
+      handleGarageChange(vehicle.garage_location);
     }
     
     setField(props.setDescription, setDescription, vehicle.description);
@@ -365,9 +378,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       const rawVin = props.vin ?? vin;
       const normalizedVin = rawVin ? String(rawVin).replace(/\s+/g, '').toUpperCase() : '';
 
-      // 修正 2：真實精確讀取使用者輸入的位置，未選擇則傳送 null，絕不自動補九龍灣1/F
-      const rawGarageLoc = props.garageLocation !== undefined ? props.garageLocation : garageLocation;
-      const effectiveGarageLoc = String(rawGarageLoc || '').trim();
+      // 修正 3：絕對使用使用者在表單內選取的本地 garageLocation，完全排除父層舊值干擾
+      const finalGarageLocation = garageLocation.trim();
 
       const effectiveVehicleLoc = String(props.vehicleLocation ?? vehicleLocation ?? '').trim();
       const effectivePickupDate = props.pickupReturnDate ?? pickupReturnDate;
@@ -381,7 +393,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         project: (props.project ?? project).trim(),
         brand: (props.brand ?? brand).trim(),
         model: (props.model ?? model).trim(),
-        garage_location: isScatteredVehicle ? '' : (effectiveGarageLoc || null),
+        garage_location: isScatteredVehicle ? '' : (finalGarageLocation || null),
         vehicle_location: effectiveVehicleLoc || null,
         pickup_return_date: effectivePickupDate || null,
         claim_form_date: effectiveClaimDate || null,
@@ -408,10 +420,7 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
         setBrand('');
         setModel('');
         
-        // 修正 3：成功清空時重置為空，不再強制設回九龍灣1/F
-        setGarageLocation('');
-        if (props.setGarageLocation) props.setGarageLocation('');
-
+        handleGarageChange('');
         setIsCustomGarage(false);
         setVehicleLocation('');
         setPickupReturnDate('');
@@ -436,8 +445,6 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       setIsSubmitting(false);
     }
   };
-
-  const currentGarageValue = props.garageLocation !== undefined ? props.garageLocation : garageLocation;
 
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6 text-black">
@@ -563,17 +570,15 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
             {!isScatteredVehicle && <div>
               <label className="block font-bold text-gray-700 mb-1">車房位置</label>
               <select
-                value={isCustomGarage ? 'CUSTOM' : currentGarageValue}
+                value={isCustomGarage ? 'CUSTOM' : garageLocation}
                 onChange={(e) => {
                   const val = e.target.value;
                   if (val === 'CUSTOM') {
                     setIsCustomGarage(true);
-                    setGarageLocation('');
-                    if (props.setGarageLocation) props.setGarageLocation('');
+                    handleGarageChange('');
                   } else {
                     setIsCustomGarage(false);
-                    setGarageLocation(val);
-                    if (props.setGarageLocation) props.setGarageLocation(val);
+                    handleGarageChange(val);
                   }
                 }}
                 className="w-full p-2.5 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
@@ -590,11 +595,9 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
               {isCustomGarage && (
                 <input
                   type="text"
-                  value={currentGarageValue}
+                  value={garageLocation}
                   onChange={(e) => {
-                    const val = e.target.value;
-                    setGarageLocation(val);
-                    if (props.setGarageLocation) props.setGarageLocation(val);
+                    handleGarageChange(e.target.value);
                   }}
                   placeholder="請輸入自訂車房位置..."
                   className="mt-2 w-full p-2.5 border border-blue-400 rounded-lg bg-blue-50/50 text-black font-bold focus:ring-2 focus:ring-blue-500 text-xs"
