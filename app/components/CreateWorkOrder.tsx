@@ -341,7 +341,8 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       return props.handleCreateOrder(e);
     }
 
-    if (!plateNumber.trim()) {
+    const currentPlate = props.plateNumber ?? plateNumber;
+    if (!currentPlate.trim()) {
       alert('請輸入車牌號碼');
       return;
     }
@@ -357,23 +358,30 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
       const rawVin = props.vin ?? vin;
       const normalizedVin = rawVin ? String(rawVin).replace(/\s+/g, '').toUpperCase() : '';
 
+      // 修正：優先使用 props.garageLocation，若無才取 local 的 garageLocation
+      const effectiveGarageLoc = String(props.garageLocation ?? garageLocation ?? '').trim();
+      const effectiveVehicleLoc = String(props.vehicleLocation ?? vehicleLocation ?? '').trim();
+      const effectivePickupDate = props.pickupReturnDate ?? pickupReturnDate;
+      const effectiveClaimDate = props.claimFormDate ?? claimFormDate;
+      const effectiveDesc = props.description ?? description;
+
       const payload = {
         warranty_type: currentWarrantyType,
-        plate_number: plateNumber.trim(),
+        plate_number: currentPlate.trim(),
         vin: normalizedVin || null,
-        project: project.trim(),
-        brand: brand.trim(),
-        model: model.trim(),
-        garage_location: isScatteredVehicle ? '' : garageLocation.trim(),
-        vehicle_location: vehicleLocation.trim(),
-        pickup_return_date: pickupReturnDate,
-        claim_form_date: claimFormDate,
+        project: (props.project ?? project).trim(),
+        brand: (props.brand ?? brand).trim(),
+        model: (props.model ?? model).trim(),
+        garage_location: isScatteredVehicle ? '' : (effectiveGarageLoc || '機電 - 九龍灣1/F'),
+        vehicle_location: effectiveVehicleLoc,
+        pickup_return_date: effectivePickupDate,
+        claim_form_date: effectiveClaimDate,
         maintenance_start_date: isScatteredVehicle ? effectiveMaintenanceStartDate : null,
         maintenance_expiry_date: isScatteredVehicle ? effectiveMaintenanceExpiryDate : null,
         quote_status: isScatteredVehicle ? effectiveQuoteStatus : 'not_required',
         quote_reference: isScatteredVehicle ? (effectiveQuoteReference.trim() || null) : null,
         oral_quote_confirmed: isScatteredVehicle ? effectiveOralQuoteConfirmed : false,
-        description: description.trim(),
+        description: effectiveDesc.trim(),
         items: currentItems.filter((it: any) => it.item_name?.trim() !== ''),
       };
 
@@ -545,12 +553,12 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
                   const val = e.target.value;
                   if (val === 'CUSTOM') {
                     setIsCustomGarage(true);
-                    if (props.setGarageLocation) props.setGarageLocation('');
                     setGarageLocation('');
+                    props.setGarageLocation?.('');
                   } else {
                     setIsCustomGarage(false);
-                    if (props.setGarageLocation) props.setGarageLocation(val);
                     setGarageLocation(val);
+                    props.setGarageLocation?.(val);
                   }
                 }}
                 className="w-full p-2.5 border rounded-lg bg-white text-black font-bold focus:ring-2 focus:ring-blue-500"
@@ -568,8 +576,9 @@ export default function CreateWorkOrder(props: CreateWorkOrderProps) {
                   type="text"
                   value={props.garageLocation ?? garageLocation}
                   onChange={(e) => {
-                    if (props.setGarageLocation) props.setGarageLocation(e.target.value);
-                    setGarageLocation(e.target.value);
+                    const val = e.target.value;
+                    setGarageLocation(val);
+                    props.setGarageLocation?.(val);
                   }}
                   placeholder="請輸入自訂車房位置..."
                   className="mt-2 w-full p-2.5 border border-blue-400 rounded-lg bg-blue-50/50 text-black font-bold focus:ring-2 focus:ring-blue-500 text-xs"
