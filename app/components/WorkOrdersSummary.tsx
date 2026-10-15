@@ -30,23 +30,42 @@ export default function WorkOrdersSummary({
   const [editItems, setEditItems] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 計算可用率與停修天數
+  // 計算可用率與停修天數 (強化容錯與多欄位相容)
   const getVehicleStats = (vehicle: any) => {
-    const orders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
+    // 兼容所有可能的工單欄位命名
+    const rawOrders = vehicle.workOrders || vehicle.work_orders || vehicle.orders || [];
+    const orders = Array.isArray(rawOrders) ? rawOrders : [];
+    
     const calculation = calculateAvailability(vehicle);
     const now = new Date();
+
     const openOrders = orders
       .filter((wo: any) => {
         const status = String(wo.status || 'open').toLowerCase();
-        return status !== 'completed' && status !== 'closed';
+        // 判斷是否為政府車輛工單 (如果車輛是 government 或 工單本身是 government/空白)
+        const vWType = String(vehicle.warranty_type || 'government').toLowerCase();
+        const woWType = String(wo.warranty_type || vWType).toLowerCase();
+        const isGov = vWType === 'government' || woWType === 'government';
+
+        return isGov && status !== 'completed' && status !== 'closed';
       })
       .map((wo: any) => {
-        const startValue = wo.claim_form_date || wo.created_at || wo.date;
+        // 多重日期備用方案，避免因 null 導致無窮大或解析失敗
+        const startValue =
+          wo.claim_form_date ||
+          wo.created_at ||
+          wo.date ||
+          wo.pickup_return_date ||
+          vehicle.claim_form_date ||
+          vehicle.created_at;
+
         const start = startValue ? new Date(startValue) : now;
+        const validStart = Number.isNaN(start.getTime()) ? now : start;
+
         return {
           ...wo,
           woNum: wo.order_number || wo.work_order_number || wo.form_number || wo.claim_form_number || 'WO-PENDING',
-          openDays: Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))),
+          openDays: Math.max(0, Math.ceil((now.getTime() - validStart.getTime()) / (1000 * 60 * 60 * 24))),
           vehiclePlate: vehicle.plate_number,
           vehicleBrand: vehicle.brand || '未設定',
           vehicleModel: vehicle.model || '未設定',
@@ -63,7 +82,7 @@ export default function WorkOrdersSummary({
       periodEnd: currentPeriod?.end ?? null,
       periodTriggered: currentPeriod?.triggered === true,
       orderCount: orders.length,
-      openCount: calculation.openCount,
+      openCount: openOrders.length,
       openOrders,
       origExpiryStr: calculation.originalExpiryDate || '未設定',
       finalExpiryStr: calculation.finalExpiryDate || '未設定',
@@ -71,9 +90,8 @@ export default function WorkOrdersSummary({
     };
   };
 
-  // 篩選有 Open 工單的政府車輛
+  // ✅ 關鍵修復：只要這輛車底下有任何一張 Open 的政府工單，就強制顯示！
   const governmentVehiclesWithOpenOrders = (vehicles || [])
-    .filter((v: any) => (v.warranty_type || 'government').toLowerCase() === 'government')
     .map((v: any) => ({ ...v, stats: getVehicleStats(v) }))
     .filter((v: any) => v.stats.openCount > 0);
 
@@ -359,7 +377,7 @@ export default function WorkOrdersSummary({
                       當期累積停修天數
                     </span>
                     <strong className="text-xl font-black text-red-600 block mt-1 truncate">
-                      {stats.totalOpenDays} 天
+                      {stats.totalOpenDays ?? 0} 天
                     </strong>
                   </div>
 
@@ -379,7 +397,7 @@ export default function WorkOrdersSummary({
                         isCritical ? 'text-red-600' : 'text-amber-600'
                       }`}
                     >
-                      {stats.availability}%
+                      {stats.availability ?? 100}%
                     </strong>
                   </div>
                 </div>
@@ -434,19 +452,17 @@ export default function WorkOrdersSummary({
         </div>
       )}
 
-      {/* 完全對齊 SearchVehicles 的「車輛維修工單 (Repair Job Sheet)」Modal 視窗 */}
+      {/* 車輛維修工單 Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 job-sheet-modal-container">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-4 text-black max-h-[90vh] overflow-y-auto print-job-sheet-content">
             
-            {/* 保留 Header 特大標題 */}
             <div className="text-center border-b-2 border-slate-900 pb-2">
               <h1 className="text-2xl font-black text-slate-900 tracking-wide">新力機械有限公司</h1>
               <p className="text-xs text-slate-800 font-bold tracking-widest mt-0.5">NEW TECH MOTOR ENGINEERING LIMITED</p>
               <p className="text-sm font-extrabold text-blue-950 mt-1 bg-slate-100 py-1 rounded">車輛維修工單 (Repair Job Sheet)</p>
             </div>
 
-            {/* Header 控制區 */}
             <div className="flex justify-between items-center border-b pb-2 print:hidden">
               <div className="flex items-center gap-3">
                 <span className="font-bold text-blue-900 text-lg">📋 {selectedOrder.order_number || selectedOrder.woNum || 'WO-未知'}</span>
@@ -480,7 +496,6 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 1. 車輛與合約資訊欄 */}
             <div className="border border-slate-400 rounded-lg p-3 bg-slate-50/50 space-y-1.5">
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-300 pb-1">🚘 車輛與合約基本資訊</h4>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
@@ -579,13 +594,11 @@ export default function WorkOrdersSummary({
               </div>
             </div>
 
-            {/* 2. 工單狀況敘述 */}
             <div className="space-y-1">
               <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">📝 狀況與故障描述</h4>
               <p className="text-xs text-gray-900 bg-gray-50 p-2.5 rounded-lg border border-slate-300 leading-snug">{editDescription || selectedOrder.description || '無詳細描述'}</p>
             </div>
 
-            {/* 3. 維修項目清單 */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">🛠️ 維修與零件項目明細</h4>
@@ -682,7 +695,6 @@ export default function WorkOrdersSummary({
               )}
             </div>
 
-            {/* 列印專屬簽名欄 */}
             <div className="hidden print:grid grid-cols-2 gap-x-6 gap-y-4 pt-4 text-xs font-bold border-t border-slate-500 min-h-[110px]">
               <div>完工日期：____________________</div>
               <div>維修主管簽署：____________________</div>
@@ -690,7 +702,6 @@ export default function WorkOrdersSummary({
               <div>交車司機：____________________</div>
             </div>
 
-            {/* Footer 操作按鈕 */}
             <div className="flex justify-between items-center border-t pt-3 print:hidden">
               <button
                 type="button"
@@ -870,7 +881,6 @@ export default function WorkOrdersSummary({
         </table>
       </div>
 
-      {/* 重構後的嚴格隔離列印 CSS */}
       <style jsx global>{`
         .warranty-print-report { display: none; }
 
@@ -880,7 +890,6 @@ export default function WorkOrdersSummary({
             margin: 8mm 10mm;
           }
 
-          /* 情況 1：列印單張工單 Job Sheet */
           body.printing-job-sheet {
             background-color: white !important;
             font-size: 12px !important;
@@ -907,7 +916,6 @@ export default function WorkOrdersSummary({
             width: 100% !important;
           }
 
-          /* 情況 2：列印政府對數報表 */
           body.printing-warranty-report {
             height: auto !important;
             min-height: 0 !important;
@@ -964,7 +972,6 @@ export default function WorkOrdersSummary({
           .warranty-print-report td { text-align: center; }
           .warranty-print-report td:nth-child(2) { text-align: left; }
 
-          /* 隱藏輸入框 placeholder */
           input::placeholder,
           .note-input::placeholder {
             color: transparent !important;
